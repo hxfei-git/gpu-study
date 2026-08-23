@@ -1,0 +1,21 @@
+[submodule "2.源码/linux"]
+	path = 2.源码/linux
+	url = https://github.com/torvalds/linux.git
+[submodule "2.源码/pal"]
+	path = 2.源码/pal
+	url = https://github.com/GPUOpen-Drivers/pal.git
+[submodule "2.源码/pocl"]
+	path = 2.源码/pocl
+	url = https://github.com/vortexgpgpu/pocl.git
+[submodule "2.源码/rocm-clr"]
+	path = 2.源码/rocm-clr
+	url = https://github.com/ROCm/clr.git
+[submodule "2.源码/rocm-device-libs"]
+	path = 2.源码/rocm-device-libs
+	url = https://github.com/ROCm/ROCm-Device-Libs.git
+[submodule "2.源码/rocr-runtime"]
+	path = 2.源码/rocr-runtime
+	url = https://github.com/ROCm/rocr-runtime.git
+[submodule "2.源码/vortex"]
+	path = 2.源码/vortex
+	url = https://github.com/vortexgpgpu/vortex.git
