@@ -32,6 +32,17 @@ Keep filenames stable. For links to files whose names contain spaces or non-ASCI
 
 Separate facts from analysis with the labels already used in the notes: `[SOURCE]`, `[SPEC]`, `[INFERENCE]`, `[BOUNDARY]`, and `[DESIGN]`. Cite the exact source path, version, or specification section whenever making a source-backed implementation claim.
 
+## Current-vs-Deferred Knowledge Workflow
+
+当用户询问某个知识点是否需要补充到当前文档时，必须先明确判断，说明建议放置的位置或后续阶段，然后等待用户明确同意。仅询问“是否需要补充”不构成修改文件的授权；在用户同意前，不得修改当前文档，也不得写入或删除 `待补充的知识点.md`。如果用户在最初请求中已经明确要求“补充”“写入”或“按此执行”，则视为已经授权，无需重复确认。
+
+- 如果确认应当放在当前文档，先说明准备补充到哪个小节以及内容边界；用户明确同意后，再补充到最合适的小节，并完成必要的缩写表、源码引用和 Markdown 检查。
+- 如果确认应当留到后续阶段，先说明目标阶段以及准备登记的内容；用户明确同意后，再把该知识点写入仓库根目录的 `待补充的知识点.md`，至少记录“知识点”“目标阶段或目标文档”“届时需要补充的范围”和“当前关联位置”。
+- 登记前先检查是否已有相同或重叠条目；有则合并或完善原条目，不要重复登记。
+- 开始一个新学习阶段、创建对应章节或扩写对应主题前，必须先读取 `待补充的知识点.md`，向用户汇报目标阶段匹配的条目，并等待用户同意后再补充，不得自动执行。
+- 只有在知识点已经写入目标文档并完成基本校验后，才能从 `待补充的知识点.md` 删除对应条目；不要仅标记“已完成”。如果只补充了一部分，应保留并改写尚未完成的范围。
+- 删除待办条目时，同时清理该文件缩写表中已不再使用的缩写。`待补充的知识点.md` 只保留尚未完成的知识点。
+
 ## Review, Commits, and Pull Requests
 
 No local Git history is available, so no repository-specific commit convention can be inferred. Use concise imperative messages with a documentation scope, for example `docs(svm): clarify page-fault ownership`.

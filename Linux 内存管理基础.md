@@ -2,69 +2,73 @@
 
 ## 缩写表
 
-| 缩写                  | 英文全称                                                   | 中文含义                          |
-| --------------------- | ---------------------------------------------------------- | --------------------------------- |
-| AF                    | Access Flag                                                | 访问标志                          |
-| AMDGPU                | AMD GPU Linux Kernel Driver                                | AMD GPU Linux 内核驱动            |
-| AP                    | Access Permission                                          | 访问权限                          |
-| ARM / ARM64           | Arm Architecture / Arm 64-bit Architecture                 | Arm 架构 / 64 位 Arm 架构         |
-| ASID                  | Address Space Identifier                                   | 地址空间标识符                    |
-| AttrIndx              | Attribute Index                                            | 内存属性索引                      |
-| BADDR                 | Base Address                                               | 基地址                            |
-| CLONE_VM              | Clone Virtual Memory flag                                  | 创建任务时共享虚拟地址空间的标志  |
-| COW                   | Copy-on-Write                                              | 写时复制                          |
-| CPU                   | Central Processing Unit                                    | 中央处理器                        |
-| DMA                   | Direct Memory Access                                       | 直接内存访问                      |
-| DSB                   | Data Synchronization Barrier                               | 数据同步屏障                      |
-| EL0 / EL1             | Exception Level 0 / Exception Level 1                      | 异常级别 0 / 异常级别 1           |
-| ELR_EL1               | Exception Link Register at Exception Level 1               | 异常级别 1 异常链接寄存器         |
-| ERET                  | Exception Return                                           | 异常返回指令                      |
-| GEM                   | Graphics Execution Manager                                 | 图形执行管理器                    |
-| GPU                   | Graphics Processing Unit                                   | 图形处理器                        |
-| HMM                   | Heterogeneous Memory Management                            | 异构内存管理                      |
-| IPI                   | Inter-Processor Interrupt                                  | 处理器间中断                      |
-| IRQ                   | Interrupt Request                                          | 中断请求                          |
-| ISB                   | Instruction Synchronization Barrier                        | 指令同步屏障                      |
-| KiB / MiB / GiB       | Kibibyte / Mebibyte / Gibibyte                             | 二进制千字节 / 兆字节 / 吉字节    |
-| L0～L3                | Level 0 through Level 3                                    | 第 0 级到第 3 级页表              |
-| LR                    | Link Register                                              | 链接寄存器                        |
-| MAIR_EL1              | Memory Attribute Indirection Register at Exception Level 1 | 异常级别 1 内存属性间接寄存器     |
-| MMU                   | Memory Management Unit                                     | 内存管理单元                      |
-| MPU                   | Memory Protection Unit                                     | 内存保护单元                      |
-| nG                    | non-Global                                                 | 非全局映射标志                    |
-| NS                    | Non-secure                                                 | 非安全属性                        |
-| PA                    | Physical Address                                           | 物理地址                          |
-| PAN                   | Privileged Access Never                                    | 特权访问禁止                      |
-| PC                    | Program Counter                                            | 程序计数器                        |
-| PFN                   | Page Frame Number                                          | 物理页框编号                      |
-| PID / TGID            | Process Identifier / Thread Group Identifier               | 任务标识符 / 线程组标识符         |
-| PGD                   | Page Global Directory                                      | 页全局目录                        |
-| PMD                   | Page Middle Directory                                      | 页中间目录                        |
-| PSTATE                | Process State                                              | 处理器状态                        |
-| PTE                   | Page Table Entry                                           | 页表项                            |
-| pt_regs               | Linux structure name; regs means Registers                 | Linux 保存异常现场的寄存器结构体  |
-| PUD                   | Page Upper Directory                                       | 页上级目录                        |
-| PXN                   | Privileged Execute Never                                   | 特权级禁止执行                    |
-| RET                   | Return                                                     | 函数返回指令                      |
-| RTOS                  | Real-Time Operating System                                 | 实时操作系统                      |
-| SH                    | Shareability                                               | 可共享属性                        |
-| SIGSEGV               | Segmentation Violation Signal                              | 段错误信号                        |
-| SP                    | Stack Pointer                                              | 栈指针                            |
-| SP_EL0 / SP_EL1       | Stack Pointer at Exception Level 0 / 1                     | 异常级别 0 / 1 栈指针寄存器       |
-| SPSR_EL1              | Saved Program Status Register at Exception Level 1         | 异常级别 1 保存程序状态寄存器     |
-| T0SZ                  | TTBR0 Address Space Size Field                             | TTBR0 地址空间大小字段            |
-| TCR_EL1               | Translation Control Register at Exception Level 1          | 异常级别 1 转换控制寄存器         |
-| TG0                   | Translation Granule for TTBR0                              | TTBR0 的转换粒度字段              |
-| TLB                   | Translation Lookaside Buffer                               | 地址转换后备缓冲器（快表）        |
-| TLBI                  | Translation Lookaside Buffer Invalidate                    | TLB 无效化操作                    |
-| TTBR0_EL1 / TTBR1_EL1 | Translation Table Base Register 0 / 1 at Exception Level 1 | 异常级别 1 转换表基址寄存器 0 / 1 |
-| TTM                   | Translation Table Maps                                     | 转换表映射内存管理器              |
-| UXN                   | Unprivileged Execute Never                                 | 非特权级禁止执行                  |
-| VA                    | Virtual Address                                            | 虚拟地址                          |
-| VM                    | Virtual Memory                                             | 虚拟内存                          |
-| VMA                   | Virtual Memory Area                                        | 虚拟内存区域                      |
-| VPN                   | Virtual Page Number                                        | 虚拟页号                          |
-| VRAM                  | Video Random-Access Memory                                 | 显存                              |
+| 缩写                  | 英文全称                                                   | 中文含义                                     |
+| --------------------- | ---------------------------------------------------------- | -------------------------------------------- |
+| ABI                   | Application Binary Interface                               | 应用程序二进制接口                           |
+| AF                    | Access Flag                                                | 访问标志                                     |
+| AMDGPU                | AMD GPU Linux Kernel Driver                                | AMD GPU Linux 内核驱动                       |
+| AP                    | Access Permission                                          | 访问权限                                     |
+| ARM / ARM64           | Arm Architecture / Arm 64-bit Architecture                 | Arm 架构 / 64 位 Arm 架构                    |
+| ASID                  | Address Space Identifier                                   | 地址空间标识符                               |
+| AttrIndx              | Attribute Index                                            | 内存属性索引                                 |
+| BADDR                 | Base Address                                               | 基地址                                       |
+| CLONE_VM              | Clone Virtual Memory flag                                  | 创建任务时共享虚拟地址空间的标志             |
+| COW                   | Copy-on-Write                                              | 写时复制                                     |
+| CPU                   | Central Processing Unit                                    | 中央处理器                                   |
+| DMA                   | Direct Memory Access                                       | 直接内存访问                                 |
+| DSB                   | Data Synchronization Barrier                               | 数据同步屏障                                 |
+| EL0 / EL1             | Exception Level 0 / Exception Level 1                      | 异常级别 0 / 异常级别 1                      |
+| ELR_EL1               | Exception Link Register at Exception Level 1               | 异常级别 1 异常链接寄存器                    |
+| ERET                  | Exception Return                                           | 异常返回指令                                 |
+| GEM                   | Graphics Execution Manager                                 | 图形执行管理器                               |
+| GPU                   | Graphics Processing Unit                                   | 图形处理器                                   |
+| HMM                   | Heterogeneous Memory Management                            | 异构内存管理                                 |
+| IPI                   | Inter-Processor Interrupt                                  | 处理器间中断                                 |
+| IRQ                   | Interrupt Request                                          | 中断请求                                     |
+| ISB                   | Instruction Synchronization Barrier                        | 指令同步屏障                                 |
+| KiB / MiB / GiB       | Kibibyte / Mebibyte / Gibibyte                             | 二进制千字节 / 兆字节 / 吉字节               |
+| L0～L3                | Level 0 through Level 3                                    | 第 0 级到第 3 级页表                         |
+| LR                    | Link Register                                              | 链接寄存器                                   |
+| MAIR_EL1              | Memory Attribute Indirection Register at Exception Level 1 | 异常级别 1 内存属性间接寄存器                |
+| MM                    | Memory Management                                          | 内存管理；`mm_struct` 表示地址空间管理对象 |
+| MMU                   | Memory Management Unit                                     | 内存管理单元                                 |
+| MPU                   | Memory Protection Unit                                     | 内存保护单元                                 |
+| nG                    | non-Global                                                 | 非全局映射标志                               |
+| NS                    | Non-secure                                                 | 非安全属性                                   |
+| PA                    | Physical Address                                           | 物理地址                                     |
+| PAN                   | Privileged Access Never                                    | 特权访问禁止                                 |
+| PC                    | Program Counter                                            | 程序计数器                                   |
+| PFN                   | Page Frame Number                                          | 物理页框编号                                 |
+| PID / TGID            | Process Identifier / Thread Group Identifier               | 任务标识符 / 线程组标识符                    |
+| PGD                   | Page Global Directory                                      | 页全局目录                                   |
+| PMD                   | Page Middle Directory                                      | 页中间目录                                   |
+| PSTATE                | Process State                                              | 处理器状态                                   |
+| PTE                   | Page Table Entry                                           | 页表项                                       |
+| pt_regs               | Linux structure name; regs means Registers                 | Linux 保存异常现场的寄存器结构体             |
+| PUD                   | Page Upper Directory                                       | 页上级目录                                   |
+| PXN                   | Privileged Execute Never                                   | 特权级禁止执行                               |
+| RET                   | Return                                                     | 函数返回指令                                 |
+| RSS                   | Resident Set Size                                          | 驻留集大小                                   |
+| RTOS                  | Real-Time Operating System                                 | 实时操作系统                                 |
+| RW                    | Read-Write                                                 | 读写                                         |
+| SH                    | Shareability                                               | 可共享属性                                   |
+| SIGSEGV               | Segmentation Violation Signal                              | 段错误信号                                   |
+| SP                    | Stack Pointer                                              | 栈指针                                       |
+| SP_EL0 / SP_EL1       | Stack Pointer at Exception Level 0 / 1                     | 异常级别 0 / 1 栈指针寄存器                  |
+| SPSR_EL1              | Saved Program Status Register at Exception Level 1         | 异常级别 1 保存程序状态寄存器                |
+| T0SZ                  | TTBR0 Address Space Size Field                             | TTBR0 地址空间大小字段                       |
+| TCR_EL1               | Translation Control Register at Exception Level 1          | 异常级别 1 转换控制寄存器                    |
+| TG0                   | Translation Granule for TTBR0                              | TTBR0 的转换粒度字段                         |
+| TLB                   | Translation Lookaside Buffer                               | 地址转换后备缓冲器（快表）                   |
+| TLBI                  | Translation Lookaside Buffer Invalidate                    | TLB 无效化操作                               |
+| TTBR0_EL1 / TTBR1_EL1 | Translation Table Base Register 0 / 1 at Exception Level 1 | 异常级别 1 转换表基址寄存器 0 / 1            |
+| TTM                   | Translation Table Maps                                     | 转换表映射内存管理器                         |
+| UXN                   | Unprivileged Execute Never                                 | 非特权级禁止执行                             |
+| VA                    | Virtual Address                                            | 虚拟地址                                     |
+| VM                    | Virtual Memory                                             | 虚拟内存                                     |
+| VMA                   | Virtual Memory Area                                        | 虚拟内存区域                                 |
+| VPN                   | Virtual Page Number                                        | 虚拟页号                                     |
+| VRAM                  | Video Random-Access Memory                                 | 显存                                         |
 
 > **[BOUNDARY]** 本文是早期的 ARM/MMU 引入草稿，停在问题定义处；完整且带本地 Linux/AMDGPU 源码基线的版本见 [2A. Linux 内存管理基础](<./1.笔记/2A. Linux 内存管理基础：从物理内存、PFN 与 struct page 到 GEM、TTM、HMM.md>)。
 
@@ -882,7 +886,31 @@ task_struct C ──┘
 
 因此，后面介绍的 ASID 更准确地说是标识地址空间，而不是简单标识某个 PID。
 
-源码中的 `copy_mm()` 清楚地区分了共享与复制：
+Linux 创建新任务时，会使用一组 `clone_flags` 标志决定新旧任务共享哪些资源。`CLONE_VM`（Clone Virtual Memory，共享虚拟地址空间标志）是其中一个标志位：
+
+```c
+#define CLONE_VM 0x00000100
+```
+
+它不是函数，也不表示“复制物理内存”，而是在告诉内核：
+
+```text
+设置CLONE_VM   → 新任务共享当前任务的mm_struct
+未设置CLONE_VM → 新任务获得新的mm_struct
+```
+
+`clone_flags` 可以同时包含多个标志。表达式 `clone_flags & CLONE_VM` 使用按位与检查其中是否设置了 `CLONE_VM`：结果非 0 表示已经设置，结果为 0 表示没有设置。
+
+源码中的 `copy_mm()` 负责为新任务选择地址空间。先认识其中几个变量：
+
+| 变量        | 含义                                  |
+| ----------- | ------------------------------------- |
+| `current` | 正在创建新任务的当前任务              |
+| `tsk`     | 正在创建的新`task_struct`           |
+| `oldmm`   | `current->mm`，即当前任务的地址空间 |
+| `mm`      | 最终准备赋给`tsk` 的地址空间        |
+
+核心代码是：
 
 ```c
 if (clone_flags & CLONE_VM) {
@@ -896,12 +924,52 @@ tsk->mm = mm;
 tsk->active_mm = mm;
 ```
 
+设置 `CLONE_VM` 时：
+
 ```text
-带CLONE_VM创建线程 → 共享oldmm
-普通fork创建子进程  → dup_mm()创建新的mm_struct
+假设oldmm这个内核指针的值为0xffff000010000000：
+
+current->mm ──┐
+              ├──→ 同一个mm_struct
+tsk->mm ──────┘    mm_struct内核虚拟地址：0xffff000010000000
+
+mmget(oldmm)：只把mm_users引用计数加1
+mm = oldmm：  只复制指针，不复制mm_struct
 ```
 
-[SOURCE] 本地 Linux `248951ddc14d`：`kernel/fork.c:1518-1566` 的 `dup_mm()`，`kernel/fork.c:1568-1601` 的 `copy_mm()`。
+因此，两个任务共享同一组 VMA、用户页表和 ASID。一个任务修改用户内存或者通过 `mmap()`、`munmap()` 改变地址空间，另一个任务也会看到结果。`mmget()` 增加 `mm_users`，是为了保证一个任务退出后，共享的 `mm_struct` 不会在其他任务仍使用时被释放。
+
+没有设置 `CLONE_VM` 时：
+
+```text
+current->mm ──→ 原来的mm_struct
+
+tsk->mm ─────→ dup_mm()创建的新mm_struct
+                ├── 复制VMA布局
+                └── 建立子进程自己的页表
+```
+
+`dup_mm()` 创建的是独立地址空间，但普通 `fork()` 通常不会立即复制所有物理页，而是使用 COW（Copy-on-Write，写时复制）：父子进程的私有映射可以暂时指向同一物理页，某一方写入时再复制该页。
+
+最后：
+
+```c
+tsk->mm = mm;
+tsk->active_mm = mm;
+```
+
+把选中的地址空间安装到新用户任务。于是可以概括为：
+
+```text
+常见线程创建方式   → 设置CLONE_VM → 多个task_struct共享一个mm_struct
+普通fork()        → 不设置CLONE_VM → 子进程获得新的mm_struct
+```
+
+`CLONE_VM` 只决定是否共享地址空间，单独设置它并不足以构成通常意义上的完整线程关系；文件表、信号处理等资源是否共享，还由其他创建标志决定。
+
+[SOURCE] 本地 Linux `248951ddc14d`：`include/uapi/linux/sched.h:11` 定义 `CLONE_VM`（该文件当前未展开，但仍在本地 Git 对象中）；[include/linux/sched/mm.h](./2.源码/linux/include/linux/sched/mm.h) 第 131～134 行定义 `mmget()`；[kernel/fork.c](./2.源码/linux/kernel/fork.c) 第 1518～1566 行实现 `dup_mm()`，第 1568～1601 行实现 `copy_mm()`。
+
+共享地址空间并不表示某块内存由某个线程独占，也不是依靠 `mm_struct` 中的锁才实现共享。先认识下一节中的 `mm_struct` 核心成员，再由 2.2.2 节解释内存归属和不同锁的职责。
 
 ### 2.2 `mm_struct`：Linux 如何描述进程地址空间
 
@@ -917,42 +985,221 @@ tsk->active_mm = mm;
 
 #### 2.2.1 `mm_struct` 的核心成员
 
-从本地源码中抽取与本章相关的成员，可以简化为：
+`mm` 来自 MM（Memory Management，内存管理）。`mm_struct` 不是一块用户内存，也不是页表本身；它是 Linux 管理一整套用户虚拟地址空间的总控对象。
+
+为了便于理解，下面按职责重新排列字段。顺序与真实结构体的内存布局不完全相同：
 
 ```c
 struct mm_struct {
+    /* 生命周期 */
     atomic_t mm_count;
-    struct maple_tree mm_mt;
-    unsigned long mmap_base;
-    unsigned long task_size;
-    pgd_t *pgd;
     atomic_t mm_users;
-    spinlock_t page_table_lock;
+
+    /* VMA组织与保护 */
+    struct maple_tree mm_mt;
+    int map_count;
     struct rw_semaphore mmap_lock;
+
+    /* 页表 */
+    pgd_t *pgd;
+    spinlock_t page_table_lock;
+    atomic_long_t pgtables_bytes;
+
+    /* 用户地址空间布局 */
+    unsigned long task_size;
+    unsigned long mmap_base;
     unsigned long start_code, end_code, start_data, end_data;
     unsigned long start_brk, brk, start_stack;
+
+    /* 虚拟内存与驻留内存统计 */
+    unsigned long total_vm;
+    unsigned long locked_vm;
+    atomic64_t pinned_vm;
+    /* rss_stat[]等统计字段，此处省略具体数组定义 */
+
+    /* ARM64等架构使用的地址空间上下文 */
     mm_context_t context;
+
     /* 还有大量统计、锁和子系统状态，此处省略 */
 };
 ```
 
-| 成员                       | 本章中的作用                                         |
-| -------------------------- | ---------------------------------------------------- |
-| `mm_mt`                  | Maple Tree，按虚拟地址管理该地址空间中的 VMA         |
-| `mmap_base`              | `mmap()` 区域布局使用的基准地址                    |
-| `task_size`              | 用户虚拟地址空间的上限                               |
-| `pgd`                    | 根页表的内核虚拟地址指针                             |
-| `mmap_lock`              | 保护 VMA 等地址空间结构的主要读写锁                  |
-| `page_table_lock`        | 保护部分页表操作和相关计数                           |
-| `start_code` 等          | 记录代码、数据、堆和栈等边界                         |
-| `context`                | 架构相关的地址空间上下文；ARM64 的 ASID 状态就在这里 |
-| `mm_users`、`mm_count` | 管理地址空间和`mm_struct` 自身的生命周期           |
+这些字段可以分成七组：
 
-`mm_struct` 很大，并不是每次地址翻译都会逐字段查询它。MMU 真正读取的是页表；`mm_struct` 是 Linux 用来创建、修改、同步和回收这套地址空间的软件管理对象。
+| 职责               | 关键成员                                                 | 具体含义                                                              |
+| ------------------ | -------------------------------------------------------- | --------------------------------------------------------------------- |
+| VMA 索引           | `mm_mt`、`map_count`                                 | `mm_mt` 是按 VA 管理 VMA 的 Maple Tree；`map_count` 记录 VMA 数量 |
+| VMA 同步           | `mmap_lock`                                            | 主要保护 VMA 树和地址空间布局；`rw` 是 Read-Write（读写）           |
+| 页表入口           | `pgd`                                                  | 指向用户根页表的内核虚拟地址，后续转换成物理地址配置给 TTBR           |
+| 页表同步和开销     | `page_table_lock`、`pgtables_bytes`                  | 保护部分页表操作和计数；统计各级页表本身占用的内存                    |
+| 用户地址布局       | `task_size`、`mmap_base`、`start_*`、`end_*`     | 记录用户地址上限、`mmap()` 布局基准和主程序各区域的摘要位置         |
+| 使用量统计         | `total_vm`、`rss_stat`、`locked_vm`、`pinned_vm` | 区分映射的虚拟页、驻留物理页、锁定页和长期固定页                      |
+| 生命周期和架构状态 | `mm_users`、`mm_count`、`context`                  | 管理对象生命周期；`context` 保存 ARM64 ASID 等架构相关状态          |
 
-[SOURCE] 本地 Linux `248951ddc14d`：`include/linux/mm_types.h:1160-1305`。
+其中几个布局字段容易被误解：
 
-#### 2.2.2 `mm_users` 与 `mm_count` 为什么是两个计数
+- `task_size`：该任务用户虚拟地址空间的大小或上限，具体值受 ARM64 配置和进程 ABI 影响。
+- `mmap_base`：Linux 为 `mmap()` 选择地址时使用的布局基准，不是“下一块必定分配的地址”。
+- `start_code/end_code`：主程序代码区域的摘要边界；动态库等其他可执行映射仍由各自 VMA 描述。
+- `start_data/end_data`：主程序数据区域的摘要边界。
+- `start_brk/brk`：进程堆的初始 program break（程序堆边界）和当前 program break。
+- `start_stack`：程序启动时记录的用户栈位置，不是线程此刻的 SP，也不等于栈 VMA 的完整边界。
+
+假设某个进程的 `mm_struct` 位于内核虚拟地址 `0xffff000010000000`，可以把它理解成下面这个总目录：
+
+```text
+task_struct
+    │ task->mm
+    ▼
+mm_struct @ 0xffff000010000000
+    │
+    ├─ 地址布局摘要
+    │    start_code = 0x400000       end_code = 0x410000
+    │    start_data = 0x410000       end_data = 0x418000
+    │    start_brk  = 0x600000       brk      = 0x620000
+    │    mmap_base  = 0x7f0000000000
+    │    start_stack= 0x7fffffffe000
+    │
+    ├─ mm_mt：按虚拟地址组织该地址空间中的VMA
+    │
+    │    用户虚拟地址空间
+    │
+    │    低地址
+    │      │
+    │      ├─ [0x400000, 0x410000)
+    │      │     主程序代码VMA
+    │      │     通常：可读、可执行、不可写
+    │      │     PC可能指向这里
+    │      │
+    │      ├─ [0x410000, 0x418000)
+    │      │     主程序数据VMA
+    │      │     保存全局变量和静态变量
+    │      │     通常：可读、可写、不可执行
+    │      │
+    │      ├─ [0x600000, 0x620000)
+    │      │     堆VMA
+    │      │     malloc()可能从这里获得内存
+    │      │
+    │      ├─ [0x7f0000000000, 0x7f0000100000)
+    │      │     动态库或mmap()建立的VMA
+    │      │     PC也可能在这里执行动态库代码
+    │      │
+    │      └─ [0x7ffffff00000, 0x800000000000)
+    │            用户栈VMA
+    │            SP通常指向这个范围内
+    │    高地址
+    │
+    ├─ pgd ──→ 用户根页表
+    │            └─ 多级页表最终保存VA到PFN的映射
+    │
+    ├─ context ──→ ARM64 ASID等架构状态
+    │
+    ├─ 统计
+    │    map_count       = VMA数量
+    │    total_vm        = VMA总共覆盖多少虚拟页
+    │    rss_stat        = 当前有多少页面驻留在物理内存
+    │    pgtables_bytes  = 页表自身占用了多少内存
+    │
+    └─ 锁与生命周期
+         mmap_lock、page_table_lock、mm_users、mm_count
+```
+
+上图中的地址只是示例。`start_code`、`brk` 等字段只是布局摘要，它们本身不会创建 VMA，也不会建立 PTE：
+
+| 问题                                     | 主要查看对象                                        |
+| ---------------------------------------- | --------------------------------------------------- |
+| 这段 VA 在软件上是否合法、允许怎样访问？ | `mm_mt` 中的 VMA                                  |
+| 这个虚拟页当前映射到哪个物理页？         | `pgd` 指向的多级页表                              |
+| 主程序代码、堆、初始栈大致位于哪里？     | `start_code`、`brk`、`start_stack` 等摘要字段 |
+
+`total_vm` 和 RSS（Resident Set Size，驻留集大小）也不能混为一谈。假设使用 4 KiB 页面：
+
+```text
+total_vm = 4096页 → VMA总计映射了16 MiB虚拟地址
+RSS      = 1024页 → 当前约有4 MiB页面驻留在物理内存
+```
+
+二者不同是正常的，因为 VMA 可以已经存在，而部分页面尚未按需分配、已经被回收，或者当前没有有效 PTE。
+
+最后要明确软硬件边界：MMU 不读取 `mm_struct`。Linux 通过 `mm_struct` 查找 VMA、管理页表并准备 TTBR；真正进行地址翻译时，MMU 读取的是 TTBR 指向的页表。
+
+[SOURCE] 本地 Linux `248951ddc14d`：[include/linux/mm_types.h](./2.源码/linux/include/linux/mm_types.h) 第 1160～1305 行定义上述核心成员；其中第 1215～1221 行是页表开销、VMA 数量和页表锁，第 1265～1273 行是虚拟内存统计，第 1289～1305 行是程序布局、RSS 与架构上下文。
+
+#### 2.2.2 共享 `mm_struct` 后，内存属于哪个线程
+
+首先要纠正因果关系：线程能够共享内存，是因为它们共享同一个 `mm_struct` 和同一套用户页表；`mm_struct` 中存在同一把锁。锁是为了让多个线程并发修改共享管理结构时仍保持一致。
+
+```text
+线程A ──┐
+        ├──→ 同一个mm_struct
+线程B ──┘         │
+                  ├── 同一个mm_mt
+                  ├── 同一个pgd和ASID
+                  └── 同一套用户页表
+
+线程A访问VA 0x600000 ─┐
+                      ├──→ 同一个PTE → 同一个PFN
+线程B访问VA 0x600000 ─┘
+```
+
+页表项没有“属于哪个线程”的字段。同一地址空间中的线程使用相同 ASID，因此只要 VA 和页面权限相同，就会得到相同的地址翻译。
+
+不同层次的锁保护不同对象：
+
+| 锁或同步方式                         | 保护对象                                                 |
+| ------------------------------------ | -------------------------------------------------------- |
+| `mmap_lock`                        | VMA 的创建、删除、拆分、合并和稳定查找等内核地址空间结构 |
+| `page_table_lock` 及更细粒度页表锁 | 页表修改和相关计数                                       |
+| `malloc()` 分配器内部锁            | 用户态分配器自己的空闲块、arena（分配区）等元数据        |
+| 用户互斥锁、原子操作                 | 程序自己的共享变量和数据结构                             |
+
+`mmap_lock` 不会在程序普通读写用户内存期间一直保持。例如两个线程同时执行 `shared_counter++`，Linux 不会用 `mmap_lock` 自动保护这个变量，程序必须自己使用互斥锁或原子操作。
+
+对于堆内存，内核通常也不记录“这个内存块属于线程 A”：
+
+```text
+线程A调用malloc() → 返回0x601000
+线程B调用malloc() → 返回0x602000
+
+Linux内核看到：
+mm_struct
+└── 堆或匿名映射VMA
+    ├── 0x601000所在的虚拟页和PTE
+    └── 0x602000所在的虚拟页和PTE
+```
+
+哪个块已经分配、块大小是多少等信息主要由用户态 `malloc()` 分配器管理。线程 A 得到的指针也可以传给线程 B 使用，常见分配器通常也允许线程 B 在正确同步后释放它；这是一种程序和分配器的逻辑归属，不是 MMU 强制的访问所有权。
+
+用户栈有所不同：每个线程通常使用不同的虚拟地址范围，并保存自己的用户 SP，但这些栈仍位于同一个 `mm_struct` 中：
+
+```text
+共同的mm_struct和用户页表
+│
+├── 线程A栈VMA
+│      A的用户SP → 0x7fffffffd000
+│
+├── 线程B栈VMA
+│      B的用户SP → 0x7ffffeffd000
+│
+└── 共享的代码、全局数据、堆和动态库映射
+```
+
+调度器恢复某个线程时，会恢复该线程自己的用户寄存器现场和 SP。但“各自使用不同栈”不等于页表隔离：线程 A 如果知道线程 B 栈中的地址，并且页面权限允许，原则上仍然可以访问。
+
+因此本节结论是：
+
+```text
+代码、全局数据、堆、VMA和用户页表   	→ 地址空间内共享
+用户SP、用户栈范围和寄存器现场      	→ 每个线程分别使用
+内存块由哪个线程申请               	→ 内核通常不区分
+共享数据的并发安全                 	→ 由正确层次的锁或原子操作保证
+```
+
+> **[BOUNDARY]** `malloc()` 的 arena（分配区）、线程缓存、跨线程释放等分配器内部机制留到用户态内存申请阶段，已登记在 [待补充的知识点](./待补充的知识点.md)。
+
+[SOURCE] 本地 Linux `248951ddc14d`：[kernel/fork.c](./2.源码/linux/kernel/fork.c) 第 1568～1601 行说明 `mm_struct` 的共享；[include/linux/mm_types.h](./2.源码/linux/include/linux/mm_types.h) 第 1215～1263 行定义页表锁和 `mmap_lock`；[arch/arm64/kernel/process.c](./2.源码/linux/arch/arm64/kernel/process.c) 第 413～452 行设置新任务的用户 SP。
+
+#### 2.2.3 `mm_users` 与 `mm_count` 为什么是两个计数
 
 这两个计数管理的层次不同：
 
@@ -985,7 +1232,7 @@ mmgrab() / mmdrop() → 操作mm_count
 
 [SOURCE] 本地 Linux `248951ddc14d`：`include/linux/mm_types.h:1168-1177,1200-1208`；`include/linux/sched/mm.h:26-55,115-142`。
 
-#### 2.2.3 新地址空间是如何初始化的
+#### 2.2.4 新地址空间是如何初始化的
 
 `mm_init()` 的主线可以压缩为：
 
@@ -1289,7 +1536,65 @@ Linux根据异常VA查找VMA
                 └─ handle_mm_fault()准备页面并处理页表
 ```
 
-因此，Page Fault 不等于程序一定出错。它可能只是“VMA 允许访问，但对应 PTE 和物理页尚未准备好”。完整异常入口、物理页分配和 PTE 更新将在后续 Page Fault 章节展开。
+具体看一次匿名堆页面首次写入。假设页面大小为 4 KiB，程序执行：
+
+```c
+*(int *)0x601234 = 10;
+```
+
+虚拟地址可以拆成：
+
+```text
+VA 0x601234
+   ├─ 虚拟页基地址 = 0x601000
+   └─ 页内offset   = 0x234
+```
+
+为了演示，假设缺页处理最终为它分配到十进制 `PFN 900`：
+
+```text
+CPU写VA 0x601234
+        │
+        ▼
+MMU查询TLB和页表
+        │
+        ▼
+VA页0x601000对应的PTE无效
+        │
+        ▼
+MMU触发Translation Fault
+CPU进入Linux异常处理
+        │
+        ▼
+Linux使用current->mm查找mm_mt
+        │
+        ▼
+找到堆VMA：[0x600000, 0x620000)
+        │
+        ├─ 0x601234位于该范围内
+        └─ VMA允许写入
+        │
+        ▼
+handle_mm_fault()进入合法缺页处理
+为匿名堆页准备物理页：PFN 900
+        │
+        ▼
+建立PTE：VA页0x601000 → PFN 900，可读写、有效
+        │
+        ▼
+返回用户态，重新执行刚才的写指令
+        │
+        ▼
+页内offset保持0x234
+最终PA = 900 × 0x1000 + 0x234
+       = 0x384234
+```
+
+这里的职责边界是：MMU 只读取 TLB 和页表，并在翻译失败时报告异常；Linux 才会通过 `current->mm->mm_mt` 判断地址是否合法，并根据 VMA 规则决定如何处理。
+
+> **[BOUNDARY]** 上例只表示“匿名堆页面首次写入”。文件映射可能从文件或 Page Cache 获得页面，COW 可能复制共享页，换出页面可能需要从交换空间读回；这些分支以及物理页分配、`struct page` 和 PTE 更新细节留到后续 Page Fault 章节。
+
+因此，Page Fault 不等于程序一定出错。它可能只是“VMA 允许访问，但对应 PTE 和物理页尚未准备好”；VMA 合法与 PTE 已经就绪是两件不同的事。
 
 [SOURCE] 本地 Linux `248951ddc14d`：[arch/arm64/mm/fault.c](./2.源码/linux/arch/arm64/mm/fault.c) 第 729～751 行；`mm/mmap_lock.c:496-550`；`mm/memory.c:6417-6425,6651-6716`。
 
@@ -1617,50 +1922,50 @@ ASID耗尽
 
 调度器从任务 A 切换到任务 B，不只是把 `current` 改成 B，还需要处理三组状态：
 
-| 状态类别 | 主要对象 | 作用 |
-| --- | --- | --- |
-| 地址空间 | `mm_struct`、PGD、TTBR、ASID | 决定用户 VA 使用哪套页表和 TLB 记录 |
-| 任务身份 | `task_struct`、`SP_EL0`、`__entry_task` | 告诉内核当前正在运行哪个任务 |
-| 内核执行现场 | `x19～x29`、SP、LR、内核栈 | 让任务以后能从内核中的原位置继续运行 |
+| 状态类别     | 主要对象                                      | 作用                                 |
+| ------------ | --------------------------------------------- | ------------------------------------ |
+| 地址空间     | `mm_struct`、PGD、TTBR、ASID                | 决定用户 VA 使用哪套页表和 TLB 记录  |
+| 任务身份     | `task_struct`、`SP_EL0`、`__entry_task` | 告诉内核当前正在运行哪个任务         |
+| 内核执行现场 | `x19～x29`、SP、LR、内核栈                  | 让任务以后能从内核中的原位置继续运行 |
 
 #### 2.8.1 用户现场和内核调度现场不是一份数据
 
 ARM64 Linux 使用两处不同的保存位置：
 
-| 保存位置 | 保存时机 | 主要内容 |
-| --- | --- | --- |
-| 当前任务内核栈上的 `struct pt_regs` | 用户态发生系统调用、中断或异常，进入内核时 | 用户寄存器 `x0～x30`、用户 SP、用户 PC 和 PSTATE |
-| `task->thread.cpu_context` | 任务在内核调度路径中被切走时 | 内核的 `x19～x29`、SP 和 LR |
+| 保存位置                             | 保存时机                                   | 主要内容                                          |
+| ------------------------------------ | ------------------------------------------ | ------------------------------------------------- |
+| 当前任务内核栈上的`struct pt_regs` | 用户态发生系统调用、中断或异常，进入内核时 | 用户寄存器`x0～x30`、用户 SP、用户 PC 和 PSTATE |
+| `task->thread.cpu_context`         | 任务在内核调度路径中被切走时               | 内核的`x19～x29`、SP 和 LR                      |
 
 `pt_regs` 是 Linux 结构体名称，其中 `regs` 是 Registers（寄存器）的缩写；它不是一个 ARM 硬件寄存器。`cpu_context` 中保存的是内核函数恢复执行所需的最小现场，不是第二份完整用户寄存器。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[arch/arm64/include/asm/ptrace.h](<./2.源码/linux/arch/arm64/include/asm/ptrace.h>) 第 152～172 行定义 `pt_regs`；[arch/arm64/include/asm/processor.h](<./2.源码/linux/arch/arm64/include/asm/processor.h>) 第 136～150 行定义 `cpu_context`。
+[SOURCE] 本地 Linux `248951ddc14d`：[arch/arm64/include/asm/ptrace.h](./2.源码/linux/arch/arm64/include/asm/ptrace.h) 第 152～172 行定义 `pt_regs`；[arch/arm64/include/asm/processor.h](./2.源码/linux/arch/arm64/include/asm/processor.h) 第 136～150 行定义 `cpu_context`。
 
 #### 2.8.2 调度器先确定下一个任务使用哪个 `mm_struct`
 
 调度器根据 `next->mm` 区分两种情况：
 
-| `next->mm` | 下一个任务 | 地址空间处理 |
-| --- | --- | --- |
-| 非 `NULL` | 用户任务 | 调用 `switch_mm_irqs_off()` 切换到 `next->mm` |
-| `NULL` | 内核线程 | 不拥有用户地址空间，通过 `active_mm` 临时借用当前地址空间上下文 |
+| `next->mm` | 下一个任务 | 地址空间处理                                                     |
+| ------------ | ---------- | ---------------------------------------------------------------- |
+| 非`NULL`   | 用户任务   | 调用`switch_mm_irqs_off()` 切换到 `next->mm`                 |
+| `NULL`     | 内核线程   | 不拥有用户地址空间，通过`active_mm` 临时借用当前地址空间上下文 |
 
 函数名中的 `irqs_off` 表示切换时 IRQ（Interrupt Request，中断请求）已经关闭。这里先完成地址空间处理，随后才由 `switch_to()` 切换内核寄存器和栈。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[kernel/sched/core.c](<./2.源码/linux/kernel/sched/core.c>) 第 5448～5513 行。
+[SOURCE] 本地 Linux `248951ddc14d`：[kernel/sched/core.c](./2.源码/linux/kernel/sched/core.c) 第 5448～5513 行。
 
 #### 2.8.3 同一地址空间与不同地址空间
 
 对于两个普通用户任务：
 
-| 关系 | `mm_struct` | PGD、TTBR 和 ASID |
-| --- | --- | --- |
-| 同一进程中的线程 | 通常相同 | 通常不需要重新切换 |
-| 不同进程 | 通常不同 | 检查或分配 ASID，并安装下一个进程的 PGD |
+| 关系             | `mm_struct` | PGD、TTBR 和 ASID                       |
+| ---------------- | ------------- | --------------------------------------- |
+| 同一进程中的线程 | 通常相同      | 通常不需要重新切换                      |
+| 不同进程         | 通常不同      | 检查或分配 ASID，并安装下一个进程的 PGD |
 
 地址空间不同时，ARM64 主线是：检查下一个 `mm_struct` 的 ASID，准备 `mm->pgd` 的物理地址，更新 TTBR，最后执行 ISB（Instruction Synchronization Barrier，指令同步屏障）。旧进程的 non-Global TLB 记录可以继续保留，因为其中带有旧 ASID，不会被新进程误用。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[arch/arm64/include/asm/mmu_context.h](<./2.源码/linux/arch/arm64/include/asm/mmu_context.h>) 第 236～264 行；[arch/arm64/mm/context.c](<./2.源码/linux/arch/arm64/mm/context.c>) 第 215～270、349～371 行。
+[SOURCE] 本地 Linux `248951ddc14d`：[arch/arm64/include/asm/mmu_context.h](./2.源码/linux/arch/arm64/include/asm/mmu_context.h) 第 236～264 行；[arch/arm64/mm/context.c](./2.源码/linux/arch/arm64/mm/context.c) 第 215～270、349～371 行。
 
 #### 2.8.4 按时间顺序看一次完整切换
 
@@ -1767,7 +2072,7 @@ B继续在用户态运行
 
 任务切换时，`entry_task_switch(next)` 先更新 `__entry_task`，`cpu_switch_to(prev, next)` 随后保存旧任务的内核现场、恢复新任务的内核现场，并执行 `SP_EL0 = next`。关键切换期间中断保持关闭，避免代码观察到“内核栈已经属于 B，但 `current` 仍指向 A”的半切换状态。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[arch/arm64/kernel/process.c](<./2.源码/linux/arch/arm64/kernel/process.c>) 第 567～578、727～777 行；[arch/arm64/kernel/entry.S](<./2.源码/linux/arch/arm64/kernel/entry.S>) 第 197～224、281～304、335～366、813～848 行。
+[SOURCE] 本地 Linux `248951ddc14d`：[arch/arm64/kernel/process.c](./2.源码/linux/arch/arm64/kernel/process.c) 第 567～578、727～777 行；[arch/arm64/kernel/entry.S](./2.源码/linux/arch/arm64/kernel/entry.S) 第 197～224、281～304、335～366、813～848 行。
 
 ### 2.9 页表修改与 TLB 一致性
 
@@ -1925,18 +2230,18 @@ CPU访问VA
 
 [SOURCE] 本章本地源码索引：
 
-| 主题                      | Linux`248951ddc14d` 源码路径                                                                                                                                                                                           |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 当前任务与`task_struct` | [arch/arm64/include/asm/current.h](./2.源码/linux/arch/arm64/include/asm/current.h)、[include/linux/sched.h](./2.源码/linux/include/linux/sched.h)                                                                         |
-| `active_mm`             | `Documentation/mm/active_mm.rst`（当前仍在 Git 对象中）、[kernel/sched/core.c](./2.源码/linux/kernel/sched/core.c)                                                                                                      |
-| `mm_struct` 与 VMA      | [include/linux/mm_types.h](./2.源码/linux/include/linux/mm_types.h)、[include/linux/mm.h](./2.源码/linux/include/linux/mm.h)                                                                                               |
-| 地址空间创建与共享        | [kernel/fork.c](./2.源码/linux/kernel/fork.c)                                                                                                                                                                             |
-| Maple Tree 与 VMA 操作    | [mm/mmap.c](./2.源码/linux/mm/mmap.c)、[mm/vma.c](./2.源码/linux/mm/vma.c)、[mm/mprotect.c](./2.源码/linux/mm/mprotect.c)                                                                                                   |
-| VMA 与缺页路径            | [arch/arm64/mm/fault.c](./2.源码/linux/arch/arm64/mm/fault.c)、[mm/mmap_lock.c](./2.源码/linux/mm/mmap_lock.c)、[mm/memory.c](./2.源码/linux/mm/memory.c)                                                                   |
-| ARM64`mm_context_t`     | [arch/arm64/include/asm/mmu.h](./2.源码/linux/arch/arm64/include/asm/mmu.h)                                                                                                                                               |
-| TTBR 与地址空间切换       | [arch/arm64/include/asm/mmu_context.h](./2.源码/linux/arch/arm64/include/asm/mmu_context.h)、[arch/arm64/mm/context.c](./2.源码/linux/arch/arm64/mm/context.c)、[arch/arm64/mm/proc.S](./2.源码/linux/arch/arm64/mm/proc.S) |
-| 异常入口与任务现场切换    | [arch/arm64/kernel/entry.S](<./2.源码/linux/arch/arm64/kernel/entry.S>)、[arch/arm64/kernel/process.c](<./2.源码/linux/arch/arm64/kernel/process.c>)、[arch/arm64/include/asm/processor.h](<./2.源码/linux/arch/arm64/include/asm/processor.h>)、[arch/arm64/include/asm/ptrace.h](<./2.源码/linux/arch/arm64/include/asm/ptrace.h>) |
-| ARM64 页表保护位          | [arch/arm64/include/asm/pgtable-hwdef.h](./2.源码/linux/arch/arm64/include/asm/pgtable-hwdef.h)、[arch/arm64/include/asm/pgtable-prot.h](./2.源码/linux/arch/arm64/include/asm/pgtable-prot.h)                             |
-| TLB 无效化                | [arch/arm64/include/asm/tlbflush.h](./2.源码/linux/arch/arm64/include/asm/tlbflush.h)                                                                                                                                     |
+| 主题                      | Linux`248951ddc14d` 源码路径                                                                                                                                                                                                                                                                                           |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 当前任务与`task_struct` | [arch/arm64/include/asm/current.h](./2.源码/linux/arch/arm64/include/asm/current.h)、[include/linux/sched.h](./2.源码/linux/include/linux/sched.h)                                                                                                                                                                         |
+| `active_mm`             | `Documentation/mm/active_mm.rst`（当前仍在 Git 对象中）、[kernel/sched/core.c](./2.源码/linux/kernel/sched/core.c)                                                                                                                                                                                                      |
+| `mm_struct` 与 VMA      | [include/linux/mm_types.h](./2.源码/linux/include/linux/mm_types.h)、[include/linux/mm.h](./2.源码/linux/include/linux/mm.h)                                                                                                                                                                                               |
+| 地址空间创建与共享        | [kernel/fork.c](./2.源码/linux/kernel/fork.c)                                                                                                                                                                                                                                                                             |
+| Maple Tree 与 VMA 操作    | [mm/mmap.c](./2.源码/linux/mm/mmap.c)、[mm/vma.c](./2.源码/linux/mm/vma.c)、[mm/mprotect.c](./2.源码/linux/mm/mprotect.c)                                                                                                                                                                                                   |
+| VMA 与缺页路径            | [arch/arm64/mm/fault.c](./2.源码/linux/arch/arm64/mm/fault.c)、[mm/mmap_lock.c](./2.源码/linux/mm/mmap_lock.c)、[mm/memory.c](./2.源码/linux/mm/memory.c)                                                                                                                                                                   |
+| ARM64`mm_context_t`     | [arch/arm64/include/asm/mmu.h](./2.源码/linux/arch/arm64/include/asm/mmu.h)                                                                                                                                                                                                                                               |
+| TTBR 与地址空间切换       | [arch/arm64/include/asm/mmu_context.h](./2.源码/linux/arch/arm64/include/asm/mmu_context.h)、[arch/arm64/mm/context.c](./2.源码/linux/arch/arm64/mm/context.c)、[arch/arm64/mm/proc.S](./2.源码/linux/arch/arm64/mm/proc.S)                                                                                                 |
+| 异常入口与任务现场切换    | [arch/arm64/kernel/entry.S](./2.源码/linux/arch/arm64/kernel/entry.S)、[arch/arm64/kernel/process.c](./2.源码/linux/arch/arm64/kernel/process.c)、[arch/arm64/include/asm/processor.h](./2.源码/linux/arch/arm64/include/asm/processor.h)、[arch/arm64/include/asm/ptrace.h](./2.源码/linux/arch/arm64/include/asm/ptrace.h) |
+| ARM64 页表保护位          | [arch/arm64/include/asm/pgtable-hwdef.h](./2.源码/linux/arch/arm64/include/asm/pgtable-hwdef.h)、[arch/arm64/include/asm/pgtable-prot.h](./2.源码/linux/arch/arm64/include/asm/pgtable-prot.h)                                                                                                                             |
+| TLB 无效化                | [arch/arm64/include/asm/tlbflush.h](./2.源码/linux/arch/arm64/include/asm/tlbflush.h)                                                                                                                                                                                                                                     |
 
 下一章将从 `PTE → 物理页基地址 → PFN` 继续，说明 Linux 如何通过 PFN 和 `struct page` 管理真实物理页。
