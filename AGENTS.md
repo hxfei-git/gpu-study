@@ -32,6 +32,8 @@ Keep filenames stable. For links to files whose names contain spaces or non-ASCI
 
 Separate facts from analysis with the labels already used in the notes: `[SOURCE]`, `[SPEC]`, `[INFERENCE]`, `[BOUNDARY]`, and `[DESIGN]`. Cite the exact source path, version, or specification section whenever making a source-backed implementation claim.
 
+源码依据必须就近嵌入正在解释的概念，不要在小节末尾堆叠一长串 `[SOURCE]` 路径和行号。优先采用“先提出问题或结论 → 标出源码路径、版本和行号 → 截取最小必要的原始代码 → 紧接着逐行解释 → 给出本段结论”的顺序。代码摘录通常只保留当前概念所需的字段、分支或调用点；省略无关代码时用注释明确表示，不得改写成看似原始源码的伪代码。源码注释、规范或设计文档摘录为英文时，必须在原文后立即提供对应的中文翻译。保留可点击的本地源码链接，但正文必须在不跳转源码文件的情况下也能理解。规范或纯文档依据同样放在对应说明附近，不要集中到小节末尾作为参考资料列表。
+
 ## Current-vs-Deferred Knowledge Workflow
 
 当用户询问某个知识点是否需要补充到当前文档时，必须先明确判断，说明建议放置的位置或后续阶段，然后等待用户明确同意。仅询问“是否需要补充”不构成修改文件的授权；在用户同意前，不得修改当前文档，也不得写入或删除 `待补充的知识点.md`。如果用户在最初请求中已经明确要求“补充”“写入”或“按此执行”，则视为已经授权，无需重复确认。
@@ -48,3 +50,13 @@ Separate facts from analysis with the labels already used in the notes: `[SOURCE
 No local Git history is available, so no repository-specific commit convention can be inferred. Use concise imperative messages with a documentation scope, for example `docs(svm): clarify page-fault ownership`.
 
 Keep each pull request focused. Describe the reader-facing change, identify updated chapters and index links, and state how links/rendering were checked. Link relevant issues or source revisions. Include a screenshot only when a Mermaid diagram, table, or rendered layout materially changed.
+
+### 交付信息
+
+补丁成功后，向用户报告：本地 `main` 基线完整 SHA、当前分支、补丁包含的文件清单、补丁绝对路径、文件大小、SHA-256，以及校验结果。说明公司电脑上的修改仍然保留，除非用户另行明确要求，否则不要清理。
+
+同时给出家里电脑上的建议应用流程：先将 `main` 仅快进更新到最新远端状态，再运行 `git apply --3way --index "<补丁路径>"`，检查差异后由用户自行提交并推送。不得在公司电脑上提交或推送。
+
+### 学习进度
+
+`1.笔记` 目录下的内容，仅作为参考学习文档，目前已经完成 `01_Linux 内存管理基础.md` 的学习，正在进行 `02_GPU 内存管理基础.md` 的学习。
