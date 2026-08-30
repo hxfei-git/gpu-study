@@ -51,12 +51,6 @@ No local Git history is available, so no repository-specific commit convention c
 
 Keep each pull request focused. Describe the reader-facing change, identify updated chapters and index links, and state how links/rendering were checked. Link relevant issues or source revisions. Include a screenshot only when a Mermaid diagram, table, or rendered layout materially changed.
 
-### 交付信息
-
-补丁成功后，向用户报告：本地 `main` 基线完整 SHA、当前分支、补丁包含的文件清单、补丁绝对路径、文件大小、SHA-256，以及校验结果。说明公司电脑上的修改仍然保留，除非用户另行明确要求，否则不要清理。
-
-同时给出家里电脑上的建议应用流程：先将 `main` 仅快进更新到最新远端状态，再运行 `git apply --3way --index "<补丁路径>"`，检查差异后由用户自行提交并推送。不得在公司电脑上提交或推送。
-
 ### 学习进度
 
 `1.笔记` 目录下的内容，仅作为参考学习文档，目前已经完成 `01_Linux 内存管理基础.md` 的学习，正在进行 `02_GPU 内存管理基础.md` 的学习。
