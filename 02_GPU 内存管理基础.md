@@ -20,7 +20,7 @@
 | DQM     | Device Queue Manager                         | KFD 中管理进程与 Queue 调度状态的模块    |
 | DRM     | Direct Rendering Manager                     | Linux 直接渲染管理框架                   |
 | FB      | Frame Buffer                                 | 帧缓冲；源码中的 FB BAR 指显存窗口       |
-| GART    | Graphics Address Remapping Table             | 图形地址重映射表                         |
+| GART    | Graphics Address Remapping Table             | AMDGPU 内核驱动使用的 GPUVM 页表         |
 | GEM     | Graphics Execution Manager                   | DRM 的图形内存对象管理框架               |
 | GFP     | Get Free Pages                               | Linux 物理页分配标志                     |
 | GFXHUB  | Graphics Hub                                 | 图形/计算访问使用的地址翻译 Hub          |
@@ -28,7 +28,7 @@
 | GPU     | Graphics Processing Unit                     | 图形处理器                               |
 | GPUVA   | GPU Virtual Address                          | GPU 虚拟地址                             |
 | GPUVM   | GPU Virtual Memory                           | GPU 虚拟地址空间及其页表                 |
-| GTT     | Graphics Translation Table                   | AMDGPU 中主要表示 GPU 可访问的系统内存域 |
+| GTT     | Graphics Translation Tables                  | TTM 管理的 system-resource 内存池        |
 | HMM     | Heterogeneous Memory Management              | 异构内存管理                             |
 | HQD     | Hardware Queue Descriptor                    | 硬件队列描述状态                         |
 | HSA     | Heterogeneous System Architecture            | 异构系统架构                             |
@@ -42,6 +42,7 @@
 | ioctl   | Input/Output Control                         | 用户态向内核驱动发送控制请求的接口       |
 | KFD     | Kernel Fusion Driver                         | Linux AMD GPU 计算驱动接口               |
 | Kernarg | Kernel Arguments                             | Kernel Dispatch 使用的参数数据/参数段    |
+| KGD     | Kernel Graphics Driver                       | 向 KFD 提供底层 GPU 服务的图形驱动侧     |
 | KiB     | Kibibyte                                     | 二进制千字节，1 KiB 等于 1024 字节       |
 | MEC     | Micro Engine Compute                         | AMD GPU 中处理计算队列的命令处理引擎     |
 | MES     | Micro Engine Scheduler                       | AMD GPU 的微引擎调度器                   |
@@ -83,7 +84,7 @@ GPU 内存管理不是单纯的“申请显存”。一块内存要真正被 CPU
 | 章节    | 核心问题                      | AQL 在本章中的位置                   |
 | ------- | ----------------------------- | ------------------------------------ |
 | 第 0 章 | GPU 内存管理到底要解决什么    | 用一段 16 KiB AQL Ring 固定问题背景  |
-| 第 1 章 | CPU 和 GPU 怎样找到真正的数据 | Ring 只是 system RAM 映射的一个例子  |
+| 第 1 章 | CPU 和 GPU 怎样找到真正的数据 | 以 system RAM Ring 为主并对照 VRAM   |
 | 第 2 章 | 内存怎样分配、映射并安全释放  | Ring 只演示 Queue 为什么必须持有引用 |
 | 第 3 章 | CPU 和 GPU 怎样看见彼此的写入 | Packet→Doorbell 只演示发布顺序      |
 
@@ -187,7 +188,18 @@ Doorbell 不包含 Packet 数据，也不会把 Packet 搬到 GPU。Packet 仍�
 
 ### 0.4 贯穿案例：16 KiB AQL Ring
 
-后文使用一段 16 KiB AQL Ring 作为贯穿例子，并作如下教学假设：
+AQL Ring 的“数据放在哪里”和“通过哪套 GPU 页表访问”是两个独立问题：
+
+```text
+数据位置
+  ├─ system RAM backing
+  └─ VRAM / device-local backing
+
+用户AQL Queue使用时的地址关系
+  └─ Ring GPUVA → 当前用户进程的GPUVM → 对应backing
+```
+
+后文使用一段 16 KiB AQL Ring 作为贯穿例子。为了能具体观察 `struct page`、DMA 地址和 Host IOMMU，本文主动选择 **system RAM backing**，并作如下教学假设：
 
 | 项目     | 本文假设                                         |
 | -------- | ------------------------------------------------ |
@@ -214,7 +226,16 @@ GPU侧：GPUVA ──→ GPU页表 ┘
 3. Queue 使用期间，为什么不能删掉映射或释放 BO？
 4. CPU 写完 Packet 后，怎样保证 GPU 读到完整内容？
 
-> **[BOUNDARY]** 16 KiB 只是便于画出 4 个页面的示例，不是 ROCr 固定的 Ring 大小。本文也不会借这个例子展开完整 Queue 创建和 Kernel Dispatch。
+后文的图示按用途使用以下标记：
+
+| 标记                          | 表示什么                                                |
+| ----------------------------- | ------------------------------------------------------- |
+| `[AQL主线]`                 | 用户 AQL Queue 使用进程 GPUVM 访问 Ring、Kernarg 等资源 |
+| `[GPU系统上下文/非AQL对照]` | AMDGPU 内核驱动使用系统 GPU 地址空间的对照路径          |
+| `[Host Driver建表阶段]`     | CPU 上运行的驱动创建或修改 GPU 页表                     |
+| `[GPU运行阶段]`             | GPU MMU 根据当前地址空间实际遍历页表                    |
+
+> **[BOUNDARY]** 16 KiB 和 system RAM 都只是本文的教学选择，不是 ROCr 固定的 Ring 大小或固定的 Ring backing。ROCr 还可以选择设备本地内存作为 Ring backing；该分支在 2.7 只作必要对照。本文也不会借这个例子展开完整 Queue 创建和 Kernel Dispatch。
 
 ## 1. GPU 怎样找到真正的数据
 
@@ -228,6 +249,8 @@ GPU侧：GPUVA ──→ GPU页表 ┘
 | VRAM       | GPU 本地内存 | GPU          | GPU 本地高带宽访问；CPU 只能访问 BAR 可见部分 |
 
 GPUVA 并不天然属于某一种存储。一套 GPU 页表可以让不同 GPUVA 页面分别指向 system RAM 或 VRAM。
+
+因此，AQL Ring 也不能仅凭名字判断数据位置：system RAM Ring 和 VRAM Ring 都可以映射进用户进程的 GPUVM。本文后续以 system RAM Ring 为贯穿案例，讲到 VRAM 时再单独画出另一条路径。
 
 **[SOURCE]** Linux `248951ddc14de84de3910f9b13f51491a8cd91df` 的 [`drivers/gpu/drm/amd/amdgpu/amdgpu_vm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_vm.c) 第 51～58 行写道：
 
@@ -480,7 +503,11 @@ GPU PTE的目标也不一定是IOVA
 
 ### 1.4 GPU 地址翻译
 
-现在把 GPU MMU、GPU 页表、PTE、GPU TLB 和 Host IOMMU 放进同一张图。假设 GPU 访问位于 system RAM 的 Ring 第 0 页，并且 Host IOMMU 已启用：
+现在把 GPU MMU、GPU 页表、PTE、GPU TLB 和 Host IOMMU 放进同一张图。先看本文的贯穿案例：GPU 访问位于 system RAM 的 AQL Ring 第 0 页，并且 Host IOMMU 已启用。
+
+```text
+[AQL主线：system RAM Ring]
+```
 
 ```text
 GPU引擎发出 GPUVA 0x1000_0120
@@ -507,6 +534,20 @@ system RAM第0页内偏移0x120
 ```
 
 GPU MMU 负责解释 GPUVA；Host IOMMU 只在设备访问主机内存时解释 IOVA。两者不是同一个 MMU，也不查询同一套页表。
+
+如果 AQL Ring 位于 VRAM，仍然使用该用户进程的 GPUVM，但 PTE 目标变为本地显存地址，不经过 Host IOMMU：
+
+```text
+[AQL主线：VRAM Ring]
+
+Ring GPUVA
+  → 当前用户进程的GPUVM页表
+  → PTE中的VRAM本地地址
+  → GPU本地内存系统
+  → VRAM中的Ring数据
+```
+
+这两条 AQL 路径只在 PTE 目标不同；都不需要先经过 VMID 0 的内核 GART 页表。
 
 最终 PTE 不是缓冲区数据，而是“目标页面地址 + 访问属性”。
 
@@ -604,7 +645,7 @@ GPU TLB 只是翻译结果缓存，不是页表。页表修改后，如果旧 TL
   → GPU再次访问时重新遍历页表
 ```
 
-TLB 失效清除的是“旧地址翻译”，不是清空 Ring 或 Kernel 数据。第 2 章会在 `MAP_MEMORY_TO_GPU` 路径中看到“同步页表更新后再 flush TLB”。
+TLB invalidation 清除的是“旧地址翻译”，不是清空 Ring 或 Kernel 数据。第 2 章会在 `MAP_MEMORY_TO_GPU` 路径中看到“同步页表更新后再使旧 TLB 翻译失效”。
 
 ### 1.5 地址空间怎样被选择
 
@@ -879,26 +920,31 @@ GPU指令使用GPUVA  → GPU MMU读取该进程的GPUVM页表
 
 下面假设运行 ROCr/HIP 应用的 Linux 用户进程，在当前 GPU 上使用 PASID `42`，驱动为它维护的 GPUVM 根页表地址是 `R`；负责当前调度模式的一方再从有限硬件槽位中为它选择 VMID `5`。非 HWS 模式由 Host Driver 选择；HWS 模式由 GPU 调度固件负责驻留和槽位管理。`42` 和 `5` 都只是讲解用的示例值。
 
-```mermaid
-flowchart TD
-    P["Linux用户进程的GPU地址空间<br/>对当前GPU：PASID = 42<br/>驱动维护的GPUVM根页表 = R"]
-    A["当前模式的调度者<br/>选择空闲VMID = 5"]
-    M["PASID-VMID映射状态<br/>VMID 5 ↔ PASID 42"]
-    B["VMID 5上下文寄存器<br/>PAGE_TABLE_BASE = R"]
-    Q["GPU当前执行上下文<br/>使用VMID 5"]
-    C["选择VMID 5的<br/>地址翻译上下文"]
-    G["GPU访存指令<br/>给出GPUVA G"]
-    W["GPU Page Walker<br/>从根页表R开始遍历"]
-    E["最终PTE<br/>得到D2和访问属性"]
+```text
+[配置阶段]
 
-    P --> A
-    A -->|记录身份对应关系| M
-    A -->|写入根页表地址R| B
-    Q --> C
-    C --> B
-    B --> W
-    G --> W
-    W --> E
+Linux用户进程在当前GPU上的地址空间
+├─ PASID = 42
+└─ Host Driver维护的GPUVM根页表 = R
+             │
+             │ 当前模式的调度者选择空闲槽位
+             ▼
+          VMID = 5
+             │
+             ├─ 配置VMID 5 ↔ PASID 42
+             └─ 配置VMID 5.PAGE_TABLE_BASE = R
+
+
+[GPU运行阶段]
+
+当前Queue使用VMID 5
+  → GPU MMU选择VMID 5的上下文寄存器
+  → 取得根页表地址R
+
+GPU访问给出GPUVA G
+  → Page Walker从R开始遍历G对应的页表
+  → 读取最终PTE
+  → 得到D2和访问属性
 ```
 
 这张图分为配置和运行两个时刻：
@@ -936,7 +982,11 @@ GPU 正常页表遍历直接使用 VMID 选择的根页表。PASID 负责维持�
 
 中文翻译：GPUVM 是 GPU 的 MMU 功能；GPU 可以同时启用多套 GPUVM 页表，每个 VMID 关联其中一套页表。这对应图中的“VMID 槽位→根页表”。
 
-#### 1.5.5 源码第一步：驱动分配 PASID 并交给 GPUVM
+#### 1.5.5 可选源码验证
+
+1.5.1～1.5.4 已经给出了理解地址空间选择所需的主线。下面几段只用源码验证 PASID 分配、KFD VMID 范围、非 HWS 选择槽位、根页表配置和释放过程；第一次阅读可以直接跳到 1.5.6。
+
+##### 1.5.5.1 源码第一步：驱动分配 PASID 并交给 GPUVM
 
 PASID 不是 GPU 返回给驱动的编号。AMDGPU 使用 Linux 的软件编号分配器，从硬件支持的位宽范围内选择一个尚未使用的正整数。
 
@@ -977,7 +1027,7 @@ r = amdgpu_vm_init(adev, &fpriv->vm, fpriv->xcp_id, pasid);
 
 因此，示例中的 `PASID 42` 表示“驱动从软件编号池分配了 42，并把它记录到该用户进程的 GPUVM”；不是用户指定 42，也不是向 GPU 请求后由 GPU 返回 42。
 
-#### 1.5.6 源码第二步：软件记录哪些硬件 VMID 被划给 KFD
+##### 1.5.5.2 源码第二步：软件记录哪些硬件 VMID 被划给 KFD
 
 VMID 是 GPU 已经实现好的有限硬件槽位；`compute_vmid_bitmap` 则是 Host Driver 保存在内核内存中的一个普通整数，用来记录“哪些硬件 VMID 被划给 KFD 使用”。它不是 BAR、不是 GPU 寄存器，也不保存页表地址。
 
@@ -1071,7 +1121,7 @@ vmid_pasid[5] == 0，因此VMID 5当前空闲
   ├─ 软件记录：vmid_pasid[5] = PASID 42
   ├─ 配置硬件PASID 42 ↔ VMID 5
   ├─ 配置GPU内部VMID 5的根页表地址R
-  └─ flush该地址空间的旧TLB翻译
+  └─ invalidate该地址空间的旧TLB翻译
 ```
 
 **[SOURCE]** Linux [`drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c) 第 1666 行初始化非 HWS 路径的占用表：
@@ -1082,7 +1132,7 @@ memset(dqm->vmid_pasid, 0, sizeof(dqm->vmid_pasid));
 
 这里约定数组值 `0` 表示“这个 VMID 尚未绑定有效 PASID”。因此，`compute_vmid_bitmap` 负责保存 KFD 的资源范围，`vmid_pasid[]` 才负责保存非 HWS 模式下的动态分配结果。
 
-#### 1.5.7 源码第三步：非 HWS 从占用表选择空闲 VMID
+##### 1.5.5.3 源码第三步：非 HWS 从占用表选择空闲 VMID
 
 以非 HWS 路径为例，驱动维护的表可能处于以下状态：
 
@@ -1113,6 +1163,8 @@ q->properties.vmid = qpd->vmid;
 
 `dqm_lock()` 防止两个进程同时看见 VMID 5 为空闲并重复分配。`list_empty()` 表示这是该进程设备上下文中的第一条 Queue。
 
+下面源码第一次出现 `pdd`。它是 Process Device Data，即“当前进程在当前 GPU 上的 KFD 状态”；这里通过 `qpd_to_pdd(qpd)` 从其中内嵌的 Queue/调度状态 `qpd` 找回 PDD。`pdd->pasid` 就是这个进程—GPU组合使用的 PASID。
+
 **[SOURCE]** Linux [`drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c) 第 681～715 行展示一种非 HWS 调度路径：
 
 ```c
@@ -1140,13 +1192,14 @@ kfd_flush_tlb(qpd_to_pdd(qpd));
 - 只扫描 `first_vmid_kfd～last_vmid_kfd`，不会占用不属于 KFD 的 VMID。
 - `vmid_pasid[i] == 0` 表示该槽位空闲；例子中因此选中 VMID 5。
 - 如果整个范围都没有空闲槽位，函数返回 `-ENOSPC`，不会覆盖正在使用的 VMID。
+- `pdd` 是当前进程＋当前 GPU 的 PDD；`pdd->pasid` 提供这个 PDD 对应的进程地址空间标识。
 - `vmid_pasid[allocated_vmid] = pdd->pasid` 记录 `VMID↔PASID`。
 - `set_pasid_vmid_mapping()` 把对应关系配置给硬件。
 - `qpd->vmid` 保存该进程设备上下文当前使用的 VMID。
 - `set_vm_context_page_table_base()` 把该进程的根页表地址配置给这个 VMID。
 - `kfd_flush_tlb()` 使该地址空间可能残留的旧 TLB 翻译失效。
 
-#### 1.5.8 源码第四步：给这个 VMID 写入根页表地址
+##### 1.5.5.4 源码第四步：给这个 VMID 写入根页表地址
 
 前文的 VMID `5` 是用来解释机制的抽象编号。这里既然选用 GFXHUB v2.0 的具体代码，就改用该代际实际划给 KFD 的 VMID 范围。
 
@@ -1170,38 +1223,35 @@ R = page_table_base = 0x0000_1234_5678_9000
 
 `R` 只是为了展示 64 位数值怎样写入寄存器而选取的示例值，不是源码中的固定地址。它是 GPU MMU 用来定位根页表的基值，不是 CPU VA。驱动配置和 GPU 运行是两个时刻：
 
-```mermaid
-flowchart TB
-    subgraph CONFIG["配置阶段：Host Driver"]
-        I["函数输入<br/>vmid = 8<br/>R = 0x0000_1234_5678_9000"]
-        S["用vmid选择寄存器组<br/>CONTEXT0基准 + ctx_addr_distance × 8"]
-        L["lower_32_bits(R)<br/>0x5678_9000"]
-        H["upper_32_bits(R)<br/>0x0000_1234"]
-        I --> S
-        I --> L
-        I --> H
-    end
+```text
+[配置阶段：Host Driver]
 
-    subgraph REGS["GFXHUB的VMID 8上下文寄存器组"]
-        P["PAGE_TABLE_BASE_ADDR_LO32 = 0x5678_9000<br/>PAGE_TABLE_BASE_ADDR_HI32 = 0x0000_1234<br/>两个字段共同表示根页表基值R"]
-    end
+函数输入
+├─ vmid = 8
+└─ R = 0x0000_1234_5678_9000
+       │
+       ├─ vmid选择寄存器组
+       │    CONTEXT0基准 + ctx_addr_distance × 8
+       │
+       ├─ lower_32_bits(R) = 0x5678_9000
+       └─ upper_32_bits(R) = 0x0000_1234
+                         │
+                         ▼
+GFXHUB的VMID 8上下文寄存器组
+├─ PAGE_TABLE_BASE_ADDR_LO32 = 0x5678_9000
+└─ PAGE_TABLE_BASE_ADDR_HI32 = 0x0000_1234
+   两个寄存器共同表示根页表基值R
 
-    S --> P
-    L --> P
-    H --> P
 
-    subgraph RUN["运行阶段：GPU"]
-        Q["当前Queue使用VMID 8"]
-        C["GFXHUB选择VMID 8的上下文寄存器"]
-        R["取得根页表基值R"]
-        G["访存请求给出GPUVA G"]
-        W["GPU Page Walker<br/>从R开始遍历G对应的页表"]
-        E["最终PTE<br/>得到目标地址D2和访问属性"]
-        Q --> C --> R --> W --> E
-        G --> W
-    end
+[运行阶段：GPU]
 
-    P --> R
+当前Queue使用VMID 8
+  → GFXHUB选择VMID 8上下文寄存器
+  → 取得根页表基值R
+
+访存请求给出GPUVA G
+  → GPU Page Walker从R开始遍历G对应的页表
+  → 最终PTE给出目标地址D2和访问属性
 ```
 
 **[INFERENCE]** 图中的“配置阶段”直接对应下面的寄存器写入源码；“运行阶段”把该配置结果与 1.5.4 已确认的“VMID 选择一套 GPUVM 页表”连接起来，并不是说 `gfxhub_v2_0_setup_vm_pt_regs()` 自己执行了 Page Walk。
@@ -1252,7 +1302,7 @@ WREG32_SOC15_OFFSET(GC, 0,
 
 > **[BOUNDARY]** 图表示寄存器选择与地址翻译之间的逻辑关系，不表示芯片内部模块的物理摆放，也不表示驱动在 GPU 每次访存时重新写寄存器。不同 GPU 代际的寄存器名称和布局可能不同；本图只对应这里引用的 GFXHUB v2.0 代码。
 
-#### 1.5.9 源码第五步：最后一条 Queue 销毁后释放 VMID
+##### 1.5.5.5 源码第五步：最后一条 Queue 销毁后释放 VMID
 
 驱动不能仅把软件表写成 `0` 就立即复用 VMID。它必须先让旧 Queue 停止使用这个地址空间；只有该进程在这块 GPU 上的最后一条 Queue 已被移除，才调用 `deallocate_vmid()`。
 
@@ -1291,7 +1341,7 @@ q->properties.vmid = 0;
 
 ```text
 旧Queue停止使用VMID 5
-  → flush旧TLB翻译
+  → invalidate旧TLB翻译
   → 清除硬件中的PASID↔VMID映射
   → vmid_pasid[5] = 0
   → VMID 5重新成为可分配槽位
@@ -1329,7 +1379,7 @@ Linux用户进程存在
 
 这里限制的不是系统中能够存在的 Linux 进程总数，而是“在这块 GPU 上已经创建 Queue、因而必须占用 VMID 的进程—设备上下文数量”。这是 VMID 给出的上限；HQD 等其他 Queue 资源也可能更早达到限制。
 
-#### 1.5.10 HWS：谁维护 VMID 占用
+##### 1.5.5.6 HWS：谁维护 VMID 占用
 
 `compute_vmid_bitmap` 可以直接理解为：
 
@@ -1375,7 +1425,7 @@ res.vmid_mask = dqm->dev->compute_vmid_bitmap;
 return pm_send_set_resources(&dqm->packet_mgr, &res);
 ```
 
-进程信息则提供 PASID 和根页表；具体 VMID 仍由固件选择。
+进程信息则提供 PASID 和根页表；具体 VMID 仍由固件选择。下面的 `pdd` 仍是 Process Device Data，表示当前进程在当前 GPU 上的状态；`qpd` 是这个 PDD 内嵌的 Queue/调度状态。
 
 **[SOURCE]** 以 VI 代际为例，Linux [`drivers/gpu/drm/amd/amdkfd/kfd_packet_manager_vi.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager_vi.c) 第 52～57 行：
 
@@ -1383,6 +1433,8 @@ return pm_send_set_resources(&dqm->packet_mgr, &res);
 packet->bitfields2.pasid = pdd->pasid;
 packet->bitfields3.page_table_base = qpd->page_table_base;
 ```
+
+这里分别从同一个进程—GPU上下文取出两类信息：`pdd->pasid` 说明地址空间属于谁，`qpd->page_table_base` 给出该地址空间的根页表地址。
 
 普通 AQL Packet 只是已有 Queue 中的新任务：
 
@@ -1399,88 +1451,63 @@ packet->bitfields3.page_table_base = qpd->page_table_base;
 
 > **[BOUNDARY]** HWS 固件内部怎样保存占用表、怎样选择换出对象，以及 MES 的具体调度协议留到 AQL Queue 调度阶段；当前只需要记住：`compute_vmid_bitmap` 是分给 KFD 的 VMID 范围，HWS 的实时占用由固件维护。
 
+#### 1.5.6 VMID 0 不属于普通 AQL 进程地址空间
+
+前面讨论的是分给 KFD 计算使用的 VMID。还要单独隔离一个系统上下文：在本文采用的 GFXHUB v2.0 例子中，VMID 0 用于 AMDGPU 内核驱动的系统 GPU 地址空间，不是某个 ROCr 用户进程的活动 VMID。
+
+```text
+[AQL主线]
+
+KFD计算VMID（例如VMID 8～15中的一个）
+  → 选择某个用户进程的GPUVM根页表
+  → GPU访问该进程的Ring、Kernarg和结果缓冲区
+
+
+[GPU系统上下文/非AQL对照]
+
+VMID 0
+  → 选择AMDGPU内核驱动的系统页表/GART
+  → GPU访问内核驱动映射进系统GPU地址空间的资源
+```
+
+所以，普通 AQL Ring 的 GPUVA 不会因为 backing 位于 system RAM，就自动改用 VMID 0。它仍由当前用户进程的 KFD VMID 选择进程 GPUVM；VMID 0/GART 的用途在下一节作为非 AQL 对照说明。
+
 ### 1.6 GTT、GART 和 GPUVM：不是三级翻译
 
-这三个名字经常同时出现，但它们不在同一层。先把四个前置词说清楚：
-
-| 词语     | 在本节中的意思                                             |
-| -------- | ---------------------------------------------------------- |
-| BO       | 驱动用来管理一块缓冲区的软件对象                           |
-| backing  | 真正保存数据的存储资源；可以是 system RAM 页面或 VRAM 区间 |
-| 内存域   | 驱动对数据放置位置的分类，例如 GTT 或 VRAM                 |
-| aperture | 地址空间中预留的一段窗口；窗口内地址可被继续映射到实际页面 |
-
-下面先用同一块 16 KiB 缓冲区对比 GTT 和 VRAM 两种放置；随后仍用位于 GTT 的 AQL Ring 贯穿地址映射关系。
-
-#### 1.6.1 先分清：BO 管理对象和 BO 数据放在哪里
-
-“BO 在 system RAM”与“BO 在 VRAM”容易产生歧义。严格来说，需要分开看两个东西：
+这三个名字经常同时出现，但分别回答不同问题。先固定两个相互独立的维度：
 
 ```text
-BO管理对象：struct amdgpu_bo等软件结构
-BO数据：    用户真正申请的16 KiB缓冲区内容
+数据放在哪里
+  → 看backing和内存域：system RAM还是VRAM
+
+GPU通过哪套地址空间访问
+  → 看GPUVM映射：进程GPUVM还是内核驱动的系统GPUVM/GART
 ```
 
-`struct amdgpu_bo` 是 Linux 内核中的 C 结构体，无论数据最终放在哪里，它都保存在 system RAM。所谓“GTT BO”或“VRAM BO”，说的是 **BO 数据/backing 的当前位置**。
+因此，看到一个 GTT BO，只能先得出“数据由 system resource 承载”；不能直接得出“用户 AQL 访问一定经过 VMID 0/GART”。
 
-先看数据也位于 system RAM 的情况：
+#### 1.6.1 先区分 backing 与地址映射
 
-```text
-16 KiB GTT BO
-
-system RAM
-├─ struct amdgpu_bo                 软件管理对象
-│    └─ tbo.resource
-│          └─ struct ttm_resource   描述当前放置在GTT域
-│
-└─ 4个system RAM页面                真正的16 KiB数据
-     └─ 每页还有供GPU使用的DMA地址
-
-GPU访问数据：GPUVA → GPU PTE → DMA地址 → system RAM页面
-```
-
-再看数据位于 VRAM 的情况：
+BO 是驱动管理缓冲区的软件对象，backing 才是真正保存数据的存储资源。软件管理对象保存在 system RAM；BO 数据则可以位于 system RAM 或 VRAM：
 
 ```text
-16 KiB VRAM BO
+GTT BO
 
 system RAM
-└─ struct amdgpu_bo                 软件管理对象
-     └─ tbo.resource
-           └─ struct ttm_resource   描述VRAM域、资源偏移和大小
+├─ struct amdgpu_bo等管理结构
+└─ 4个system RAM页面              真正的16 KiB数据
+
+
+VRAM BO
+
+system RAM
+└─ struct amdgpu_bo等管理结构
 
 VRAM
-└─ 一段16 KiB资源区间               真正的16 KiB数据
-
-GPU访问数据：GPUVA → GPU PTE → VRAM本地地址 → VRAM
+└─ 一段16 KiB显存资源              真正的16 KiB数据
 ```
 
-注意，`tbo.resource` 指向的是 system RAM 中的 `struct ttm_resource` 描述对象，不是一个可以由 CPU 直接解引用到 VRAM 数据的普通指针。驱动读取其中的内存域、资源偏移和大小，再生成 GPU PTE。
-
-两种情况压缩成一张表：
-
-| 比较项                         | GTT BO          | VRAM BO       |
-| ------------------------------ | --------------- | ------------- |
-| `struct amdgpu_bo` 在哪里    | system RAM      | system RAM    |
-| `struct ttm_resource` 在哪里 | system RAM      | system RAM    |
-| 真正的 16 KiB 数据在哪里       | system RAM 页面 | VRAM 资源区间 |
-| GPU PTE 的目标                 | 页面 DMA 地址   | VRAM 本地地址 |
-
-**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_object.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_object.c) 第 663～669 行通过 `kvzalloc()` 分配 `amdgpu_bo` 软件对象：
-
-```c
-BUG_ON(bp->bo_ptr_size < sizeof(struct amdgpu_bo));
-
-*bo_ptr = NULL;
-bo = kvzalloc(bp->bo_ptr_size, GFP_KERNEL);
-if (bo == NULL)
-	return -ENOMEM;
-drm_gem_private_object_init(adev_to_drm(adev), &bo->tbo.base, size);
-```
-
-`kvzalloc(..., GFP_KERNEL)` 分配的是内核虚拟内存，由 system RAM 承载。这里分配的是管理结构，不是那段 16 KiB VRAM 数据。
-
-**[SOURCE]** Linux [`include/drm/ttm/ttm_bo.h`](./2.源码/linux/include/drm/ttm/ttm_bo.h) 第 81～84、117～121 行说明 `resource` 的职责：
+**[SOURCE]** Linux [`include/drm/ttm/ttm_bo.h`](./2.源码/linux/include/drm/ttm/ttm_bo.h) 第 81～84、117～121 行把“当前放置资源”和“system RAM 页面状态”分成两个字段：
 
 ```c
  * @resource: structure describing current placement.
@@ -1491,154 +1518,96 @@ struct ttm_resource *resource;
 struct ttm_tt *ttm;
 ```
 
-中文翻译：`resource` 是描述 BO 当前放置位置的结构；`ttm` 则保存与 system RAM 页面有关的 TTM 信息。因此，`resource` 是位置说明书，不是缓冲区数据本身。
+中文翻译：`resource` 描述 BO 当前使用哪类放置资源；`ttm` 保存 system RAM backing 的页面状态。二者都是管理信息，不是用户申请的那段缓冲区数据。
 
-以后看到“BO 位于某处”，都按下面的完整句子理解：
-
-```text
-GTT BO  = BO管理对象在system RAM，BO数据当前也在system RAM
-VRAM BO = BO管理对象在system RAM，BO数据当前在VRAM
-```
-
-> **[BOUNDARY]** 本节只区分“软件对象”和“真正数据”；完整 GEM/TTM 对象关系仍留到后续 DRM 学习阶段。
-
-#### 1.6.2 GTT：说明数据放在 GPU 可访问的 system RAM
-
-假设 Ring 被分配为 GTT 内存：
+地址映射是下一层关系。同一份 backing 是否能被某个 GPUVA 到达，要看它是否已经映射进相应 GPUVM：
 
 ```text
-16 KiB GTT BO
-  └─ backing：4个system RAM页面
+BO/backing已经存在
+        ≠
+某个用户进程的GPUVA已经可以访问它
 ```
 
-这里的 GTT 首先是一个**内存域名称**。它说明这块 BO 的数据由 GPU 可访问的 system RAM 承载；它本身不是 GPUVA，也不是一次地址翻译。
+详细对象关系放到 2.4；本节先关注 GTT、GART 和 GPUVM 的职责边界。
 
-**[SOURCE]** Linux [`include/uapi/drm/amdgpu_drm.h`](./2.源码/linux/include/uapi/drm/amdgpu_drm.h) 第 83～95 行定义 AMDGPU 内存域。其中与本节有关的原始注释是：
+#### 1.6.2 GTT：TTM 管理的 system-resource 内存池
 
-```c
- * %AMDGPU_GEM_DOMAIN_GTT	GPU accessible system memory, mapped into the
- * GPU's virtual address space via gart. Gart memory linearizes non-contiguous
- * pages of system memory, allows GPU access system memory in a linearized
- * fashion.
- *
- * %AMDGPU_GEM_DOMAIN_VRAM	Local video memory. For APUs, it is memory
- * carved out by the BIOS.
-```
-
-中文翻译：GTT 域是 GPU 可以访问的 system RAM；原本不连续的系统页面经过设备侧映射后，可以被 GPU 按连续地址使用。VRAM 域则表示 GPU 本地显存。
-
-因此，看到 `AMDGPU_GEM_DOMAIN_GTT` 时，先读成：
-
-> 这块 BO 的数据放在 GPU 可访问的 system RAM 中。
-
-#### 1.6.3 GART：把 GART 窗口地址翻译成 DMA 地址
-
-先回答最容易混淆的问题：
-
-> **GART 页表不是 CPU MMU 使用的 CPU 页表。它由运行在 CPU 上的 Host Driver 创建和填写，但由 GPU MMU 读取和使用。**
-
-| 问题                   | 答案                                 |
-| ---------------------- | ------------------------------------ |
-| 谁分配、填写 GART 页表 | Host Driver，代码运行在 CPU 上       |
-| 谁遍历 GART 页表       | GPU MMU / Page Walker                |
-| 输入地址               | GART aperture 中的 GPU 侧地址        |
-| PTE 给出的目标         | system RAM 页面对设备可用的 DMA 地址 |
-
-假设 4 个 system RAM 页面在 Host 物理内存中并不连续。DMA 映射先为它们生成设备可用地址 `D0～D3`：
+在本文当前路径中，GTT 首先表示一类由 TTM 管理、供 GPU 使用的 system resource。对普通 system-memory BO，可以先读成：
 
 ```text
-system RAM页面： P7    P2    P9    P4
-                 │     │     │     │
-DMA映射结果：    D0    D1    D2    D3
+GTT BO
+  → backing位于system RAM
+  → 驱动为页面准备设备可用的DMA地址
 ```
 
-Host Driver 再把 `D0～D3` 写进 GART 页表：
+**[SOURCE]** Linux [`Documentation/gpu/amdgpu/amdgpu-glossary.rst`](./2.源码/linux/Documentation/gpu/amdgpu/amdgpu-glossary.rst) 第 100～105 行给出了 AMDGPU 自己使用的定义：
 
 ```text
-GART aperture地址：  A0    A1    A2    A3
-                     │     │     │     │
-GART PTE中的目标：   D0    D1    D2    D3
+GTT
+  Graphics Translation Tables. This is a memory pool managed through TTM
+  which provides access to system resources (memory or MMIO space) for
+  use by the GPU. These addresses can be mapped into the "GART" GPUVM page
+  table for use by the kernel driver or into per process GPUVM page tables
+  for application usage.
 ```
 
-因此，GPU 访问 `A2` 时发生的是：
+中文翻译：
 
 ```text
-Host IOMMU开启：
-A2 ──GPU MMU/GART页表──→ D2（IOVA）
-                         └─Host IOMMU──→ Host PA ──→ 页面P9
-
-Host IOMMU关闭：
-A2 ──GPU MMU/GART页表──→ D2（直连DMA/总线地址）──→ 页面P9
+GTT是由TTM管理的内存池，为GPU提供system resource。
+这些资源既可以映射进内核驱动使用的GART GPUVM页表，
+也可以映射进应用使用的进程GPUVM页表。
 ```
 
-所以，“GART 是不是 GPUVA 到 IOVA 的映射”需要分两种说法：
-
-- 广义上，`A2` 是 GPU 侧虚拟/逻辑地址；Host IOMMU 开启时，GART PTE 给出的 `D2` 是 IOVA，因此可以概括为“GPU 侧地址 → IOVA”。
-- 为了不和用户进程 GPUVM 中的 `GPUVA` 混淆，本文把 `A2` 明确称为 **GART aperture 地址**。GART 不是一张 CPU 页表，也不是固定接在进程 GPUVM 后面的第二级页表。
-
-**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_gart.h`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_gart.h) 第 42～45 行说明 Host Driver 持有 GART 页表的 CPU 内核映射地址：
-
-```c
-struct amdgpu_gart {
-	struct amdgpu_bo		*bo;
-	/* CPU kmapped address of gart table */
-	void				*ptr;
-```
-
-中文翻译：`ptr` 是 GART 页表的 CPU 内核映射地址。Host Driver 可以通过它填写页表，但这不代表 CPU MMU 会使用这张表。
-
-**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_gart.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_gart.c) 第 365～371 行把每个页面的 DMA 地址写入对应 GART PTE：
-
-```c
-t = offset / AMDGPU_GPU_PAGE_SIZE;
-
-for (i = 0; i < pages; i++) {
-	page_base = dma_addr[i];
-	for (j = 0; j < AMDGPU_GPU_PAGES_IN_CPU_PAGE; j++, t++) {
-		amdgpu_gmc_set_pte_pde(adev, dst, t, page_base, flags);
-		page_base += AMDGPU_GPU_PAGE_SIZE;
-```
-
-`t` 选择 GART aperture 中的页号，`dma_addr[i]` 就是 `D0～D3`，`amdgpu_gmc_set_pte_pde()` 把这个 DMA 地址写进对应 PTE。
-
-**[SOURCE]** 以 GFXHUB v2.0 为例，Linux [`drivers/gpu/drm/amd/amdgpu/gfxhub_v2_0.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gfxhub_v2_0.c) 第 134～138 行把 GART 页表的 GPU 地址写入 VMID 0 的页表根寄存器：
-
-```c
-static void gfxhub_v2_0_init_gart_aperture_regs(struct amdgpu_device *adev)
-{
-	uint64_t pt_base = amdgpu_gmc_pd_addr(adev->gart.bo);
-
-	gfxhub_v2_0_setup_vm_pt_regs(adev, 0, pt_base);
-```
-
-这一步告诉 GPU MMU 从哪里读取 GART 页表。于是角色关系非常明确：CPU 上的 Host Driver 负责建表和写表，GPU MMU 负责在访问发生时查表。
-
-因此，GART 回答的是：
-
-> GART aperture 中的 GPU 侧地址，应该翻译成哪个 system RAM 页面的 DMA 地址？
-
-#### 1.6.4 GPUVM：给某个用户进程建立自己的 GPUVA 映射
-
-运行 ROCr/HIP 程序的用户进程拥有一套 GPU 地址空间。驱动把 Ring 映射进去后，GPU 才能用该进程的 GPUVA 找到它：
+这段定义给出本节最重要的边界：
 
 ```text
-进程的Ring GPUVA
-       │
-       ▼
-该进程的GPUVM页表
-       │
-       ├─ 映射system RAM：PTE给出DMA地址
-       │                   ├─ 有Host IOMMU：DMA地址是IOVA → Host PA
-       │                   └─ 无Host IOMMU：直连DMA/总线地址
-       │                                      ↓
-       │                               system RAM页面
-       │
-       └─ 映射VRAM：PTE给出本地VRAM地址 → VRAM
+GTT回答：backing属于哪类资源？
+
+内核GART和进程GPUVM回答：
+这份资源通过哪套GPU地址空间被访问？
 ```
 
-同一套 GPUVM 页表还可以把其他 GPUVA 映射到 VRAM，所以 GPUVM 不是一种存储位置。
+所以，GTT 不是 GPUVA、DMA 地址或一级硬件翻译，也不意味着每个 GTT BO 都必须先经过内核 GART。
 
-**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_vm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_vm.c) 第 51～56 行说明 GPUVM 可以同时存在多套页表，并能混合映射 VRAM 与 system RAM：
+#### 1.6.3 AQL 主线：映射进用户进程的 GPUVM
+
+运行 ROCr/HIP 应用的 Linux 用户进程拥有自己的 GPU 地址空间。AQL Ring、Kernarg 和结果缓冲区只有映射进这套进程 GPUVM 后，GPU 才能使用进程 GPUVA 访问它们。
+
+```text
+[AQL主线：system RAM backing]
+
+[Host Driver建表阶段]
+
+Ring的4个system RAM页面
+  → 准备DMA地址D0～D3
+  → 把D0～D3写入当前进程GPUVM的PTE
+  → PTE对应Ring GPUVA G0～G3
+
+
+[GPU运行阶段]
+
+Ring GPUVA G2
+  → 当前Queue所属的进程VMID
+  → 当前进程GPUVM根页表
+  → GPU MMU读取PTE2
+  → 得到DMA地址D2
+  → 如果D2是IOVA，再经Host IOMMU得到Host PA
+  → system RAM中的Ring第2页
+```
+
+如果 Ring 位于 VRAM，地址空间仍然是该用户进程的 GPUVM，只是 PTE 目标不同：
+
+```text
+[AQL主线：VRAM backing]
+
+Ring GPUVA
+  → 当前进程GPUVM
+  → PTE中的VRAM本地地址
+  → VRAM中的Ring数据
+```
+
+**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_vm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_vm.c) 第 51～56 行说明 GPUVM 可以同时存在多套页表，并混合映射 VRAM 与 system RAM：
 
 ```c
  * GPUVM is the MMU functionality provided on the GPU.
@@ -1646,92 +1615,326 @@ static void gfxhub_v2_0_init_gart_aperture_regs(struct amdgpu_device *adev)
  * rather than there being a single global GART table
  * for the entire GPU, there can be multiple GPUVM page tables active
  * at any given time.  The GPUVM page tables can contain a mix
- * VRAM pages and system pages (both memory and MMIO) and system pages
+ * VRAM pages and system pages
 ```
 
-中文翻译：GPUVM 是 GPU 提供的 MMU 功能。旧式 GART 是整个 GPU 共用的一张全局表，而 GPUVM 可以同时启用多套页表；页表中既可以映射 VRAM 页面，也可以映射 system RAM 页面。
+中文翻译：GPUVM 是 GPU 的 MMU 功能。与旧式单一全局 GART 不同，GPU 可以同时启用多套 GPUVM 页表；一套 GPUVM 页表能够同时映射 VRAM 页面和 system RAM 页面。
 
-因此，GPUVM 回答的是：
+第 2.3 节会沿着 `MAP_MEMORY_TO_GPU → amdgpu_bo_va → amdgpu_vm_bo_map()` 展开这条进程 GPUVM 建表路径。
 
-> 当前用户进程中的某个 GPUVA 映射到哪一页 system RAM 或哪一段 VRAM？
+#### 1.6.4 非 AQL 对照：内核 GART 与 VMID 0
 
-#### 1.6.5 用同一块 Ring 看清三者关系
+GART 是 AMDGPU 内核驱动使用的一套 GPUVM 页表。
+
+**[SOURCE]** Linux [`Documentation/gpu/amdgpu/amdgpu-glossary.rst`](./2.源码/linux/Documentation/gpu/amdgpu/amdgpu-glossary.rst) 第 69～76 行定义 GART：
 
 ```text
-数据放置关系：
-
-GTT BO
-  → backing是4个system RAM页面
-  → Ring数据真正保存在这些页面中
-
-
-系统/全局GART窗口的地址翻译关系：
-
-GART aperture地址
-  → GART页表
-  → 页面DMA地址
-  → 可选的Host IOMMU翻译
-  → system RAM页面
-
-
-用户进程GPUVM的地址翻译关系：
-
-进程的Ring GPUVA
-  → 该进程的GPUVM页表
-  → 页面DMA地址
-  → 可选的Host IOMMU翻译
-  → 同一组system RAM页面
+GART
+  Graphics Address Remapping Table. This is the name we use for the GPUVM
+  page table used by the GPU kernel driver. It remaps system resources
+  (memory or MMIO space) into the GPU's address space so the GPU can access
+  them.
 ```
 
-这张图有三条关系：
+中文翻译：GART 是 AMDGPU 用来称呼“GPU 内核驱动所使用的 GPUVM 页表”的名字；它把 system memory 或 MMIO 等系统资源重映射进 GPU 地址空间，供 GPU 访问。
 
-1. `GTT BO → system RAM 页面` 是**数据放置关系**。
-2. `GART aperture 地址 → GART 页表 → DMA 地址` 是**系统/全局窗口映射关系**。
-3. `进程 GPUVA → GPUVM 页表 → DMA 地址` 是**用户进程的地址翻译关系**。
+在本文采用的 GFXHUB v2.0 例子中，这套系统页表安装在 VMID 0：
 
-后两条关系的页表输出都是设备可用的 DMA 地址：Host IOMMU 开启时是 IOVA，关闭时是直连 DMA/总线地址。它们的输入地址和所用页表不同，因此不能把 GART aperture 地址和进程 GPUVA 混成同一个概念。
-
-AQL Queue 实际使用这块 Ring 时，关注的是第三条：
+| 问题                   | 当前例子的答案                    |
+| ---------------------- | --------------------------------- |
+| 谁创建、填写 GART 页表 | CPU 上运行的 AMDGPU Host Driver   |
+| 谁在运行时遍历页表     | GPU MMU / Page Walker             |
+| 使用哪个地址空间上下文 | VMID 0 的系统上下文               |
+| 输入是什么             | 内核驱动使用的 GART aperture 地址 |
+| PTE 目标是什么         | system resource 的 DMA 地址       |
 
 ```text
-Ring GPUVA
-  → 当前进程的GPUVM页表
-  → 页面DMA地址
-  → 如果是IOVA，再经过Host IOMMU得到Host PA
-  → system RAM中的Ring数据
+[GPU系统上下文/非AQL对照]
+
+[Host Driver建表阶段]
+
+内核驱动准备system resource及其DMA地址
+  → 填写GART页表
+  → 把GART根页表地址B配置给VMID 0
+
+
+[GPU运行阶段]
+
+GART aperture地址A
+  → GPU MMU选择VMID 0
+  → 从根地址B遍历GART页表
+  → 得到DMA地址D
+  → system resource
 ```
 
-所以不要记成：
+**[SOURCE]** 以 GFXHUB v2.0 为例，Linux [`drivers/gpu/drm/amd/amdgpu/gfxhub_v2_0.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gfxhub_v2_0.c) 第 134～138 行明确把 GART 根页表配置给 VMID 0：
+
+```c
+static void gfxhub_v2_0_init_gart_aperture_regs(struct amdgpu_device *adev)
+{
+	uint64_t pt_base = amdgpu_gmc_pd_addr(adev->gart.bo);
+
+	gfxhub_v2_0_setup_vm_pt_regs(adev, 0, pt_base);
+	/* 省略GART aperture起止范围等寄存器配置。 */
+}
+```
+
+第二个参数 `0` 选择 VMID 0；`pt_base` 是 GART 页表的 GPU 侧根地址。这里展示的是 GPU/GART 初始化，不是某个 AQL Queue 创建时重新申请 VMID。
+
+如果某个 GTT resource 被绑定进这套内核 GART，`resource->start` 可以参与表示它在 GART aperture 中的资源偏移；这只属于当前内核 GART alias。它不是用户进程 GPUVA，也不会成为 AQL 进程 GPUVM 建表时的额外翻译层。
+
+> **[BOUNDARY]** 本节保留 GART 只是为了避免把它误接到 AQL 路径中。AMDGPU 内核命令 Ring、普通 DRM IB 和其他内核资源怎样完整使用系统 GPU 地址空间，留到后续 DRM/普通提交专题。
+
+#### 1.6.5 最终对照：两条映射并列，不是串联
+
+先用两个不同对象固定主线：
 
 ```text
-错误：GPUVA → GTT → GART → GPUVM → 数据
+[AQL主线：用户AQL Ring]
+
+AQL Ring的GTT backing
+  → 4个system RAM页面
+  → 页面DMA地址D0～D3
+  → 写入当前用户进程GPUVM
+  → Ring GPUVA通过进程GPUVM到达数据
+
+
+[GPU系统上下文/非AQL对照：内核资源]
+
+某个AMDGPU内核GTT resource
+  → system RAM页面及其DMA地址
+  → 绑定进内核GART
+  → GART aperture地址通过VMID 0到达数据
 ```
 
-`GTT` 不是地址节点，`GART` 也不是每次进程 GPUVA 翻译都必须再次经过的固定第二级页表。源码中描述 GTT 时使用的 `via gart`，强调 system RAM 页面需要经过设备侧重映射才能被 GPU 使用；它不应被展开成上面的固定串行链路。
+同一份 GTT backing 在设计上可以同时存在进程 GPUVM alias 和内核 GART alias，但必须分别建立映射；本文不能据此假设每个 AQL Ring 都同时拥有两种 alias：
 
-最后只记住三个问题即可：
+```text
+一份GTT backing
+  ├─ 可选：amdgpu_bo_va → 某个用户进程GPUVM
+  └─ 可选：GART aperture alias → VMID 0/GART
+```
 
-| 名称  | 最先问自己的问题                            |
-| ----- | ------------------------------------------- |
-| GTT   | 数据是不是放在 GPU 可访问的 system RAM？    |
-| GART  | 系统/全局设备窗口怎样映射 system RAM 页面？ |
-| GPUVM | 当前用户进程的 GPUVA 映射到哪里？           |
+两条映射可以指向同一份数据，但它们的输入地址、页表和用途都不同：
 
-把第 1 章压缩成一句话：
+| 名称       | 先回答什么                                      | AQL 主线中的位置        |
+| ---------- | ----------------------------------------------- | ----------------------- |
+| GTT        | 数据是否由 TTM 管理的 system resource 承载      | backing 类型            |
+| 进程 GPUVM | 当前用户进程的 GPUVA 映射到哪里                 | AQL 访问使用的页表      |
+| GART       | 内核驱动的系统 GPU 地址怎样映射 system resource | 只作非 AQL 对照         |
+| VMID 0     | 选择本文例子中的系统 GPUVM/GART                 | 不属于普通 AQL 进程路径 |
 
-> GPU 从所属 GPUVM 中的 GPUVA 出发；VMID 和根页表寄存器选择翻译上下文；GPU MMU 通过 PTE 得到 system RAM 的 DMA 地址或本地 VRAM 地址；若该 DMA 地址是 IOVA，Host IOMMU 再把它翻译为 Host PA。
+因此不要记成：
+
+```text
+错误：进程GPUVA → GTT → GART → GPUVM → 数据
+错误：进程GPUVA → 进程GPUVM → VMID 0/GART → 数据
+```
+
+第 1 章最终只需记住：
+
+> AQL Queue 使用所属用户进程的 GPUVM。GPU MMU 从 Ring GPUVA 出发，PTE 可以直接给出 system RAM 的 DMA 地址或 VRAM 本地地址；VMID 0/GART 是 AMDGPU 内核驱动的系统地址空间对照，不是 AQL 进程 GPUVM 后面的固定第二级翻译。
 
 ## 2. GPU 可访问内存怎样建立、映射和释放
 
 第 1 章从一次 GPU 访存出发，默认“GPU 页表中已经有可用 PTE”。本章把时间倒回去，看 Runtime 为什么要建立这条映射、外层内存分配怎样进入内部 KFD ALLOC，以及映射建立后 GPU 怎样真正使用它。
 
-**`system_allocator()` 只看三个步骤**
+除非段落明确标记为“非 AQL 对照”，本章中的 GPU 映射都指 **AQL 用户资源映射进目标用户进程的 GPUVM**，不是映射进 VMID 0/GART。
 
-当前 16 KiB GTT Ring 的外层分配可以压缩成三步：
+### 2.0 先固定时间边界：整条 Ring 只准备一次
 
-1. **KFD ALLOC**：创建 GTT BO，同时记录计划 GPUVA `G0`。
-2. **CPU mmap**：建立 CPU VA→BO backing 的访问通路。
-3. **GPU MAP**：建立 `G0`→GPU PTE→BO backing 的访问通路。
+这里最容易产生的误解是：把“创建整条 Ring”读成“每提交一个 Packet 都重新分配内存”。实际对象关系是：
+
+```text
+一条AQL Ring Buffer                   	整个循环缓冲区
+└─ 很多个固定大小的Packet槽位       		Ring中的数组元素
+   └─ 一次提交写入一个槽位           	不是再创建一条Ring
+```
+
+ROCr 中的 `AqlPacket` 包含 2 字节 header 和 62 字节 body，因此一个 Ring 槽位是 64 字节。本文的 16 KiB Ring 可以容纳：
+
+```text
+16 KiB ÷ 64 B = 256个Packet槽位
+
+Ring base
+  │
+  ├─ slot 0      64 B
+  ├─ slot 1      64 B
+  ├─ slot 2      64 B
+  ├─ ...
+  └─ slot 255    64 B
+```
+
+**[SOURCE]** ROCr [`runtime/hsa-runtime/core/inc/queue.h`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/inc/queue.h) 第 60～78 行用一个 union 描述 AQL 槽位，其中通用视图正好是 2 字节 header 加 62 字节 body：
+
+```cpp
+struct AqlPacket {
+  union {
+    struct {
+      uint16_t header;
+      struct {
+        uint8_t user_data[62];
+      } body;
+    } packet;
+    /* 省略同一个64字节槽位的dispatch、barrier等其他视图。 */
+  };
+};
+```
+
+这不是说一个槽位里同时保存多份 Packet；union 只是让同一段 64 字节按不同 Packet 类型解释。
+
+#### 2.0.1 创建 Queue：为整条 Ring 准备一次
+
+下面这些动作发生在 **AQL Queue 创建阶段**，针对整条 16 KiB Ring 执行一次：
+
+```text
+[创建Queue：一次]
+
+ROCr确定Ring容量：256个槽位，共16 KiB
+  │
+  ▼
+KFD ALLOC
+  → 为整条16 KiB Ring创建一个BO/backing
+  → 记录计划GPUVA起点G0
+  │
+  ▼
+CPU mmap
+  → 把整条Ring映射到应用进程CPU VA
+  → CPU以后可以填写任意槽位
+  │
+  ▼
+GPU MAP
+  → 把整条Ring映射进当前用户进程GPUVM
+  → GPU以后可以从G0开始读取任意槽位
+  │
+  ▼
+ROCr把256个槽位的header初始化为INVALID
+  │
+  ▼
+CREATE_QUEUE(Ring GPUVA = G0，Ring大小 = 16 KiB)
+  │
+  ▼
+Queue开始运行；上述CPU/GPU映射在Queue存活期间保持有效
+```
+
+这里的三个内存步骤可以压缩成：
+
+1. **KFD ALLOC**：为整条 Ring 创建一个 GTT BO，同时记录计划 GPUVA `G0`。
+2. **CPU mmap**：为整条 Ring 建立 CPU VA→BO backing 的访问通路。
+3. **GPU MAP**：为整条 Ring 建立 `G0`→当前进程 GPUVM PTE→BO backing 的访问通路。
+
+三步都是“把整条 Ring 准备好”的组成部分。只有全部完成后，`system_allocator()` 才返回 CPU 可写的 `ring_buf_`；ROCr 随后初始化所有槽位并创建 Queue。
+
+**[SOURCE]** ROCr [`runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp) 第 104～128 行先按槽位数计算整条 Ring 的字节数，只调用一次 Ring 分配函数，然后循环初始化所有槽位：
+
+```cpp
+uint32_t queue_size_bytes =
+    queue_size_pkts * sizeof(core::AqlPacket);
+
+/* Allocate the AQL packet ring buffer. */
+AllocRegisteredRingBuffer(queue_size_pkts);
+
+/* Fill the ring buffer with invalid packet headers. */
+for (uint32_t pkt_id = 0; pkt_id < queue_size_pkts; ++pkt_id) {
+  (((core::AqlPacket*)ring_buf_)[pkt_id]).dispatch.header =
+      HSA_PACKET_TYPE_INVALID;
+}
+
+/* Initialize and map a HW AQL queue. */
+```
+
+中文翻译：先为整条 AQL Packet Ring 分配缓冲区；再把 Ring 中所有槽位的 header 初始化为无效；最后继续初始化并映射硬件 AQL Queue。循环变量 `pkt_id` 只是在遍历已经分配好的槽位，不是循环执行 KFD ALLOC。
+
+#### 2.0.2 提交 Packet：反复使用已有槽位
+
+Queue 创建完成后，每次 Dispatch 都在同一条 Ring 中选择一个槽位：
+
+```text
+[每次提交Packet：反复执行]
+
+取得/预留write index = W
+  │
+  ▼
+读取read index = R，确认W - R < 256，避免覆盖尚未消费的槽位
+  │
+  ▼
+计算slot index = W & (256 - 1)
+  │
+  ▼
+slot地址 = Ring base + slot index × 64 B
+  │
+  ▼
+CPU通过已有CPU映射填写这个槽位
+  │
+  ▼
+release发布有效header
+  │
+  ▼
+写Doorbell通知GPU
+  │
+  ▼
+GPU通过已有进程GPUVM映射读取这个槽位
+  │
+  ▼
+GPU推进read index；Ring绕回后槽位可以再次使用
+```
+
+`write index` 和 `read index` 是不断前进的逻辑 Packet 编号；真正访问 Ring 数组时，才通过容量掩码把逻辑编号折回 `0～255`。因此“Ring 绕回”只是重新使用已经消费完成的槽位，不是重新分配 Ring backing。
+
+这一阶段不会重新执行：
+
+```text
+不会重新KFD ALLOC
+不会重新CPU mmap
+不会重新GPU MAP
+不会创建第二条Ring
+```
+
+**[SOURCE]** HSA [`runtime/hsa-runtime/inc/hsa.h`](./2.源码/rocr-runtime/runtime/hsa-runtime/inc/hsa.h) 第 2300～2353 行把 Queue 暴露为“一个 Ring 基地址＋一个槽位容量”：
+
+```c
+typedef struct hsa_queue_s {
+  /* Starting address of the runtime-allocated AQL packet buffer. */
+  void* base_address;
+
+  hsa_signal_t doorbell_signal;
+
+  /* Maximum number of packets the queue can hold. Must be a power of 2. */
+  uint32_t size;
+  /* 省略其他字段。 */
+} hsa_queue_t;
+```
+
+中文翻译：`base_address` 是 Runtime 分配的 AQL Packet 缓冲区起点；`size` 是 Queue 最多容纳多少个 Packet，并且必须是 2 的幂。提交者使用基地址、容量和 write index 选择槽位，而不是为每个 Packet 再申请 BO。
+
+#### 2.0.3 销毁 Queue：最后才拆除整条 Ring
+
+```text
+[销毁Queue：一次]
+
+停止Queue，保证GPU不再读取Ring
+  → Queue放下对Ring BO和进程GPUVM mapping的引用
+  → GPU UNMAP删除整条Ring的进程GPUVM映射
+  → KFD FREE删除handle并放下BO引用
+  → HSAKMT释放自己管理的CPU VA区域，必要时执行munmap
+  → 最后一个引用消失后回收BO/backing
+```
+
+所以需要固定的总时间线是：
+
+```text
+创建Queue一次
+  → 准备并映射整条Ring
+  → 提交很多个Packet，反复复用Ring槽位
+  → 销毁Queue一次
+  → 拆除整条Ring的映射并释放backing
+```
+
+因此，如果“Ring 已经建立好”指的是“Queue 已经能够运行”，那么你的理解是对的：此时 CPU 映射和进程 GPUVM 映射都已经完成。KFD ALLOC、CPU mmap 和 GPU MAP 不是在 Ring 建好以后为每个 Packet 再执行，而是 **建立整条 Ring 的内部步骤**。
+
+#### 2.0.4 整条 Ring 的申请流程
+
+2.0.1 已经从结果上说明“创建 Queue 时准备整条 Ring”。本节再沿调用层次展开这次 **只执行一次** 的申请，恢复 ROCr→HSAKMT→KFD 的总时序图：
 
 ```mermaid
 sequenceDiagram
@@ -1740,19 +1943,22 @@ sequenceDiagram
     participant KMT as HSAKMT
     participant KFD as KFD/AMDGPU
 
-    ROCr->>KMT: system_allocator(16 KiB)
-    KMT->>KFD: ① KFD ALLOC：创建GTT BO，记录计划G0
+    ROCr->>KMT: system_allocator(整条16 KiB Ring)
+    KMT->>KFD: KFD ALLOC：创建一个GTT BO，记录计划G0
     KFD-->>KMT: 返回handle和mmap_offset
-    KMT->>KMT: ② CPU mmap：建立CPU访问通路
-    KMT->>KFD: ③ GPU MAP：建立G0对应的GPU PTE
-    KFD->>KFD: 写PTE、等待页表更新、刷新TLB
-    KFD-->>KMT: GPU映射生效
+    KMT->>KMT: CPU mmap：映射整条Ring
+    KMT->>KFD: GPU MAP：把整条Ring映射进进程GPUVM
+    KFD->>KFD: 写PTE、等待页表更新、invalidate旧TLB翻译
+    KFD-->>KMT: 整条Ring的GPU映射生效
     KMT-->>ROCr: 返回CPU可写的ring_buf_
+    ROCr->>ROCr: 初始化全部256个槽位
+    ROCr->>KMT: CREATE_QUEUE(G0, 16 KiB)
+    KMT->>KFD: CREATE_QUEUE ioctl
 ```
 
-三步全部完成以后，`system_allocator()` 才返回 CPU 可写的 `ring_buf_`。
+这张图中的每一条箭头都属于同一次 Queue 创建。Packet 提交阶段不会重新进入这张申请时序。
 
-**时序图进入内部 KFD ALLOC 时：需求已经明确，但内存对象尚未创建**
+下面从第一步开始阅读。进入内部 KFD ALLOC 时，Ring 的大小、来源和计划 GPUVA 已经明确，但内存对象尚未创建。
 
 Runtime 此时只确定了三件事：
 
@@ -1792,17 +1998,78 @@ __u64 va_addr;       /* to KFD */
 GPU发出地址G0
        │
        ▼
-目标GPUVM中还没有对应PTE
+目标用户进程GPUVM中还没有对应PTE
        │
        └──× 目前没有任何存储可以通过G0到达
 ```
 
-**第一步：内部 KFD ALLOC 只创建或登记内存对象**
+当前文档跟踪的这版 ROCr Ring 分配**没有请求双重映射**。`AllocRegisteredRingBuffer()` 把真实 Ring 大小直接交给 allocator，标志中只有可执行属性：
+
+**[SOURCE]** ROCr [`runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp) 第 518～535 行：
+
+```cpp
+ring_buf_alloc_bytes_ =
+    queue_size_pkts * sizeof(core::AqlPacket);
+
+/* 省略device-memory分支。 */
+ring_buf_ = agent_->system_allocator()(
+    ring_buf_alloc_bytes_, 0x1000,
+    core::MemoryRegion::AllocateExecutable);
+```
+
+因此本文 16 KiB system-memory Ring 按当前显式标志路径阅读：申请一块 16 KiB backing，随后在一个目标 GPUVM 中建立一段 16 KiB GPUVA 映射。
+
+ROCr 仍保留名为 `AllocateDoubleMap` 的旧选项，但当前定义已标注为 deprecated（已弃用），上面的 Ring 分配也没有传入该标志：
+
+**[SOURCE]** ROCr [`runtime/hsa-runtime/core/inc/memory_region.h`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/inc/memory_region.h) 第 91～96 行：
+
+```cpp
+AllocateDoubleMap = (1 << 2),   // Deprecated:Map twice VA allocation to backing store
+```
+
+中文翻译：该旧选项会把同一份 backing 映射到两段 VA，但已经被标记为弃用。它只在后文作为 `attachments` 为什么必须设计成列表的边界例子，不进入本文当前 AQL Ring 主线。
+
+##### 2.0.4.1 KFD ALLOC：只创建或登记整条 Ring 的内存对象
 
 HSAKMT 把 `G0`、16 KiB 和 GTT 等参数交给 `ALLOC_MEMORY_OF_GPU`。KFD 根据这些参数创建驱动管理的 BO，并为这次分配建立查询编号。这个内部 ioctl 返回给 HSAKMT 两个后续会用到的结果：
 
 - `handle`：以后执行 MAP、UNMAP 和 FREE 时，用它找回同一个内存对象；它不是内存地址。
 - `mmap_offset`：HSAKMT 后续执行 `mmap()` 时，用它指定要映射同一个 GTT BO；它也不是 CPU 指针。
+
+下面第一次出现 `struct kgd_mem`，先把名字拆开：
+
+```text
+KGD = Kernel Graphics Driver    内核图形驱动；在这里指AMDGPU这一侧
+mem = memory                   内存
+
+kgd_mem
+  → 可以读成“KGD memory object”
+  → 即AMDGPU侧提供给KFD使用的内存管理对象
+```
+
+`KGD` 不是另一块硬件，也不是另一个用户进程。在 KFD/AMDGPU 接口的命名中，可以先把双方理解成：
+
+```text
+KFD计算驱动代码
+      │
+      │ KFD/KGD接口
+      ▼
+KGD（AMDGPU图形驱动侧）
+      └─ struct kgd_mem：描述一块KFD内存分配
+```
+
+**[SOURCE]** Linux [`drivers/gpu/drm/amd/include/kgd_kfd_interface.h`](./2.源码/linux/drivers/gpu/drm/amd/include/kgd_kfd_interface.h) 第 24～27 行对这条边界的原始说明是：
+
+```c
+/*
+ * This file defines the private interface between the
+ * AMD kernel graphics drivers and the AMD KFD.
+ */
+```
+
+中文翻译：这个文件定义 AMD 内核图形驱动与 AMD KFD 之间的私有接口。当前 AMDGPU 实现中，`kgd_mem` 就是图形驱动侧通过这条接口交给 KFD 使用的内存管理对象。
+
+`struct kgd_mem` 是管理对象，不是那 16 KiB Ring 数据本身。它记录计划 GPUVA、BO 指针、内存域和映射状态等信息；真正的数据仍由它所关联 BO 的 system RAM 或 VRAM backing 承载。
 
 **[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c) 第 1828～1840 行显示 KFD/AMDGPU 创建 BO 后，把输入的 `va` 记入 `kgd_mem`，同时把 GPU 映射计数初始化为 0：
 
@@ -1825,7 +2092,7 @@ bo->kfd_bo = *mem;
 | KFD ALLOC 返回后  | 已记录在`kgd_mem->va`                   | 已创建        | 仍不存在，映射计数为 0     |
 | KFD MAP 完成后    | 仍使用同一个`G0`                        | 仍是同一个 BO | 映射关系和 GPU PTE 已建立  |
 
-所以不能说“KFD ALLOC 时还不知道 VA”，也不能说“知道 VA 就已经完成映射”。准确说法是：**计划 GPUVA 在调用前已经选定；KFD ALLOC 创建 BO 并记住该数值；KFD MAP 才让该数值在目标 GPUVM 中生效。**
+**计划 GPUVA 在调用前已经选定；KFD ALLOC 创建 BO 并记住该数值；KFD MAP 才让该数值在目标 GPUVM 中生效。**
 
 只看这个内部 KFD ALLOC 完成后的状态：
 
@@ -1838,15 +2105,15 @@ HSAKMT持有handle
         ▼
 [16 KiB backing的管理/资源状态]
 
-应用进程的CPU页表：CPU VA ──×──→ 上面的backing
-目标GPU的GPUVM：    GPUVA G0 ──×──→ 上面的backing
+应用进程的CPU页表：	CPU VA ──×──→ 上面的backing
+目标GPU的GPUVM：	GPUVA G0 ──×──→ 上面的backing
 ```
 
 这里已经存在 `handle→BO→backing` 的管理关系，但它不是页表映射。底层页面或资源可以被驱动通过 BO 管理，并不表示它们已经进入应用进程的 CPU 页表或目标 GPU 的 GPUVM。所谓“映射”必须说明映射进哪个地址空间：CPU 映射要产生 CPU PTE，GPU 映射要产生 GPU PTE。
 
 因此，这个时刻只是外层 `system_allocator()` 的中间状态。ROCr 尚未拿到 `ring_buf_`，也还没有开始初始化 Ring；HSAKMT 会在同一次外层分配中继续向下执行。
 
-**第二步：HSAKMT 建立 CPU 映射；当前 Ring 必须有这条通路**
+##### 2.0.4.2 CPU mmap：让 CPU 能够填写整条 Ring
 
 本例要由 CPU 初始化并持续填写 Packet，因此 HSAKMT 使用内部 KFD ALLOC 返回的 `mmap_offset` 调用 `mmap()`，把同一个 GTT BO 映射进应用进程的 CPU 地址空间。完成后，两侧的状态是：
 
@@ -1875,15 +2142,15 @@ if (mem && mflags.ui32.HostAccess) {
 
 逐行只读出当前结论：`__fmm_allocate_device()` 先完成包含 KFD ALLOC 的设备对象分配；当这块内存要求 Host 访问时，`fmm_map_to_cpu()` 随后使用 `mmap_offset` 建立 CPU 映射。CPU 映射不是在 KFD ALLOC 之前凭空存在，也不是由 handle 本身提供。
 
-**第三步：MAP 把 GPUVA 接到这块内存上**
+##### 2.0.4.3 GPU MAP：把整条 Ring 接入进程 GPUVM
 
-现在，内存对象和 CPU 地址通路已经存在，但 ROCr 还没有拿到外层 allocator 的返回值，Ring 也尚未初始化。HSAKMT 接着把 `handle` 和目标 GPU 列表交给 `MAP_MEMORY_TO_GPU`。KFD 用 handle 找回 BO，并对每个目标 GPU 完成下面的关系：
+现在，内存对象和 CPU 地址通路已经存在，但 ROCr 还没有拿到外层 allocator 的返回值，Ring 也尚未初始化。HSAKMT 接着把 `handle` 和当前 GPU 交给 `MAP_MEMORY_TO_GPU`。KFD 用 handle 找回 BO，并在当前进程的 GPUVM 中建立下面的关系：
 
 ```text
 GPUVA G0
     │
     ▼
-目标GPUVM中的PTE
+目标用户进程GPUVM中的PTE
     │ PTE中记录设备可使用的地址
     ▼
 DMA地址
@@ -1894,7 +2161,7 @@ DMA地址
 
 PTE 写入并不等于硬件立刻已经使用了新内容。KFD 还要等待页表更新完成，并让可能缓存旧翻译的 GPU TLB 失效。完成这些步骤以后，`G0` 才具备到达 Ring backing 的地址通路；但此时只是“可以访问”，Ring 的 Packet 槽位仍要由 ROCr 在外层 allocator 返回后初始化。
 
-**第四步：外层 allocator 返回，ROCr 才真正初始化 Ring**
+##### 2.0.4.4 allocator 返回：ROCr 初始化整条 Ring
 
 CPU mmap 和 GPU MAP 都完成后，调用栈逐层返回，`system_allocator()` 最终把 CPU 可以解引用的 `ring_buf_` 交给 `AqlQueue`。随后 ROCr 才执行普通的 CPU store，把 Ring 变成一个初始为空、可以安全建队的 Packet 环：
 
@@ -1928,7 +2195,9 @@ ROCr调用CREATE_QUEUE(Ring地址, Ring大小)
 
 至此，Ring 的存储、CPU/GPU 地址通路和初始内容都已准备好。KFD CREATE_QUEUE 完成后，Runtime 才能让 Queue 正式使用这块 Ring；只要 CPU 还可能提交 Packet，CPU 映射就必须存在，只要 GPU 还可能通过 `G0` 取包，BO 和 GPU 映射也必须存在。等 Queue 使用结束以后，流程才进入本章的另一半：按依赖关系反向释放。
 
-退出时按相反顺序拆除。先看每一步“拆掉什么、还留下什么”：
+#### 2.0.5 申请完成后的持有与反向拆除
+
+2.0.4 完成后，Queue 在整个运行期复用同一条 Ring。退出时才按相反顺序拆除。先看每一步“拆掉什么、还留下什么”：
 
 ```text
 ① GPU正在使用
@@ -1939,7 +2208,7 @@ ROCr调用CREATE_QUEUE(Ring地址, Ring大小)
 ② GPU映射还在，但已经没有使用者
    GPUVA → PTE → 存储  这条通路仍然存在
              │
-             │ UNMAP：删除GPU PTE，并等待更新、刷新TLB
+             │ UNMAP：删除GPU PTE，并等待更新、invalidate旧TLB翻译
              ▼
 ③ 内存对象还在，但GPU已经走不到它
    handle和BO仍然存在；GPUVA → 存储的通路已经消失
@@ -1953,11 +2222,23 @@ ROCr调用CREATE_QUEUE(Ring地址, Ring大小)
 
 因此，UNMAP 和 FREE 也不是同一个动作：UNMAP 删除的是“GPU 怎样到达内存”的地址关系；FREE 删除的是“用户怎样通过 handle 管理该对象”的关系。
 
-CPU VA mapping 不在这条 GPUVM 状态线上：由 HSAKMT 建立的 CPU 映射要按它自己的生命周期执行 `munmap()`；应用传入的 USERPTR 原始映射则由应用自己释放。后文 2.1～2.2 先解释三种 backing 从哪里来，2.3～2.5 再展开 ALLOC、CPU mmap 和 GPU MAP，2.6 最后说明为什么必须按“使用者放下引用→UNMAP→FREE”的顺序退出。
+CPU VA mapping 不在这条 GPUVM 状态线上：由 HSAKMT 建立的 CPU 映射要按它自己的生命周期执行 `munmap()`；应用传入的 USERPTR 原始映射则由应用自己释放。后文 2.1～2.2 解释 backing 与设备地址从哪里来，2.3 展开 GPU MAP，2.4～2.5 收束对象和两侧访问通路，2.6 最后说明为什么必须按“使用者放下引用→UNMAP→FREE”的顺序退出。
 
 ### 2.1 三种基础内存来源
 
 前文只用 GTT Ring 讲清了 `KFD ALLOC→CPU mmap→GPU MAP`。现在把视角从 GTT 拉开：KFD 还可以管理 VRAM，或者登记应用原本已有的 CPU 内存。2.1 只比较三种来源的入口差异；页面、DMA 地址和显存资源怎样准备，留到 2.2。
+
+这里仍要保持第 1.6 节的边界：GTT、USERPTR、VRAM 选择 backing；后续 GPU MAP 才选择“把这份 backing 映射进哪套 GPUVM”。本章 AQL 主线中的目标是用户进程 GPUVM。
+
+这里的 **backing** 可以直接读成“真正承载缓冲区数据的存储资源”。它不是 BO 管理对象，也不是 CPU VA 或 GPUVA：
+
+```text
+BO管理对象：记录这块缓冲区由谁管理、大小和当前位置
+backing：   真正保存缓冲区数据的system RAM页面或VRAM区间
+CPU VA/GPUVA：CPU或GPU找到这份数据所使用的地址
+```
+
+因此，下面比较“三种内存来源”，实际是在比较：**真正保存数据的 backing 是从哪里得到的。**
 
 KFD 将三种基础来源路径表示为 VRAM、GTT 和 USERPTR 标志；一次常规分配按用途选择其中一种。USERPTR 是 User Pointer 的缩写，表示“登记应用已有的 CPU VA”，不是驱动重新复制一份用户数据。
 
@@ -1984,16 +2265,18 @@ KFD 将三种基础来源路径表示为 VRAM、GTT 和 USERPTR 标志；一次�
 ```text
 第一组标志选择内存来源：VRAM、GTT或USERPTR。
 第二组标志描述访问属性：能否写、能否执行、是否要求CPU可见、
-是否用于AQL Queue，以及缓存/一致性属性。
+旧AQL双重映射请求，以及缓存/一致性属性。
 ```
+
+这里的 `AQL_QUEUE_MEM` 是旧的双重映射机制标志，不表示“所有 AQL Ring 都必须设置”。本文当前 ROCr Ring 分配没有使用它。
 
 三种来源的核心区别是：
 
-| 类型    | 数据从哪里来                                    | CPU 侧最初是否已有地址                     | GPU 访问前还需要什么                     |
-| ------- | ----------------------------------------------- | ------------------------------------------ | ---------------------------------------- |
-| GTT     | 驱动为 BO 分配的 system RAM 页面                | 分配后可通过 mmap 建立 CPU VA              | DMA 映射并写入目标 GPUVM                 |
-| USERPTR | 用户已有 CPU VA 及其内存映射；物理页由 HMM 解析 | 是；但物理页不一定已经驻留                 | 解析/跟踪页面、建立 DMA 地址并写入 GPUVM |
-| VRAM    | GPU 本地显存资源                                | 不一定；要看 BAR 可见性与是否建立 CPU 映射 | 映射进目标 GPUVM                         |
+| 类型    | 数据从哪里来                                    | CPU 侧最初是否已有地址                     | GPU 访问前还需要什么                         |
+| ------- | ----------------------------------------------- | ------------------------------------------ | -------------------------------------------- |
+| GTT     | 驱动为 BO 分配的 system RAM 页面                | 分配后可通过 mmap 建立 CPU VA              | DMA 映射并写入目标进程 GPUVM                 |
+| USERPTR | 用户已有 CPU VA 及其内存映射；物理页由 HMM 解析 | 是；但物理页不一定已经驻留                 | 解析/跟踪页面、建立 DMA 地址并写入进程 GPUVM |
+| VRAM    | GPU 本地显存资源                                | 不一定；要看 BAR 可见性与是否建立 CPU 映射 | 映射进目标 GPUVM                             |
 
 GTT 与 USERPTR 最终都可能让 GPU 访问 system RAM，但页面来源相反：
 
@@ -2010,42 +2293,408 @@ USERPTR：先有CPU VA及其映射 → HMM解析/按需调入对应页面 → �
 
 2.1 只说了三种来源的名字，本节把它们落到真实资源：GTT/USERPTR 最终要得到逐页 DMA 地址，VRAM 最终要得到本地显存地址。这些地址准备好以后，后续 GPU MAP 才有内容可以写进 PTE。
 
-#### 2.2.1 先认四个局部角色和三条来源链
+#### 2.2.1 TTM 在这里负责什么
 
-本节会同时出现 TTM、HMM、SG 和 DMA API。它们不是四条并列的新主线，而是把“页面从哪里来”逐步变成“设备可以使用哪些地址”的四个局部角色：
+TTM（Translation Table Maps）是 Linux DRM 提供的通用 BO 内存管理层。AMDGPU 用它描述 BO 数据当前由哪类存储资源承载，并管理相关 CPU 映射、放置和迁移状态。虽然名字里有 Translation Table，但它不是 GPU 页表，也不负责 GPU 运行时的 GPUVA 翻译。
 
-| 名称              | 本节只使用的最小含义                                                        | 本节暂不展开什么                    |
-| ----------------- | --------------------------------------------------------------------------- | ----------------------------------- |
-| `ttm_tt`        | TTM 为 system RAM backing 保存页面数组`pages[]` 和 DMA 地址数组的描述对象 | TTM placement、驱逐、迁移和回收队列 |
-| HMM               | 根据现有 CPU VA 取得对应页面，并跟踪 CPU 页表变化                           | 页面失效、迁移、GPU Page Fault 恢复 |
-| `sg_table`      | 把一组可能离散的页面组织成 DMA API 可以处理的 SG 列表                       | SG 合并策略和各平台 DMA 实现细节    |
-| `dma_address[]` | DMA API 为目标设备生成的逐页设备地址                                        | Host IOMMU 建表和 IOVA 分配算法     |
+当前只展开两个字段：
 
-先用一张图比较三种来源。每一行都按“存储从哪里来→驱动怎样描述→PTE 填什么→GPU 最终访问什么”阅读：
+```text
+struct amdgpu_bo                         AMDGPU专用BO对象
+└─ tbo：struct ttm_buffer_object         TTM通用BO部分
+   │
+   ├─ resource → struct ttm_resource     当前放置资源
+   │  ├─ mem_type                        GTT/TT还是VRAM等资源类型
+   │  ├─ start                           在该资源管理器中的起始位置
+   │  └─ size                            资源大小
+   │
+   └─ ttm → struct ttm_tt                system RAM backing信息
+      ├─ num_pages                       页面数量
+      ├─ pages[0..n-1]                   当前BO自己的页面数组
+      └─ dma_address[0..n-1]             对应页面的设备DMA地址
+```
+
+先不要把两边接成一条固定地址链：
+
+```text
+resource
+  → 回答“BO当前放在哪类TTM资源中”
+
+ttm
+  → 当backing位于system RAM时，
+     回答“当前BO有哪些页面、这些页面的DMA地址是什么”
+```
+
+**[SOURCE]** Linux [`include/drm/ttm/ttm_bo.h`](./2.源码/linux/include/drm/ttm/ttm_bo.h) 第 90～97、120～121 行说明 TTM BO 处理放置和 CPU 映射，而多地址空间 GPU 的 GPU 映射由具体驱动另外管理：
+
+```c
+/*
+ * Base class for TTM buffer object, that deals with data placement and CPU
+ * mappings. GPU mappings are really up to the driver, but for simpler GPUs
+ * the driver can usually use the placement offset @offset directly as the
+ * GPU virtual address. For drivers implementing multiple
+ * GPU memory manager contexts, the driver should manage the address space
+ * in these contexts separately and use these objects to get the correct
+ * placement and caching for these GPU maps.
+ */
+/* 省略其他字段。 */
+struct ttm_resource *resource;
+struct ttm_tt *ttm;
+```
+
+中文翻译：TTM 通用 BO 层处理数据放置和 CPU 映射；如果 GPU 支持多套地址空间，具体驱动需要分别管理这些 GPU 地址空间，并利用 TTM 对象提供正确的放置与缓存信息。
+
+##### 2.2.1.1 `resource->start` 到底是什么
+
+`resource->start` 只表示“当前资源分配在所属资源管理器中的起始位置”。它必须和 `mem_type` 一起解释，不能单独叫作 CPU VA、GPUVA、DMA 地址或页表根地址。
+
+**[SOURCE]** Linux [`include/drm/ttm/ttm_resource.h`](./2.源码/linux/include/drm/ttm/ttm_resource.h) 第 249～266 行给出字段定义：
+
+```c
+/**
+ * struct ttm_resource
+ *
+ * @start: Start of the allocation.
+ * @size: Actual size of resource in bytes.
+ * @mem_type: Resource type of the allocation.
+ *
+ * Structure indicating the placement and space resources used by a
+ * buffer object.
+ */
+struct ttm_resource {
+	unsigned long start;
+	size_t size;
+	uint32_t mem_type;
+	/* 省略其他字段。 */
+};
+```
+
+中文翻译：`start` 是这次资源分配的起点，`size` 是实际资源大小，`mem_type` 指明资源类型；整个结构描述 BO 使用的放置与空间资源。
+
+在本章关注的两种放置中：
+
+| `mem_type`    | `resource->start` 怎样理解                                                                | 与 AQL 进程 GPUVA 的关系                         |
+| --------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `TTM_PL_TT`   | GTT/TT 资源管理器中的放置偏移；若内核把该资源绑定进 GART，可作为 GART aperture 中的资源偏移 | 不是 Ring GPUVA，也不是进程 PTE 中的 DMA 地址    |
+| `TTM_PL_VRAM` | VRAM 资源域中的起始页号                                                                     | 可用于形成 VRAM 本地目标地址，但仍不是进程 GPUVA |
+
+因此，16 KiB BO 的两种放置可以先这样读：
+
+```text
+GTT/TT放置
+
+resource
+├─ mem_type = TTM_PL_TT
+├─ start = S                 TTM资源域中的放置偏移
+└─ size = 16 KiB
+
+ttm
+├─ pages[0..3]               当前BO自己的4个system RAM页面
+└─ dma_address[0..3]         D0～D3
+
+
+VRAM放置
+
+resource
+├─ mem_type = TTM_PL_VRAM
+├─ start = V                 VRAM资源域起始页号
+└─ size = 16 KiB
+
+真正数据位于VRAM资源V～V+3
+```
+
+`S` 不对应 `pages[S]`。`pages[]` 是当前 BO 自己的局部数组，始终从 `pages[0]` 开始。只有明确讨论“把这个资源绑定进内核 GART”时，`S` 才会进一步成为相应 GART aperture 偏移；普通 AQL 进程映射不需要先建立这条 alias。
+
+##### 2.2.1.2 AQL 进程映射使用哪些量
+
+这一节实际只回答一个问题：
+
+> 怎样把“当前 BO 从某个 backing 偏移开始的数据”，放到“当前用户进程的一段 GPUVA”上？
+
+先记住一句话：
+
+> **`mapping` 描述“映射到哪个 GPUVA、从 BO 哪个偏移开始”；TTM 描述“这个 BO 偏移背后实际是什么页面或显存地址”；GPUVM 建表代码负责把两边接成 PTE。**
+
+```text
+GPUVA这一端                             实际存储这一端
+
+mapping->start/last                     amdgpu_bo
+  → 映射到哪段进程GPUVA                       └─ TTM
+                                                ├─ system RAM：dma_address[]
+mapping->offset                                 └─ VRAM：resource资源地址
+  → 从BO内部哪个偏移开始                                ▲
+           │                                          │
+           └────── GPUVM建表代码把两端连接 ─────────┘
+                            │
+                            ▼
+                     生成进程GPUVM PTE
+```
+
+这里不是 `mapping->start` 去对应 `resource->start`。二者属于不同坐标系：前者描述进程 GPUVA 页，后者描述 TTM 资源域中的放置位置；它们通过同一个 BO 以及 GPUVM 建表过程发生联系。
+
+先用本文的 16 KiB GTT Ring 固定输入。假设 GPU 页面也是 4 KiB：
+
+```text
+已经准备好的Ring BO
+
+BO大小 = 16 KiB
+│
+├─ BO内第0页 → pages[0] = P7 → dma_address[0] = D0
+├─ BO内第1页 → pages[1] = P2 → dma_address[1] = D1
+├─ BO内第2页 → pages[2] = P9 → dma_address[2] = D2
+└─ BO内第3页 → pages[3] = P4 → dma_address[3] = D3
+
+
+计划建立的进程地址范围
+
+Ring GPUVA起点：G0 = 0x1000_0000
+映射BO偏移：    0
+映射大小：      16 KiB
+```
+
+这里有两套编号，先不要混在一起：
+
+```text
+进程GPUVA页
+  → 当前用户进程地址空间里的页号
+
+BO局部页
+  → 当前16 KiB BO内部的第0～3页
+```
+
+###### 第一步：`entry->va` 把计划 GPUVA 交给 GPUVM 层
+
+KFD attachment 中的 `entry->va` 保存字节单位的计划 GPUVA。当前例子是：
+
+```text
+entry->va = G0 = 0x1000_0000
+```
+
+**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c) 第 1324～1327 行把四个关键输入交给 `amdgpu_vm_bo_map()`：
+
+```c
+/* Set virtual address for the allocation */
+ret = amdgpu_vm_bo_map(entry->adev, entry->bo_va, entry->va, 0,
+		       amdgpu_bo_size(entry->bo_va->base.bo),
+		       entry->pte_flags);
+```
+
+源码注释的中文翻译：为这次内存分配设置虚拟地址。
+
+把当前调用按参数展开：
+
+```text
+amdgpu_vm_bo_map(
+    当前目标GPU与“BO ↔ 进程GPUVM”关系,
+    saddr = entry->va = 0x1000_0000,   	进程GPUVA起点
+    offset = 0,                         从BO第0字节开始
+    size = 16 KiB,                      映射整条Ring
+    flags = 读写/缓存等PTE属性
+)
+```
+
+所以 `entry->va` 回答的是：
+
+> 把这条 Ring 放到当前用户进程 GPUVM 的哪个字节地址开始？
+
+###### 第二步：`mapping->start/last` 把字节 GPUVA 换成 GPU 页号范围
+
+`amdgpu_vm_bo_map()` 接收的 `saddr` 是字节地址，随后除以 GPU 页大小，保存成页号。
+
+**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_vm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_vm.c) 第 1826～1877 行：
+
+```c
+/**
+ * amdgpu_vm_bo_map - map bo inside a vm
+ *
+ * @saddr: where to map the BO
+ * @offset: requested offset in the BO
+ * @size: BO size in bytes
+ */
+/* 省略参数检查。 */
+saddr /= AMDGPU_GPU_PAGE_SIZE;
+eaddr = saddr + (size - 1) / AMDGPU_GPU_PAGE_SIZE;
+
+/* 省略地址冲突检查和内存申请。 */
+mapping->start = saddr;
+mapping->last = eaddr;
+mapping->offset = offset;
+```
+
+中文翻译：`saddr` 指定把 BO 映射到 VM 中的什么地址；`offset` 指定从 BO 内哪个偏移开始；`size` 是映射字节数。函数再把字节地址换算成 GPU 页号，并保存起止页号与 BO 偏移。
+
+当前例子中：
+
+```text
+GPU页大小 = 0x1000
+
+entry->va = 0x1000_0000               	字节GPUVA
+        │ 除以0x1000
+        ▼
+mapping->start = 0x1_0000              	起始GPU页号
+mapping->last  = 0x1_0003              	连续4个GPU页
+mapping->offset = 0                    	从BO第0字节开始
+```
+
+因此，`entry->va` 和 `mapping->start` 描述的是同一个起点，但单位不同：
+
+| 字段                | 单位   | 当前值          | 用途                         |
+| ------------------- | ------ | --------------- | ---------------------------- |
+| `entry->va`       | 字节   | `0x1000_0000` | KFD 保存并传入的计划 GPUVA   |
+| `mapping->start`  | GPU 页 | `0x1_0000`    | 进程 GPUVM 映射的起始页号    |
+| `mapping->last`   | GPU 页 | `0x1_0003`    | 进程 GPUVM 映射的结束页号    |
+| `mapping->offset` | 字节   | `0`           | 从 BO backing 的哪个偏移开始 |
+
+###### 第三步：把进程 GPUVA 页与 BO backing 页一一连接
+
+Host Driver 建表时，把两边按相同的局部下标 `i` 连接起来：
+
+```text
+[Host Driver建表阶段]
+
+当前用户进程GPUVM                 	 当前Ring BO backing
+
+GPUVA G0 + 0×4KiB  ───────────────→  BO偏移0×4KiB
+GPU页号 start + 0                     → dma_address[0] = D0 → 页面P7
+        │
+        └─ 对应GPUVA第0页的最终PTE写入D0
+
+
+GPUVA G0 + 1×4KiB  ───────────────→  BO偏移1×4KiB
+GPU页号 start + 1                     → dma_address[1] = D1 → 页面P2
+        │
+        └─ 对应GPUVA第1页的最终PTE写入D1
+
+
+GPUVA G0 + 2×4KiB  ───────────────→  BO偏移2×4KiB
+GPU页号 start + 2                     → dma_address[2] = D2 → 页面P9
+        │
+        └─ 对应GPUVA第2页的最终PTE写入D2
+
+
+GPUVA G0 + 3×4KiB  ───────────────→  BO偏移3×4KiB
+GPU页号 start + 3                     → dma_address[3] = D3 → 页面P4
+        │
+        └─ 对应GPUVA第3页的最终PTE写入D3
+```
+
+把重复部分压成公式：
+
+```text
+第i个GPUVA页
+  = mapping->start + i
+
+第i个BO backing页
+  = mapping->offset / 4KiB + i
+
+system RAM路径的PTE目标
+  = ttm->dma_address[mapping->offset / 4KiB + i]
+```
+
+本例 `mapping->offset=0`，所以数组下标就是 `i=0～3`。如果只映射 BO 中间的一部分，`mapping->offset` 才会让 backing 下标从非零位置开始。
+
+###### `resource->start` 为什么没有出现在上图中
+
+`resource->start` 描述 BO 在 TTM 资源域中的放置位置，不是这次进程映射的 GPUVA 起点：
+
+```text
+amdgpu_bo
+│
+├─ resource
+│    ├─ mem_type = TTM_PL_TT
+│    └─ start = S                    TTM资源域放置状态
+│
+└─ ttm
+     └─ dma_address[0..3] = D0～D3  system RAM逐页DMA地址
+                                      │
+                                      └─ 当前AQL进程PTE使用这些D_i
+```
+
+对于当前 system RAM AQL 路径：
+
+```text
+mapping->start
+  → 决定写当前进程GPUVM中的哪4个GPUVA页
+
+mapping->offset
+  → 决定从当前BO的哪一页开始
+
+ttm->dma_address[]
+  → 提供最终写进PTE的D0～D3
+
+resource->start
+  → 保留为TTM放置状态
+  → 不插入“进程GPUVA → PTE → D_i”这条运行时翻译链
+```
+
+VRAM 路径不同：它没有逐页 system RAM `dma_address[]`，需要从 VRAM `resource` 取得本地显存资源地址；2.2.5 再单独展开。
+
+###### 建表完成后，GPU 运行时看见什么
+
+`entry`、`mapping`、`resource` 和 `ttm` 都是 Host Driver 建表时使用的软件对象。GPU 运行时不会遍历这些 C 结构：
+
+```text
+[Host Driver建表阶段]
+
+entry->va + mapping + ttm->dma_address[]
+  → 生成当前进程GPUVM的4个PTE
+  → 页表更新完成并invalidate旧TLB翻译
+
+
+[GPU运行阶段]
+
+GPU访问G0 + 0x2120
+  → 属于Ring第2个GPU页，页内偏移0x120
+  → GPU MMU遍历当前进程GPUVM
+  → 最终PTE给出D2
+  → D2 + 0x120
+  → 页面P9中的目标数据
+```
+
+因此，职责边界最终是：
+
+```text
+TTM
+  → 准备或描述system RAM页面/VRAM资源
+
+AMDGPU Host Driver的GPUVM代码
+  → 选择进程GPUVA范围和BO backing范围
+  → 生成GPU PTE
+
+GPU MMU
+  → GPU运行时只读取页表
+  → 不读取entry、mapping、resource或ttm这些C结构
+```
+
+> **[BOUNDARY]** 本节只解释正常 AQL 映射怎样把一段 BO backing 放进用户进程 GPUVM。TTM placement、迁移和驱逐以后单独学习；真正提交页表更新、等待 Fence 和 invalidate旧 TLB 翻译的调用顺序在 2.3 展开。
+
+#### 2.2.2 三种来源怎样变成 PTE 目标地址
+
+2.1 只区分了 GTT、USERPTR 和 VRAM 三种内存来源。本节继续追踪：每种来源怎样取得实际页面或显存资源，并变成目标进程 GPUVM 的 PTE 可以使用的地址。先看三条完整路径，不需要预先记忆 TTM、HMM 和 SG 的定义。每一行都按“存储从哪里来→驱动怎样描述→进程 PTE 填什么→GPU 最终访问什么”阅读：
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ GTT：驱动新建system RAM backing                                             │
 │                                                                             │
 │ KFD ALLOC → TTM pool取得页面 → ttm_tt.pages[]                               │
-│                              ├→ 按需DMA映射 → dma_address[] → GPU PTE ─┐    │
-│                              └→ CPU mmap（可选）→ CPU VA              │    │
+│                              ├→ 按需DMA映射 → dma_address[] → 进程GPUVM PTE ─┐
+│                              └→ CPU mmap（可选）→ CPU VA              │     │
 │                                                                        ▼    │
 │                                                               system RAM页  │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│ USERPTR：用户原本已经拥有CPU VA及其内存映射                                 │
+│ USERPTR：用户原本已经拥有CPU VA及其内存映射                                  │
 │                                                                             │
-│ CPU VA → HMM解析/按需调入页面 → ttm_tt.pages[] → sg_table → DMA API          │
+│ CPU VA → HMM查询得到hmm_pfns[] → AMDGPU填ttm_tt.pages[] → SG → DMA API     │
 │    │                                                │                       │
 │    │                                                └→ dma_address[]        │
-│    │                                                     → GPU PTE ────┐    │
+│    │                                                     → 进程GPUVM PTE ─┐
 │    └────────────── CPU仍通过原CPU VA访问同一组页面 ────────────────────┤    │
 │                                                                        ▼    │
 │                                                               system RAM页  │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│ VRAM：驱动取得GPU本地显存资源区间                                           │
+│ VRAM：驱动取得GPU本地显存资源区间                                            │
 │                                                                             │
-│ KFD ALLOC → TTM VRAM resource → 本地显存地址 → GPU PTE → VRAM               │
+│ KFD ALLOC → TTM VRAM resource → 本地显存地址 → 进程GPUVM PTE → VRAM         │
 │                              └→ BAR可见时可选CPU mmap → CPU VA               │
 └─────────────────────────────────────────────────────────────────────────────┘
 
@@ -2053,50 +2702,169 @@ USERPTR：先有CPU VA及其映射 → HMM解析/按需调入对应页面 → �
 存储地址已经准备好 → 把地址写入“目标进程GPUVM”的PTE → GPUVA才能到达数据
 ```
 
+看完三条路径，再给图中出现的五个名字定位：
+
+| 名称                       | 在上图中只负责什么                                           |
+| -------------------------- | ------------------------------------------------------------ |
+| `ttm_tt`                 | 保存当前 BO 的 system RAM 页面数组和 DMA 地址数组            |
+| HMM                        | 从 USERPTR CPU VA 查询并跟踪页框信息，返回`hmm_pfns[]`     |
+| AMDGPU USERPTR 辅助代码    | 把 HMM 页框信息转换成`struct page *`并填入`ttm->pages[]` |
+| `sg_table`               | 把可能离散的页面组织成 DMA API 可以处理的页面列表            |
+| DMA API /`dma_address[]` | 为目标 GPU 生成设备可用地址，并保存逐页 DMA 地址             |
+
+其中，HMM 和 `sg_table` 第一次出现在 USERPTR 这条路径中。这里直接把它展开，避免等到后面才解释。
+
+USERPTR 开始时只有一段 CPU VA。把它变成 GPU PTE 可以使用的 DMA 地址，需要依次回答两个不同问题：
+
+```text
+问题1：这段CPU VA当前对应哪些页框信息？
+       → HMM负责查询并跟踪，返回hmm_pfns[]
+
+问题2：怎样把HMM结果变成TTM保存的struct page *？
+       → AMDGPU负责转换并填入ttm->pages[]
+
+问题3：怎样把这些可能离散的页面交给DMA API？
+       → sg_table负责组织
+```
+
+完整路径是：
+
+```text
+应用已有CPU VA
+      │
+      ▼
+HMM查询并跟踪CPU页表
+      │
+      ▼
+hmm_pfns[]                    HMM返回的逐页页框信息
+      │ AMDGPU调用hmm_pfn_to_page()
+      ▼
+ttm->pages[]                  AMDGPU填入的当前BO struct page数组
+      │ sg_alloc_table_from_pages()
+      ▼
+sg_table                      DMA API接受的SG页面列表
+      │ dma_map_sgtable()
+      ▼
+已经完成DMA映射的SG条目
+      │ drm_prime_sg_to_dma_addr_array()
+      ▼
+ttm->dma_address[]            GPU可使用的逐页DMA地址
+      │ 后续MAP_MEMORY_TO_GPU
+      ▼
+进程GPUVM中的GPU PTE
+```
+
+假设 16 KiB USERPTR 对应 4 个不连续页面，需要分成“HMM 查询”和“AMDGPU 填入 TTM”两步：
+
+```text
+[HMM查询阶段]
+
+CPU VA第0页 → hmm_pfns[0]
+CPU VA第1页 → hmm_pfns[1]
+CPU VA第2页 → hmm_pfns[2]
+CPU VA第3页 → hmm_pfns[3]
+
+HMM负责查询并跟踪这些CPU页表对应的页框信息。
+
+
+[AMDGPU整理阶段]
+
+hmm_pfns[0] → hmm_pfn_to_page() → 页面P7 → ttm->pages[0]
+hmm_pfns[1] → hmm_pfn_to_page() → 页面P2 → ttm->pages[1]
+hmm_pfns[2] → hmm_pfn_to_page() → 页面P9 → ttm->pages[2]
+hmm_pfns[3] → hmm_pfn_to_page() → 页面P4 → ttm->pages[3]
+
+AMDGPU驱动负责把HMM查询结果转换成struct page *，
+再写入当前BO的ttm->pages[]。
+```
+
+所以，严格说不能写成“HMM 负责得到 `ttm->pages[]`”。HMM 的工作到“查询并跟踪 `hmm_pfns[]` 中的逐页页框信息”结束；`amdgpu_ttm_tt_set_user_pages()` 才由 AMDGPU 调用 `hmm_pfn_to_page()` 并填充 `ttm->pages[]`。HMM 不生成 DMA 地址，也不填写 GPU PTE。
+
+`sg_table` 接手的是已经找到的页面：
+
+```text
+sg_table
+├─ 页面P7，长度4 KiB
+├─ 页面P2，长度4 KiB
+├─ 页面P9，长度4 KiB
+└─ 页面P4，长度4 KiB
+```
+
+`sg_table` 只是 DMA API 使用的标准页面清单，不查询 CPU 页表，也不复制数据。DMA API 映射这张清单以后，才得到 `D0～D3`；驱动再把结果展开到 `dma_address[]`。
+
+五个阶段可以压缩成：
+
+| 阶段                    | 输入              | 当前输出或作用                         |
+| ----------------------- | ----------------- | -------------------------------------- |
+| HMM                     | CPU VA            | 查询并跟踪页框信息，返回`hmm_pfns[]` |
+| AMDGPU USERPTR 辅助代码 | `hmm_pfns[]`    | 转换并填入`ttm->pages[]`             |
+| `sg_table`            | `ttm->pages[]`  | 组织成 DMA API 接受的 SG 列表          |
+| DMA API                 | `sg_table`      | 为目标 GPU 建立设备 DMA 地址           |
+| AMDGPU GPUVM            | `dma_address[]` | 把 DMA 地址写入目标进程的 GPU PTE      |
+
+先记一句话即可：
+
+```text
+HMM负责“查页框信息”
+AMDGPU负责“填TTM页面数组”
+sg_table负责“列页面”
+DMA API负责“生成设备地址”
+GPUVM负责“写GPU页表”
+```
+
+这些角色并不是所有内存来源都必须依次经过的固定层级：普通 GTT 不需要先经过 HMM；VRAM 也不需要 host `struct page` 和 `dma_address[]`。只有 USERPTR 路径会经历“HMM 查询→AMDGPU 填页面数组→SG→DMA API”这条准备链。
+
 其中 GTT 与 USERPTR 都可能使用 `ttm_tt` 保存 system RAM backing；区别仍然是页面来源，而不是用了哪一个数组。VRAM 则用本地资源区间提供 PTE 地址，不需要 `struct page` 数组。
 
 总图中的“CPU mmap（可选）”是对一般 GTT BO 而言；前文的 AQL Ring 必须由 CPU 初始化和持续填写，因此在那个具体场景中 CPU 映射是必需的。
 
-#### 2.2.2 GTT：驱动取得 system RAM 页面
+#### 2.2.3 GTT：怎样准备 system RAM 页面和 DMA 地址
 
-GTT BO 的 backing 由系统页面组成。AMDGPU 通过 TTM 的页面池为尚无用户页面的对象填充 `ttm->pages[]`。源码中的 `amdgpu_ttm_tt` 是对通用 `ttm_tt` 的 AMDGPU 扩展，因此同一个 backend 函数里也会看到 USERPTR 分支；这不表示普通 GTT 分配突然变成了 USERPTR。
+本节只跟踪普通 GTT backing 的准备过程，不建立用户进程 GPUVA，也不绑定内核 GART。目标只有两个：
 
-**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_ttm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_ttm.c) 第 1216～1251 行：
+```text
+问题一：真正保存数据的是哪些system RAM页面？
+  → 填充ttm->pages[]
 
-```c
-/*
- * amdgpu_ttm_tt_populate - Map GTT pages visible to the device
- *
- * Map the pages of a ttm_tt object to an address space visible
- * to the underlying device.
- */
-static int amdgpu_ttm_tt_populate(struct ttm_device *bdev,
-				  struct ttm_tt *ttm,
-				  struct ttm_operation_ctx *ctx)
-{
-	/* 省略局部变量声明。 */
-	/* user pages are bound by amdgpu_ttm_tt_pin_userptr() */
-	if (gtt->userptr) {
-		ttm->sg = kzalloc_obj(struct sg_table);
-		if (!ttm->sg)
-			return -ENOMEM;
-		return 0;
-	}
-
-	/* 省略外部导入检查和pool选择。 */
-	ret = ttm_pool_alloc(pool, ttm, ctx);
-	if (ret)
-		return ret;
-
-	for (i = 0; i < ttm->num_pages; ++i)
-		ttm->pages[i]->mapping = bdev->dev_mapping;
-	return 0;
-}
+问题二：目标GPU应使用哪些设备地址访问这些页面？
+  → 填充ttm->dma_address[]
 ```
 
-中文翻译：这个函数为 TTM backing 准备页面；普通 GTT 路径由 TTM 页面池分配页面，USERPTR 则跳过页面池，因为它的页面来自用户已有映射。
+对于 16 KiB GTT BO，希望得到：
 
-`ttm_pool_alloc()` 不只负责取得页面。TTM pool 配置了目标设备时，它还会在需要时同时准备 DMA 地址。
+```text
+resource
+├─ mem_type = TTM_PL_TT
+└─ 说明当前是system-memory放置
+
+ttm
+├─ num_pages = 4
+├─ pages[]       = P7、P2、P9、P4
+└─ dma_address[] = D0、D1、D2、D3
+```
+
+`P7、P2、P9、P4` 表示可能离散的 system RAM 页面；`D0～D3` 是对应页面供目标设备使用的 DMA 地址。这里没有 `G0`，因为进程 GPUVA 映射要等到 `MAP_MEMORY_TO_GPU`。
+
+##### 第一步：`ttm_pool_alloc()` 准备页面
+
+**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_ttm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_ttm.c) 第 1246～1248 行在普通 GTT 路径调用 TTM pool：
+
+```c
+ret = ttm_pool_alloc(pool, ttm, ctx);
+if (ret)
+	return ret;
+```
+
+调用前，`ttm_tt` 和所需数组空间已经存在，但数组内容还要填充：
+
+```text
+调用前
+
+ttm
+├─ num_pages = 4
+├─ pages[0..3]       = 尚未填充
+└─ dma_address[0..3] = 尚未填充
+```
 
 **[SOURCE]** Linux [`drivers/gpu/drm/ttm/ttm_pool.c`](./2.源码/linux/drivers/gpu/drm/ttm/ttm_pool.c) 第 861～883 行对 `ttm_pool_alloc()` 的说明是：
 
@@ -2107,27 +2875,164 @@ necessary.
 
 中文翻译：用页面填充 `ttm_tt`，并在需要时确保这些页面已经完成 DMA 映射。
 
-这里源码注释中的 `Map GTT pages visible to the device` 容易和 `MAP_MEMORY_TO_GPU` 混淆。两者不在同一层：
+取得页面时，TTM 会优先尝试复用页面池；没有合适页面时，再从 Linux 系统页面分配路径取得新页面。
 
-```text
-amdgpu_ttm_tt_populate()
-  → 准备ttm->pages[]中的backing页面
-  → 尚未表达“哪个进程GPUVA映射到这些页面”
+**[SOURCE]** 同一文件第 797～825 行：
 
-MAP_MEMORY_TO_GPU
-  → 把BO连接到目标进程的GPUVM
-  → 根据页面DMA地址写GPU PTE
+```c
+/* First, try to allocate a page from a pool if one exists. */
+p = NULL;
+pt = ttm_pool_select_type(pool, page_caching, order);
+if (pt && allow_pools)
+	p = ttm_pool_type_take(pt, ttm_pool_nid(pool));
+
+/* If that fails or previously failed, allocate from system. */
+if (!p) {
+	page_caching = ttm_cached;
+	allow_pools = false;
+	p = ttm_pool_alloc_page(pool, gfp_flags, order);
+}
+
+/* 省略申请失败后降低order重试的分支。 */
 ```
 
-逐段只读出三个动作：
+`p` 的类型是 `struct page *`。因此，`ttm_pool_alloc()` 的含义不是“每次都重新申请一个物理页”，而是“为当前 `ttm_tt` 准备所需页面，可能复用池中页面，也可能新分配”。
 
-1. `gtt->userptr` 为真时不调用 TTM 页面池，因为页面要从用户 CPU VA 取得。
-2. 普通 GTT 路径调用 `ttm_pool_alloc()`，把系统页面放入 `ttm->pages[]`，并按 pool 配置在需要时准备 `dma_address[]`。
-3. `ttm->pages[i]->mapping = bdev->dev_mapping` 把页面关联到 TTM 设备使用的 `struct address_space`，即 Linux 内核用于组织文件/设备关联页面的管理对象；它不是 CPU 进程地址空间，也不是 GPUVA→PTE 映射。
+##### 第二步：DMA API 为页面生成设备地址
 
-当前只需从代码中读出：`ttm_pool_alloc()` 为 GTT 准备页面和必要的 DMA 地址；真正选择目标进程 GPUVM 并写 PTE 的仍是后续 `MAP_MEMORY_TO_GPU`。这对应本节总图的第一行。
+拿到 `struct page *` 以后，驱动不能自行假设 Host PA 就是 GPU 应使用的地址。需要设备地址时，TTM 把页面交给 DMA API。
 
-#### 2.2.3 USERPTR：从 CPU 页表取得现有页面
+**[SOURCE]** 同一文件第 685～699 行：
+
+```c
+if (alloc->dma_addr) {
+	r = ttm_pool_map(pool, order, p, &first_dma);
+	if (r)
+		return r;
+}
+
+if (restore) {
+	/* 省略备份恢复状态的保存。 */
+} else {
+	ttm_pool_allocated_page_commit(p, first_dma, alloc, 1UL << order);
+	/* 省略缓存状态更新。 */
+}
+```
+
+普通页面分配路径中的 `ttm_pool_map()` 最终调用 DMA API。同一文件第 281～288 行：
+
+```c
+/* 摘录：非dma_alloc_attrs分支。 */
+size_t size = (1ULL << order) * PAGE_SIZE;
+
+addr = dma_map_page(pool->dev, p, 0, size, DMA_BIDIRECTIONAL);
+if (dma_mapping_error(pool->dev, addr))
+	return -EFAULT;
+
+*dma_addr = addr;
+```
+
+这里的输入是 `struct page *p`，返回值是目标设备应该使用的 `dma_addr_t`：
+
+```text
+Host IOMMU开启
+  → dma_map_page()返回的DMA地址通常是IOVA
+
+Host IOMMU关闭
+  → 返回的DMA地址通常是直连DMA/总线地址
+```
+
+因此，不应把这一步描述成“驱动取出 CPU 物理地址，然后自己计算 DMA 地址”。DMA API 负责建立平台需要的 DMA/IOMMU 状态并返回设备地址。
+
+##### 第三步：把页面和 DMA 地址写入当前 BO 的局部数组
+
+**[SOURCE]** 同一文件第 544～562 行把结果依次写入两个数组：
+
+```c
+for (i = 0; i < nr; ++i)
+	*alloc->pages++ = allocated++;
+
+/* 省略剩余页面计数更新和dma_addr为空的返回分支。 */
+for (i = 0; i < nr; ++i) {
+	*alloc->dma_addr++ = first_dma;
+	first_dma += PAGE_SIZE;
+}
+```
+
+对于本文的 4 KiB 页面示例，可以把最终结果读成：
+
+```text
+ttm
+├─ num_pages = 4
+│
+├─ pages[0] = P7        dma_address[0] = D0
+├─ pages[1] = P2        dma_address[1] = D1
+├─ pages[2] = P9        dma_address[2] = D2
+└─ pages[3] = P4        dma_address[3] = D3
+```
+
+两组下标都是当前 BO 的局部下标 `0～3`。`pages[2]` 与 `dma_address[2]` 描述同一个 backing 页面；它们与 `resource->start=S` 没有 `pages[S]` 这样的数组关系。
+
+##### 此刻处于哪个阶段：backing 已准备，GPU MAP 尚未发生
+
+本节只完成了普通 GTT backing 的准备。把它放回时间线：
+
+```text
+KFD ALLOC / backing准备阶段           ← 当前学到这里
+
+计划GPUVA
+└─ G0                                只是已经记录的地址数值
+
+GTT BO
+├─ pages[0..3]                       4个system RAM页面
+└─ dma_address[0..3]                 D0～D3
+```
+
+两边目前尚未连接：
+
+```text
+计划GPUVA G0  ─────────×─────────→  GTT BO backing
+                  还没有有效的
+             进程GPUVM mapping/PTE
+```
+
+此时需要准确描述为：
+
+- BO、system RAM 页面和逐页 DMA 地址已经准备好。
+- 计划 GPUVA `G0` 已经记录，但记录一个地址数值不等于建立页表映射。
+- `amdgpu_vm_bo_map()` 尚未创建这段软件 mapping，GPU PTE 也尚未生效。
+- GPU 现在使用 `G0` 访问，仍然无法到达这块 Ring。
+
+下一阶段才执行真正的 GPU MAP：
+
+```text
+MAP_MEMORY_TO_GPU阶段                 ← 2.3展开
+
+根据handle找到同一个BO
+  → 取得目标用户进程的amdgpu_bo_va
+  → amdgpu_vm_bo_map()创建软件mapping
+  → GPUVM更新代码生成并提交PTE
+  → 等待页表更新完成
+  → invalidate旧TLB翻译
+  → G0正式可以到达Ring backing
+```
+
+所以三节的分工是：
+
+```text
+2.2.1.2
+  → mapping与TTM建立后分别描述什么
+
+2.2.3
+  → 为普通GTT backing准备pages[]和dma_address[]
+
+2.3
+  → MAP_MEMORY_TO_GPU在什么时刻创建mapping并写PTE
+```
+
+> **[BOUNDARY]** 某些 AMDGPU 内核资源可以把同一组 DMA 地址另外绑定进 VMID 0/GART；那是独立的内核 alias，不是当前 AQL 进程 GPU MAP 的必经步骤。
+
+#### 2.2.4 USERPTR：从 CPU 页表取得现有页面
 
 USERPTR 不重新创造一份用户数据。用户已经拥有 CPU VA 及其内存映射，驱动再从这段映射解析对应页面，并跟踪 CPU 页表变化。
 
@@ -2179,8 +3084,8 @@ void amdgpu_ttm_tt_set_user_pages(struct ttm_tt *ttm,
 ```text
 用户CPU VA起点
   → HMM范围查询得到hmm_pfns[]
-  → hmm_pfn_to_page()
-  → ttm->pages[]
+  → AMDGPU调用hmm_pfn_to_page()
+  → AMDGPU填入ttm->pages[]
 ```
 
 页面数组准备好以后，另一个 backend 函数在绑定阶段把它组织成 SG 列表，再调用 DMA API 为目标设备建立 DMA 地址。下面保留函数入口，是为了明确这不是上一段函数的尾部。
@@ -2216,25 +3121,43 @@ static int amdgpu_ttm_tt_pin_userptr(struct ttm_device *bdev,
 2. `dma_map_sgtable()` 为 `adev` 代表的目标 GPU 建立设备访问地址；Host IOMMU 开启时，这里可能得到 IOVA。
 3. `drm_prime_sg_to_dma_addr_array()` 把映射结果展开到 `dma_address[]`，供后续逐页生成 GPU PTE。
 
-这条链连接了第 1 章，但 GPU PTE 仍要等 `MAP_MEMORY_TO_GPU` 阶段才写入：
+这三步对应本节开头总图中从 `ttm->pages[]` 到 `dma_address[]` 的部分。此时只准备好了设备地址；GPU PTE 仍要等后续 `MAP_MEMORY_TO_GPU` 才写入。
+
+#### 2.2.5 VRAM：取得显存资源区间
+
+VRAM BO 的数据位于 GPU 本地显存资源中，驱动管理的是显存地址区间，而不是一组普通 host `struct page`。映射进目标用户进程 GPUVM 时，PTE 最终指向本地显存地址；只有 CPU 需要直接访问且该区间位于 BAR 可见范围时，才另外建立 CPU 侧映射。
+
+这里必须先看 `mem_type = TTM_PL_VRAM`，再解释 `resource->start`：它表示 VRAM 资源域中的起始页号，而不是进程 GPUVA：
 
 ```text
-用户CPU VA
-  → CPU页表中的页面
-  → ttm->pages[]中的struct page
-  → sg_table
-  → DMA API
-  → dma_address[]
-  → 后续MAP_MEMORY_TO_GPU写GPU PTE
+resource
+├─ mem_type = TTM_PL_VRAM
+├─ start = V                    VRAM域中的起始页号
+└─ size = 16 KiB
+
+VRAM域内字节偏移 = V << PAGE_SHIFT
+GPU侧VRAM地址     = VRAM基地址 + VRAM域内字节偏移
 ```
 
-#### 2.2.4 VRAM：取得显存资源区间
+进程 GPUVA 仍由 GPUVM 另外映射到这个 GPU 侧 VRAM 地址，`V` 本身不是进程 GPUVA。
 
-VRAM BO 的数据位于 GPU 本地显存资源中，驱动管理的是显存地址区间，而不是一组普通 host `struct page`。映射进 GPUVM 时，PTE 最终指向本地显存地址；只有 CPU 需要直接访问且该区间位于 BAR 可见范围时，才另外建立 CPU 侧映射。
+**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_object.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_object.c) 第 1499～1510 行展示连续 VRAM BO 的换算：
+
+```c
+WARN_ON_ONCE(bo->tbo.resource->mem_type != TTM_PL_VRAM);
+
+fb_base = adev->gmc.fb_start;
+fb_base += adev->gmc.xgmi.physical_node_id * adev->gmc.xgmi.node_segment_size;
+offset = (bo->tbo.resource->start << PAGE_SHIFT) + fb_base;
+```
+
+`start << PAGE_SHIFT` 只产生 VRAM 域内偏移；加上 GPU 视角的 FB/VRAM 基地址以后，才形成 GPU 侧目标地址。
 
 这里没有展开与 GTT 同等长度的源码，并不表示 VRAM 没有资源管理过程。VRAM placement、显存区间分配、迁移与驱逐属于完整 TTM 资源管理专题；当前只保留总图中的差别：GTT/USERPTR 的 PTE 目标来自逐页 DMA 地址数组，VRAM 的 PTE 目标来自本地显存资源区间。
 
-#### 2.2.5 pin、分配与映射不是一回事
+> **[BOUNDARY]** 上图只用于解释连续 VRAM 资源。分段 VRAM 资源需要通过 AMDGPU 资源游标逐段读取，留到后续完整内存管理专题。
+
+#### 2.2.6 pin、分配与映射不是一回事
 
 | 动作     | 回答的问题                                     |
 | -------- | ---------------------------------------------- |
@@ -2248,492 +3171,248 @@ USERPTR 尤其容易被说成“GPU 分配了一块 pinned memory”，但准确
 
 至此只完成了“backing 和设备地址从哪里来”的准备。下一节回到 KFD UAPI，确认 KFD ALLOC 怎样创建/登记对象、GPU MAP 又怎样把这些地址写进指定 GPUVM。
 
-### 2.3 分配和映射是两个阶段
+### 2.3 `MAP_MEMORY_TO_GPU` 怎样让计划 GPUVA 真正生效
 
-前文已经用 GTT Ring 解释过“内部 KFD ALLOC 不等于外层 allocator 返回”。本节不再重讲场景，而是用 KFD UAPI 和 MAP 源码验证这条边界。
+2.0～2.2 已经准备好三类输入：计划 GPUVA `G0`、Ring BO backing，以及 system RAM 的逐页 DMA 地址或 VRAM 本地资源地址。本节只回答一件事：
 
-首次阅读建议先读 2.3.1 的接口职责和 2.3.2 的 MAP 时序，然后直接进入 2.4；2.3.3 继续追到 CPU/SDMA 怎样写 PTE，适合作为第二遍源码阅读。
+> `MAP_MEMORY_TO_GPU` 怎样把这些输入真正写成 GPU MMU 可以使用的进程 GPUVM 页表？
 
-#### 2.3.1 KFD UAPI 怎样拆开 ALLOC、MAP、UNMAP 和 FREE
-
-KFD UAPI 本身已经把分配、映射和释放拆成不同操作。
-
-**[SOURCE]** Linux [`include/uapi/linux/kfd_ioctl.h`](./2.源码/linux/include/uapi/linux/kfd_ioctl.h) 第 430～478 行：
-
-```c
-/* Allocate memory for later SVM (shared virtual memory) mapping.
- *
- * @va_addr:     virtual address of the memory to be allocated
- *               all later mappings on all GPUs will use this address
- * @size:        size in bytes
- * @handle:      buffer handle returned to user mode, used to refer to
- *               this allocation for mapping, unmapping and freeing
- * @mmap_offset: for CPU-mapping the allocation by mmapping a render node
- *               for userptrs this is overloaded to specify the CPU address
- * @gpu_id:      device identifier
- * @flags:       memory type and attributes. See KFD_IOC_ALLOC_MEM_FLAGS above
- */
-struct kfd_ioctl_alloc_memory_of_gpu_args {
-	__u64 va_addr;
-	__u64 size;
-	__u64 handle;
-	__u64 mmap_offset;
-	__u32 gpu_id;
-	__u32 flags;
-};
-
-/* Map memory to one or more GPUs
- *
- * @handle:                memory handle returned by alloc
- * @device_ids_array_ptr:  array of gpu_ids (__u32 per device)
- * @n_devices:             number of devices in the array
- * @n_success:             number of devices mapped successfully
- *
- * @n_success returns information to the caller how many devices from
- * the start of the array have mapped the buffer successfully. It can
- * be passed into a subsequent retry call to skip those devices. For
- * the first call the caller should initialize it to 0.
- *
- * If the ioctl completes with return code 0 (success), n_success ==
- * n_devices.
- */
-struct kfd_ioctl_map_memory_to_gpu_args {
-	__u64 handle;
-	__u64 device_ids_array_ptr;
-	__u32 n_devices;
-	__u32 n_success;
-};
-```
-
-中文翻译：
+先固定时间位置：
 
 ```text
-ALLOC创建或登记一块以后可以映射的内存，返回handle；
-这个handle供后续MAP、UNMAP和FREE引用。
-mmap_offset用于另外建立CPU映射。
+[当前正常AQL Queue创建：执行一次]
 
-MAP使用同一个handle，把该内存映射到一个或多个GPU；
-device_ids数组选择目标GPU，n_success记录已经成功映射的设备数，
-从而支持失败后的继续重试；完全成功时n_success等于n_devices。
+KFD ALLOC
+  → CPU mmap
+  → MAP_MEMORY_TO_GPU
+       ├─ 建立软件mapping
+       ├─ 提交PTE更新
+       ├─ 等待页表写完
+       └─ invalidate旧TLB翻译
+  → CREATE_QUEUE
+  → Queue开始运行
+
+
+[以后每次AQL Dispatch：反复执行]
+
+CPU填写已有Ring槽位
+  → release发布Packet
+  → Doorbell
+  → GPU使用已经建立好的PTE读取Ring
 ```
 
-四个核心 ioctl 的职责是：
+所以这里说“申请时做一次”，准确含义是：在当前 Ring 的正常 Queue 创建流程中，GPU MAP 做一次；不是 `ALLOC_MEMORY_OF_GPU` 本身写页表，也不是每提交一个 AQL Packet 都重新写页表。
 
-| ioctl                     | 只回答什么                                                                  |
-| ------------------------- | --------------------------------------------------------------------------- |
-| `ALLOC_MEMORY_OF_GPU`   | 创建/登记内存与管理对象，返回 KFD handle                                    |
-| `MAP_MEMORY_TO_GPU`     | 把对象连接到指定 GPU 的 GPUVM，准备 PTE                                     |
-| `UNMAP_MEMORY_FROM_GPU` | 删除指定 GPUVM 中的映射                                                     |
-| `FREE_MEMORY_OF_GPU`    | 在无人使用、没有 GPU 映射后撤销驱动对象；按所有权回收资源或放下外部页面引用 |
+> **[BOUNDARY]** “一次”只描述本文的正常稳定路径。以后若发生 BO 迁移、驱逐恢复、USERPTR 失效恢复或重新映射，驱动仍可能再次更新 PTE；这些异常和恢复路径不进入本节。
 
-下面的 ALLOC 专指 KFD ioctl，不是外层 `system_allocator()` 的返回：
+#### 2.3.1 MAP 的输入、输出与状态边界
+
+先比较四个时刻：
+
+| 时刻              | 已经有什么                              | GPU 能否通过`G0` 访问              |
+| ----------------- | --------------------------------------- | ------------------------------------ |
+| KFD ALLOC 前      | HSAKMT 已选定计划地址`G0`             | 不能；BO 还不存在                    |
+| KFD ALLOC 后      | handle、`kgd_mem`、BO/backing、`G0` | 不能；目标 GPUVM 还没有 PTE          |
+| GPU MAP 后        | 软件 mapping、PDE/PTE、完成同步         | 能；`G0` 已在目标进程 GPUVM 中生效 |
+| 每次 AQL Dispatch | 复用同一条 Ring 和同一组 PTE            | 能；不重新 MAP                       |
+
+MAP 的输入和输出可以压缩成：
 
 ```text
-KFD ALLOC ioctl成功
-≠ GPU已经能访问
-
-MAP成功
-= 对目标GPUVM建立映射并完成必要同步
+输入
+├─ handle：找到同一个kgd_mem/BO
+├─ 目标GPU：确定映射到哪块GPU
+├─ 计划GPUVA G0
+└─ backing设备地址：D0～D3或VRAM地址
+        │
+        ▼
+MAP_MEMORY_TO_GPU
+        │
+        ▼
+输出
+├─ 当前进程GPUVM中的软件mapping
+├─ GPU MMU可读取的PDE/PTE
+└─ 页表更新完成、旧TLB翻译已失效
 ```
 
-#### 2.3.2 一次 GPU MAP 怎样向下提交、向上完成
-
-在继续读源码前，先固定调用层级。下面各层都可能使用 `mem`、`addr` 一类局部变量名，变量名字相同不表示对象类型相同：
-
-| 源码层级             | 本节会看到的对象或变量                             | 这一层回答什么                                    |
-| -------------------- | -------------------------------------------------- | ------------------------------------------------- |
-| ROCr / HSAKMT        | ioctl 参数、KFD handle、目标 GPU ID 数组           | 用户态请求操作哪块内存、映射到哪些 GPU            |
-| KFD 进程—设备层     | `p`、`pdd`、`peer_pdd`                       | 这是哪个进程，以及该进程在源/目标 GPU 上的状态    |
-| KFD—AMDGPU 桥接层   | `kgd_mem`、`kfd_mem_attachment`                | KFD 内存对象连接了哪些设备                        |
-| AMDGPU GPUVM 层      | `amdgpu_bo`、`amdgpu_bo_va`、`amdgpu_vm`     | 哪个 BO 映射到哪套 GPUVM 的哪个 GPUVA             |
-| backing 与更新后端层 | `ttm_resource`、`pages_addr`、CPU/SDMA backend | PTE 的目标地址来自哪里，以及由谁把 PTE 值写进页表 |
-
-表中的 `KFD chardev` 是 KFD 字符设备的 ioctl 入口层，负责接收 `/dev/kfd` 请求并找到当前进程的 KFD 状态；`backend` 只表示“完成某项工作的具体实现路径”，例如由 CPU 或 SDMA 执行页表写入。
-
-常见缩写变量先作如下理解：
-
-| 变量或字段   | 当前含义                                                                                  |
-| ------------ | ----------------------------------------------------------------------------------------- |
-| `pdd`      | 发起对象所属 GPU 对应的 PDD                                                               |
-| `peer_pdd` | 当前准备映射到的目标 GPU 对应的 PDD；这里的`peer` 不表示正在执行 GPU 间点对点拷贝       |
-| `adev`     | AMDGPU 设备对象                                                                           |
-| `mem`      | 在 KFD 桥接源码中通常是`kgd_mem`；进入 `amdgpu_vm.c` 后会看到同名但不同类型的局部变量 |
-| `entry`    | 一条`kfd_mem_attachment`，表示内存对象与某个目标设备的连接                              |
-| `bo_va`    | BO 与某套`amdgpu_vm` 的映射关系                                                         |
-| `drm_priv` | 当前进程在某个 AMDGPU 设备上的 DRM 私有上下文；桥接层由它取得目标`amdgpu_vm`            |
-| `sync`     | 收集需要等待的`dma_fence` 完成凭证，不是内存数据本身                                    |
-
-这里的 Fence 特指 Linux `dma_fence`：它表示一次异步页表更新何时完成，作用类似“完成凭证”。它不是第 3 章的 CPU/GPU 内存顺序栅栏或 AQL fence scope，也不等于 TLB flush；正确顺序是先等待这个完成凭证，再刷新旧的 TLB 翻译。
-
-在进入时序图前，先用两条箭头固定“对象”和“映射”不是同一件事；2.4 会再给出完整关系图：
+把一次成功 MAP 按执行者展开，完整时序如下。后面 2.3.2～2.3.4 就是依次放大图中的各段：
 
 ```text
-handle → kgd_mem → amdgpu_bo/backing
-             └→ attachment → bo_va → amdgpu_vm
+HSAKMT（用户态）
+│
+│ MAP_MEMORY_TO_GPU(handle，当前GPU)
+▼
+KFD字符设备入口
+│
+├─ 从当前PDD的handle表中查到同一个kgd_mem
+└─ 从同一个PDD中取得当前进程的GPUVM
+│
+│ 交给KFD/AMDGPU GPUVM桥接层
+▼
+KFD/AMDGPU桥接层
+│
+├─ 找到kgd_mem中的主amdgpu_bo
+├─ 创建或复用attachment
+├─ 创建或复用“BO ↔ GPUVM”的amdgpu_bo_va
+└─ 记录“GPUVA G0 ↔ BO offset 0”的software mapping
+│
+│ 请求把mapping落实到GPU页表
+▼
+AMDGPU GPUVM页表更新层
+│
+├─ 为backing准备当前GPU可使用的设备地址
+├─ system RAM：选择D0、D1、D2、D3
+├─ VRAM：选择对应的本地显存地址
+└─ 计算每个PDE/PTE的地址和属性
+│
+│ 选择当前配置的页表更新后端
+▼
+CPU后端 或 SDMA后端
+│
+├─ 把计算好的PDE/PTE写进当前进程的页表BO
+└─ 返回last_pt_update Fence
+│
+▼
+KFD外层完成阶段
+│
+├─ 等待Fence，确认页表BO已经写完
+├─ invalidate当前GPUVM的旧TLB翻译
+└─ MAP成功返回HSAKMT
+│
+▼
+以后每次AQL Dispatch直接复用这套GPUVA映射
 ```
 
-把这些层放进一次 MAP 的时序中，先看“请求怎样向下走、完成怎样向上返回”：
-
-```mermaid
-sequenceDiagram
-    participant U as HSAKMT
-    participant K as KFD chardev
-    participant B as KFD-AMDGPU 桥接
-    participant V as GPUVM 更新后端
-    participant M as 页表存储 / GPU TLB
-
-    U->>K: ① MAP_MEMORY_TO_GPU ioctl
-    K->>K: ② handle → kgd_mem
-    loop ③ 对每个目标 GPU
-        K->>B: map_memory_to_gpu(peer_pdd, kgd_mem)
-        B->>B: ④ 创建/复用 bo_va，准备 DMA 地址
-        B->>V: ⑤ 请求更新 GPU PTE
-        alt CPU 更新后端
-            V->>M: CPU 写入 PTE
-        else SDMA 更新后端
-            V->>M: SDMA 把 PTE 值复制到页表
-        end
-        V-->>B: ⑥ 返回 last_pt_update Fence
-        B-->>K: 当前目标 GPU 的 mapping 已提交
-    end
-    K->>B: ⑦ sync_memory()
-    B->>B: 等待 Fence 完成
-    B-->>K: 页表更新已完成
-    K->>M: ⑧ flush 目标 GPU TLB
-    K-->>U: ⑨ MAP 成功返回
-```
-
-图中 ④～⑥ 是后文“怎样把 D2 写进 PTE2”的源码放大部分；第一次阅读只要先守住 ①→⑨ 的时间顺序。
-
-现在再看 ioctl 入口。源码保留函数声明和变量类型，是为了让 `pdd`、`peer_pdd` 和 `mem` 不再凭空出现。
-
-**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdkfd/kfd_chardev.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) 第 1282～1375 行展示 `MAP_MEMORY_TO_GPU` 的关键顺序：
-
-```c
-static int kfd_ioctl_map_memory_to_gpu(struct file *filep,
-					struct kfd_process *p, void *data)
-{
-	struct kfd_ioctl_map_memory_to_gpu_args *args = data;
-	struct kfd_process_device *pdd, *peer_pdd;
-	void *mem;
-	struct kfd_node *dev;
-	long err = 0;
-	int i;
-	/* 省略其余局部变量、参数检查、取得pdd/dev以及进程绑定。 */
-
-	mem = kfd_process_device_translate_handle(
-			pdd, GET_IDR_HANDLE(args->handle));
-
-	for (i = args->n_success; i < args->n_devices; i++) {
-		/* 省略根据device ID取得并绑定peer_pdd。 */
-		err = amdgpu_amdkfd_gpuvm_map_memory_to_gpu(
-			peer_pdd->dev->adev, (struct kgd_mem *)mem,
-			peer_pdd->drm_priv);
-		if (err) {
-			/* 省略错误日志。 */
-			goto map_memory_to_gpu_failed;
-		}
-		args->n_success = i+1;
-	}
-
-	err = amdgpu_amdkfd_gpuvm_sync_memory(
-		dev->adev, (struct kgd_mem *)mem, true);
-
-	/* Flush TLBs after waiting for the page table updates to complete */
-	for (i = 0; i < args->n_devices; i++) {
-		/* 省略重新取得peer_pdd。 */
-		kfd_flush_tlb(peer_pdd);
-	}
-	/* 省略清理和返回。 */
-}
-```
-
-源码英文注释的中文翻译：必须先等待页表更新完成，然后才能刷新对应 GPU 的 TLB。
-
-逐段理解：
-
-1. `pdd + GET_IDR_HANDLE(handle)` 在所属设备的进程对象表中把 handle 查成 `kgd_mem`。宏名中的 IDR 是 Linux 内核的整数 ID→对象映射机制；这里不需要学习其数据结构实现。
-2. 循环中的每个 `peer_pdd` 代表一个目标 GPU；同一个 `kgd_mem` 可以分别连接到多个目标 GPUVM。
-3. `amdgpu_amdkfd_gpuvm_map_memory_to_gpu()` 为当前目标设备建立映射；这不是把数据复制到 peer GPU。
-4. `amdgpu_amdkfd_gpuvm_sync_memory()` 等待此前收集的页表更新 `dma_fence`。
-5. 等待完成后才逐个刷新目标 GPU 的 TLB，防止继续使用旧翻译。
-
-这正好对应前面时序图的 ②～⑧：先查对象、再连接 GPUVM、写 PTE、等待完成，最后刷新 TLB。
-
-#### 2.3.3 第二遍阅读：驱动怎样把 `D2` 写进 PTE2
-
-这不是 GPU 正在执行 Kernel 时发生的动作，也不是每块内存都会重复执行的驱动加载初始化。它发生在这块 BO 执行 `MAP_MEMORY_TO_GPU` 时。
-
-> 如果按首次阅读路线学习，可以跳过整个 2.3.3，直接进入 2.4。CPU/SDMA 后端只回答“PTE 值最终由谁写进去”；无论选择哪个后端，前面的对象关系和最后形成的 PTE 都不变。
-
-**第一步：登记 GPUVA 范围，然后请求更新 PTE**
-
-**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c) 第 1324～1337 行：
-
-```c
-ret = amdgpu_vm_bo_map(entry->adev, entry->bo_va, entry->va, 0,
-		       amdgpu_bo_size(entry->bo_va->base.bo),
-		       entry->pte_flags);
-/* 省略错误处理和no_update_pte分支。 */
-
-ret = update_gpuvm_pte(mem, entry, sync);
-```
-
-`amdgpu_vm_bo_map()` 记录“从 `entry->va` 开始的 GPUVA 范围映射到这个 BO”；`update_gpuvm_pte()` 再把这条软件映射落实为真正的 GPU PTE。
-
-**第二步：确保 DMA 映射存在，再更新 GPU 页表**
-
-**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c) 第 1295～1314 行：
-
-```c
-static int update_gpuvm_pte(struct kgd_mem *mem,
-			    struct kfd_mem_attachment *entry,
-			    struct amdgpu_sync *sync)
-{
-	struct amdgpu_bo_va *bo_va = entry->bo_va;
-	struct amdgpu_device *adev = entry->adev;
-	int ret;
-
-	ret = kfd_mem_dmamap_attachment(mem, entry);
-	if (ret)
-		return ret;
-
-	/* Update the page tables  */
-	ret = amdgpu_vm_bo_update(adev, bo_va, false);
-	if (ret) {
-		pr_err("amdgpu_vm_bo_update failed\n");
-		return ret;
-	}
-
-	return amdgpu_sync_fence(sync, bo_va->last_pt_update, GFP_KERNEL);
-}
-```
-
-这里的三步分别是：
+这里最重要的等式是：
 
 ```text
-kfd_mem_dmamap_attachment()
-  → 确保目标GPU具有可用的DMA地址
+MAP前：
+G0只是一个已记录的数值
+G0 ──×──→ Ring backing
 
-amdgpu_vm_bo_update()
-  → 生成并提交GPU页表更新
-
-amdgpu_sync_fence()
-  → 记录页表更新完成所依赖的同步点
+MAP后：
+G0 ──进程GPUVM/PTE──→ Ring backing
 ```
 
-`amdgpu_sync_fence()` 的名字容易被误解成“现在就在等待”。它实际只把 `dma_fence` 完成凭证保存到 `sync` 集合；真正的等待发生在外层 ioctl 稍后调用的 `amdgpu_amdkfd_gpuvm_sync_memory()` 中。
+GPU MAP 不重新申请 Ring backing，也不复制 Ring 数据；它只建立并完成 GPU 地址关系。
 
-**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_sync.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_sync.c) 第 161～178 行与 [`drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c) 第 2209～2223 行分别展示“记录”和“等待”：
+#### 2.3.2 同一个 PDD 怎样找到 BO 和当前进程 GPUVM
 
-```c
-int amdgpu_sync_fence(struct amdgpu_sync *sync, struct dma_fence *f,
-		      gfp_t flags)
-{
-	struct amdgpu_sync_entry *e;
+当前示例只有一个 Linux 用户进程和一块 AMD GPU。PDD 是 **Process Device Data**，对应 `struct kfd_process_device`，表示“这个进程在这块 GPU 上的 KFD 状态”。
 
-	/* 省略空Fence和去重检查。 */
-	e = kmem_cache_alloc(amdgpu_sync_slab, flags);
-	if (!e)
-		return -ENOMEM;
-	hash_add(sync->fences, &e->node, f->context);
-	e->fence = dma_fence_get(f);
-	return 0;
-}
-
-int amdgpu_amdkfd_gpuvm_sync_memory(
-		struct amdgpu_device *adev, struct kgd_mem *mem, bool intr)
-{
-	struct amdgpu_sync sync;
-	int ret;
-
-	amdgpu_sync_create(&sync);
-	mutex_lock(&mem->lock);
-	amdgpu_sync_clone(&mem->sync, &sync);
-	mutex_unlock(&mem->lock);
-	ret = amdgpu_sync_wait(&sync, intr);
-	amdgpu_sync_free(&sync);
-	return ret;
-}
-```
-
-因此完整顺序是：
+`handle` 和 PDD 不是两个并列对象。PDD 内部有一张 `alloc_idr` handle 表；HSAKMT 持有的 `handle` 是查找这张表所需的编号。与此同时，同一个 PDD 的 `drm_priv` 保存当前进程在当前 GPU 上的 GPUVM 上下文。因此，内存对象和 GPUVM 都从同一个 PDD 出发：
 
 ```text
-提交页表更新
-  → 得到last_pt_update Fence
-  → amdgpu_sync_fence()把Fence记入同步集合
-  → 外层amdgpu_sync_wait()等待Fence完成
-  → 等待成功后刷新TLB
+                              MAP之前
+
+struct kfd_process_device PDD
+│
+├─ alloc_idr（handle表）
+│      │
+│      └─ handle ──取出表内ID并查表──→ kgd_mem M
+│                                         ├─ va = G0
+│                                         │  只记录计划GPUVA
+│                                         └─ bo
+│                                             ▼
+│                                         amdgpu_bo B
+│                                             ▼
+│                                         Ring backing
+│
+└─ drm_priv
+       │ drm_priv_to_vm()
+       ▼
+   amdgpu_vm V
+       └─ root：GPU页表根
+
+此时两条分支都已找到对象，但还没有连接：
+
+GPUVM V中的G0 ─────────×─────────→ Ring backing
+                       还没有mapping/PTE
 ```
 
-**第三步：system RAM BO 选择 `pages_addr[]`**
+左侧分支中，`handle` 只负责在 `PDD->alloc_idr` 中找到 `kgd_mem`；它不负责寻找 GPUVM。右侧分支则直接从同一个 PDD 的 `drm_priv` 找到 `amdgpu_vm`。MAP 的任务，是创建两条分支之间的连接对象，并最终把连接结果写进 GPU 页表。
 
-这里进入了 `amdgpu_vm.c`。该函数也把一个局部变量命名为 `mem`，但它的类型是 `struct ttm_resource *`，表示 BO 当前的 TTM 放置资源；它不是前面 KFD 桥接层的 `struct kgd_mem *`。阅读时可以在脑中把这里的 `mem` 改称 `ttm_res`。
-
-**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_vm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_vm.c) 第 1310～1313、1369～1373 行：
-
-```c
-mem = bo->tbo.resource;
-if (mem && (mem->mem_type == TTM_PL_TT ||
-	    mem->mem_type == AMDGPU_PL_PREEMPT))
-	pages_addr = bo->tbo.ttm->dma_address;
-
-/* 省略权限属性处理。 */
-r = amdgpu_vm_update_range(adev, vm, false, false, flush_tlb,
-			   !uncached, &sync, mapping->start,
-			   mapping->last, update_flags,
-			   mapping->offset, vram_base, mem,
-			   pages_addr, last_update);
-```
-
-这次调用中只需要识别四组参数：
-
-| 参数                                 | 当前含义                                                      |
-| ------------------------------------ | ------------------------------------------------------------- |
-| `mapping->start` / `last`        | 目标 GPUVM 中要填写的 GPUVA 页范围                            |
-| `mapping->offset`                  | 该映射从 BO backing 的哪个偏移开始                            |
-| `mem`（`struct ttm_resource *`） | BO 当前位于 GTT、VRAM 或其他哪类 TTM 资源                     |
-| `pages_addr`                       | system RAM backing 的逐页 DMA 地址数组；VRAM 路径通常不使用它 |
-
-`TTM_PL_TT` 是本章关注的普通 system-memory TTM 放置；`AMDGPU_PL_PREEMPT` 是另一种 system-backed 特殊放置，第一次阅读不需要展开。两者都通过 `pages_addr` 为 PTE 提供逐页地址。
-
-对于 4 页 system RAM 缓冲区，`pages_addr` 指向：
+下面继续展开同一个 PDD 中的两条分支，得到当前单 GPU、一个 16 KiB GTT Ring 的完整软件对象关系；箭头表示“字段保存指针或引用”，不是结构体彼此内嵌：
 
 ```text
-pages_addr[0] = D0
-pages_addr[1] = D1
-pages_addr[2] = D2
-pages_addr[3] = D3
+struct kfd_process_device（PDD）
+│  含义：当前Linux用户进程在当前GPU上的KFD状态
+│
+├─ alloc_idr[handle ID]
+│      │
+│      │ 用KFD内存handle查表
+│      ▼
+│  struct kgd_mem M
+│  │  含义：KFD对这次内存分配的总管理对象，不是16 KiB数据本身
+│  │
+│  ├─ va = G0
+│  │      计划映射的Ring GPUVA起点
+│  │
+│  ├─ bo ────────────────────────────────┐
+│  │                                    ▼
+│  │                            struct amdgpu_bo B
+│  │                              这次分配的一个主BO
+│  │                                    │
+│  │                                    └─ tbo
+│  │                                        ├─ resource：GTT放置区间
+│  │                                        └─ ttm
+│  │                                            ├─ pages[0..3]
+│  │                                            └─ dma_address[0..3]
+│  │                                                D0、D1、D2、D3
+│  │
+│  └─ attachments链表
+│         │
+│         └─ struct kfd_mem_attachment E
+│             含义：M映射到“当前这块GPU”时使用的连接记录
+│
+│             ├─ adev ─────────────→ 当前GPU
+│             ├─ va = G0             本次映射的GPUVA起点
+│             ├─ pte_flags            PTE访问/缓存属性
+│             └─ bo_va ──────────────────────────────────────┐
+│                                                           ▼
+│                                                struct amdgpu_bo_va X
+│                                                  含义：BO B与GPUVM V的关系对象
+│
+│                                                ├─ base.bo ─────→ 同一个BO B
+│                                                ├─ base.vm ─────→ 同一个GPUVM V
+│                                                ├─ valids/invalids
+│                                                │       │
+│                                                │       └─ mapping K
+│                                                │          ├─ start：GPUVA起始页号
+│                                                │          ├─ last：GPUVA结束页号
+│                                                │          ├─ offset：BO内起始偏移
+│                                                │          └─ flags：PTE属性
+│                                                └─ last_pt_update
+│                                                   最近一次页表更新Fence
+│
+└─ drm_priv
+       │
+       │ drm_priv_to_vm()
+       ▼
+   struct amdgpu_vm V
+      含义：当前进程在当前GPU上的GPU地址空间
+      ├─ root：GPU页表根
+      └─ VA管理结构中登记同一个mapping K
 ```
 
-**第四步：页表更新后端真正写入 PTE**
-
-AMDGPU 可以使用不同的页表更新后端。先看最直观的 CPU 更新路径。
-
-这段循环中的变量属于“正在生成一批 PTE”的局部上下文：
-
-| 变量                   | 当前含义                                                                  |
-| ---------------------- | ------------------------------------------------------------------------- |
-| `pe`                 | 目标页表中第一个待写 PTE 的地址                                           |
-| `count`              | 本批要写多少个 PTE                                                        |
-| `addr`               | 有`pages_addr` 时是 BO backing 中的当前偏移；否则可能已经是连续目标地址 |
-| `incr`               | 每写一个 PTE 后，backing 偏移或目标地址怎样递增                           |
-| `value` / `oflags` | 最终写进 PTE 的地址部分与属性部分                                         |
-
-**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_vm_cpu.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_vm_cpu.c) 第 94～105 行：
-
-```c
-for (i = 0; i < count; i++) {
-	u64 oflags = flags;
-
-	value = p->pages_addr ?
-		amdgpu_vm_map_gart(p->pages_addr, addr) :
-		addr;
-
-	/* 省略代际相关属性覆盖。 */
-	amdgpu_gmc_set_pte_pde(p->adev, (void *)(uintptr_t)pe,
-			       i, value, oflags);
-	addr += incr;
-}
-```
-
-最容易误解的是函数名 `amdgpu_vm_map_gart()`。把它的实现展开后可以看到，它没有发起一次硬件 GART 页表遍历，只是在 CPU 上用 backing 偏移查询 `pages_addr[]`。
-
-**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_vm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_vm.c) 第 934～957 行：
-
-```c
-uint64_t amdgpu_vm_map_gart(const dma_addr_t *pages_addr, uint64_t addr)
-{
-	uint64_t result;
-
-	/* page table offset */
-	result = pages_addr[addr >> PAGE_SHIFT];
-
-	/* in case cpu page size != gpu page size*/
-	result |= addr & (~PAGE_MASK);
-	result &= 0xFFFFFFFFFFFFF000ULL;
-
-	return result;
-}
-```
-
-源码英文注释的中文翻译：先根据页表/backing 偏移选择页面；如果 CPU 页大小与 GPU 页大小不同，再结合相应页内部分，最后形成 PTE 使用的页对齐地址。
-
-这里的 `map_gart` 是 AMDGPU 源码中的 helper 命名，表达“解析 system-memory/GART backing 的逐页地址”。它不表示运行时翻译链变成：
+这张图要按三层关系阅读：
 
 ```text
-错误：GPUVA → GPUVM页表 → 再走一遍GART页表 → 页面
+第一层：handle → kgd_mem M
+        找到“这次KFD内存分配是谁”
+
+第二层：kgd_mem M → amdgpu_bo B → backing
+        找到“16 KiB数据实际放在哪里”
+
+第三层：attachment E → amdgpu_bo_va X → mapping K → amdgpu_vm V
+        记录“BO B的哪段内容映射到GPUVM V的哪段GPUVA”
 ```
 
-实际仍然是驱动在建表阶段先查数组：
+因此，`kgd_mem`、`amdgpu_bo`、`amdgpu_bo_va` 和 `mapping` 不是四份 Ring 数据。真正的 16 KiB 数据只有 backing 一份；其他对象都在描述、连接或管理它。本文跟踪的当前 ROCr 单 GPU 路径在 2.0.4 已确认没有设置已弃用的 `AQL_QUEUE_MEM` 双重映射标志，因此这里可以按“一个 `kgd_mem`、一个主 BO、一条 attachment、一段 mapping”理解。旧双重映射和跨 GPU 辅助 BO 留到后续实现阶段。
 
-```text
-建表阶段：BO backing偏移2 → pages_addr[2] → D2 → 写入PTE2
-运行阶段：GPUVA → GPUVM页表中的PTE2 → D2
-```
+**源码依据：这些连接字段确实保存在对象中**
 
-以第 2 页为例：
-
-```text
-amdgpu_vm_map_gart()选择pages_addr[2]
-  → value = D2
-  → oflags = VALID/SYSTEM/READABLE等属性
-  → amdgpu_gmc_set_pte_pde()写入PTE2
-```
-
-最终得到的不是只有地址，而是：
-
-```text
-PTE2 = 地址D2 | 访问属性
-```
-
-页表也可能由 SDMA 后端更新。驱动先生成完整 PTE 值，再安排 SDMA 把它复制到页表。下面源码中的 `p->job->ibs` 属于驱动内部的页表更新 job/IB，不是用户提交的普通 DRM IB，也不是 AQL Ring。
-
-**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_vm_sdma.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_vm_sdma.c) 第 280～291 行：
-
-```c
-for (i = 0; i < nptes; ++i, addr += incr) {
-	u64 oflags = flags;
-
-	pte[i] = amdgpu_vm_map_gart(p->pages_addr, addr);
-	/* 省略代际相关属性覆盖。 */
-	pte[i] |= oflags;
-}
-
-amdgpu_vm_sdma_copy_ptes(p, bo, pe, nptes);
-```
-
-CPU 更新与 SDMA 更新只是“谁把值写进页表”不同，结果相同：PTE2 中保存 `D2` 和访问属性。SDMA 在这里执行的是驱动内部页表更新命令，不是用户 Kernel，也不改变 ALLOC/MAP 的对象关系。
-
-把 Host 与 GPU 两侧接起来就是：
-
-```text
-Host Driver映射阶段：
-页面P2 → DMA地址D2 → 写入PTE2
-
-GPU Kernel运行阶段：
-GPU ISA访问GPUVA
-  → TLB命中或Page Walker读取PTE2
-  → 得到D2
-  → 访问system RAM页面P2
-```
-
-> **[BOUNDARY]** 设备初始化阶段会预先建立 GPUVM 管理器、页表根和更新后端，但不会为每个未来 BO 预先写好 PTE。本文追踪的是每块内存在 `MAP_MEMORY_TO_GPU` 时发生的映射；完整设备初始化不在这里展开。
-
-无论是否阅读 2.3.3，接下来都需要把源码里的 handle、`kgd_mem`、BO、attachment 和 `bo_va` 收束成一张对象关系图；这是 2.4 的任务。
-
-### 2.4 最小内存对象关系
-
-2.3 的 MAP 时序已经出现这些名字。本节不再追函数调用，只回答“哪个对象管理存储、哪个对象表示映射”；即使跳过了 2.3.3，也可以直接阅读。
-
-| 类别         | 本例中的代表                                            | 它负责什么                                    |
-| ------------ | ------------------------------------------------------- | --------------------------------------------- |
-| 用户标识     | KFD handle                                              | 让用户态在后续 ioctl 中引用同一块内存         |
-| 内存管理对象 | `kgd_mem`、`amdgpu_bo`                              | 保存大小、来源、引用和底层存储等管理状态      |
-| 映射关系     | `kfd_mem_attachment`、`amdgpu_bo_va`、`amdgpu_vm` | 表示“这个 BO 映射进这套 GPUVM 的哪个 GPUVA” |
-
-**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd.h`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd.h) 第 62～94 行只保留本章所需字段：
+**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd.h`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd.h) 第 62～94 行。下面只保留图中使用的字段：
 
 ```c
 struct kfd_mem_attachment {
@@ -2746,180 +3425,783 @@ struct kfd_mem_attachment {
 };
 
 struct kgd_mem {
-	struct mutex lock;
+	/* 省略锁、导入和USERPTR专用字段。 */
 	struct amdgpu_bo *bo;
 	struct list_head attachments;
 	uint32_t domain;
 	unsigned int mapped_to_gpu_memory;
 	uint64_t va;
-	uint32_t alloc_flags;
-	/* 省略同步、导入和进程归属字段。 */
+	/* 省略其余生命周期与同步字段。 */
 };
 ```
 
-逐行只读出这些关系：
+这段定义确认了图中的第一组连接：`kgd_mem.bo` 指向主 BO，`kgd_mem.attachments` 是 attachment 链表，`kgd_mem.va` 保存计划 GPUVA。每条 attachment 再保存目标 GPU `adev`、本次 GPUVA `va`、PTE 属性和 `bo_va` 指针；`is_mapped` 用来记录这条关系当前是否已经落实为 GPU 映射。`mapped_to_gpu_memory` 是映射计数，不是 GPUVA，也不是 backing 页面数量。
 
-- `kgd_mem.bo` 指向 AMDGPU 实际管理的 BO。
-- `kgd_mem.va` 是计划映射的 GPUVA 起点。
-- `amdgpu_bo` 本身没有一个已经生效的唯一 GPUVA；虚拟地址属于“BO 映射进哪套 GPUVM”的关系。
-- `domain` 表示 GTT/VRAM 等内存域。
-- `attachments` 保存这块内存连接到各 GPUVM 的关系。
-- 每个 attachment 中的 `bo_va` 表示“某个 BO 与某个 GPUVM 的连接”，不是另一份数据。
-
-**[SOURCE]** 创建对象时，[`drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c) 第 1781～1840 行最终把 `kgd_mem` 指向 `amdgpu_bo`，同时把映射计数初始化为 0：
+**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_vm.h`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_vm.h) 第 200～203 行，以及 [`drivers/gpu/drm/amd/amdgpu/amdgpu_object.h`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_object.h) 第 64～87 行，给出 `bo_va` 两端和 mapping 字段：
 
 ```c
-*mem = kzalloc_obj(struct kgd_mem);
-/* 省略初始化和BO创建过程。 */
-bo = gem_to_amdgpu_bo(gobj);
-bo->kfd_bo = *mem;
-(*mem)->bo = bo;
-(*mem)->va = va;
-(*mem)->domain = domain;
-(*mem)->mapped_to_gpu_memory = 0;
+struct amdgpu_vm_bo_base {
+	struct amdgpu_vm *vm;
+	struct amdgpu_bo *bo;
+	/* 省略状态链表字段。 */
+};
+
+struct amdgpu_bo_va_mapping {
+	struct amdgpu_bo_va *bo_va;
+	/* 省略链表和区间树节点。 */
+	uint64_t start;
+	uint64_t last;
+	uint64_t offset;
+	uint32_t flags;
+};
+
+struct amdgpu_bo_va {
+	struct amdgpu_vm_bo_base base;
+	/* 省略引用计数。 */
+	struct dma_fence *last_pt_update;
+	struct list_head invalids;
+	struct list_head valids;
+	/* 省略其余Queue引用和状态字段。 */
+};
 ```
 
-`mapped_to_gpu_memory = 0` 是最直接的证据：BO 已经创建，不等于它已经映射进某个 GPUVM。这里出现的 GEM 只是 AMDGPU 内部复用的通用对象层；本文不展开其 handle 和生命周期框架。
+`amdgpu_bo_va.base` 同时保存 `bo` 和 `vm`，因此它表示“这个 BO 与这套 GPUVM 的关系”，而不是第二个 BO。mapping 再挂在 `valids/invalids` 状态链表中，用 `start/last/offset/flags` 描述一段具体映射；`last_pt_update` 保存最近一次页表更新的完成 Fence。源码里的 `valids` 与 `invalids` 是驱动管理 mapping 是否需要重新更新的状态集合，不表示存在两套 Ring 数据。
 
-**[SOURCE]** 真正连接到某套 GPUVM 时，Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c) 第 974～990 行创建或复用 `amdgpu_bo_va`：
+**源码一：用 handle 找回 `kgd_mem`**
+
+用途：从当前 PDD 的 KFD 内存 handle 表中取回 ALLOC 阶段登记的同一个管理对象。
+
+入参与返回含义：
+
+| 项目                             | 含义                                                                                |
+| -------------------------------- | ----------------------------------------------------------------------------------- |
+| `pdd`                          | 当前进程在当前 GPU 上的同一个 PDD，内部同时含`alloc_idr`和`drm_priv`            |
+| `GET_IDR_HANDLE(args->handle)` | 从用户 handle 中取出供 IDR 查表的低位整数 ID                                        |
+| 返回值                           | 找到时返回对象指针；未找到时返回`NULL`                                            |
+| `mem`                          | 接收返回值的局部`void *`；当前 AMDGPU 内存路径中的真实类型是 `struct kgd_mem *` |
+
+**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdkfd/kfd_chardev.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) 第 1322～1327 行：
 
 ```c
-bo_va = amdgpu_vm_bo_find(vm, bo[i]);
-if (!bo_va)
-	bo_va = amdgpu_vm_bo_add(adev, vm, bo[i]);
-else
-	++bo_va->ref_count;
-
-attachment[i]->bo_va = bo_va;
-attachment[i]->va = va;
-attachment[i]->pte_flags = get_pte_flags(adev, vm, mem);
-attachment[i]->adev = adev;
-list_add(&attachment[i]->list, &mem->attachments);
+mem = kfd_process_device_translate_handle(
+	pdd, GET_IDR_HANDLE(args->handle));
+if (!mem) {
+	err = -ENOMEM;
+	goto get_mem_obj_from_handle_failed;
+}
 ```
 
-把不同箭头标清楚后，最小模型是：
+这段源码整体只做“handle 查表”。`GET_IDR_HANDLE()` 先从用户传入的复合 handle 中取出供 IDR 使用的整数 ID，`kfd_process_device_translate_handle()` 再到当前 `pdd->alloc_idr` 中查找 ALLOC 阶段登记的对象。查找成功后，局部变量 `mem` 指向同一个 `struct kgd_mem`；它不是 Ring 数据、CPU VA、GPUVA，也不是新创建的 BO。
+
+如果查表失败，`mem` 为 `NULL`，函数设置负错误码并跳到清理路径，因此不会继续建立 attachment、mapping 或 PTE。换句话说，这一段的输出只是“找到了哪个 KFD 内存管理对象”，尚未触碰 GPU 页表。
+
+**源码二：把查到的内存对象和同一 PDD 的 GPUVM 交给 AMDGPU**
+
+用途：进入 KFD/AMDGPU 桥接层，为当前进程的 GPUVM 建立映射。
+
+入参与返回含义：
+
+| 入参或返回                | 含义                                       |
+| ------------------------- | ------------------------------------------ |
+| `peer_pdd->dev->adev`   | 当前示例中的 AMD GPU                       |
+| `(struct kgd_mem *)mem` | handle 找到的同一个 KFD 内存管理对象       |
+| `peer_pdd->drm_priv`    | 同一个 PDD 中可转换为`amdgpu_vm`的上下文 |
+| 返回值`err`             | `0` 表示映射提交成功；负错误码表示失败   |
+
+**[SOURCE]** 同一文件第 1344～1346 行：
+
+```c
+err = amdgpu_amdkfd_gpuvm_map_memory_to_gpu(
+	peer_pdd->dev->adev, (struct kgd_mem *)mem,
+	peer_pdd->drm_priv);
+```
+
+源码把这里的局部变量命名为 `peer_pdd`；在本文当前单 GPU 示例中，它和前面用于 handle 查表的 `pdd` 指向同一个 PDD，不表示又出现了第二个 PDD。
+
+这次调用把 MAP 所需的三组信息一起交给 AMDGPU GPUVM 层：当前 GPU、刚刚由 handle 找到的 `kgd_mem`，以及从同一个 PDD 取得的 GPUVM 上下文。GPUVM 层随后可以从 `kgd_mem` 找到主 BO 和计划 GPUVA，从 `drm_priv` 找到当前 `amdgpu_vm`，再建立上图中的 attachment、`amdgpu_bo_va` 和 mapping。
+
+函数返回 `0`，表示这次映射流程已经成功提交；返回负错误码，表示中间某一步失败，上层将进入清理路径。这里绝不是把 `kgd_mem` 指针写进 GPU PTE：PTE 中最终保存的是 backing 的设备地址和属性位，软件对象指针只供 Host Driver 组织流程。
+
+#### 2.3.3 软件 mapping 怎样落实为真正的 PTE
+
+**先复习：BO 是什么**
+
+BO 是 **Buffer Object**。它是 AMDGPU 驱动用来管理一块缓冲区的内核对象，不是另一份 Ring 数据，也不是 GPU 地址。本例中的 `amdgpu_bo B` 管理那段 16 KiB Ring；真正的 16 KiB 数据仍在 B 的 backing 中：GTT 情况是 system RAM 页面，VRAM 情况是显存资源。
 
 ```text
-用户态命名空间
-┌─────────────────────┐
-│ KFD handle          │  只是查表编号，不是CPU VA或GPUVA
-└──────────┬──────────┘
-           │ 查表
-           ▼
-KFD内存管理状态
-┌──────────────────────────────────────────────────────────────────────┐
-│ kgd_mem                                                             │
-│  ├─ va / domain / alloc_flags                                       │
-│  ├─ bo ────────────────────────────────┐                             │
-│  └─ attachments                       │                             │
-└───────────────┬────────────────────────┼─────────────────────────────┘
-                │                        │
-                │ 每个目标GPU一条关系    │ 同一份受管内存/backing
-                ▼                        ▼
-GPUVM映射关系                         实际内存对象
-┌──────────────────────────┐          ┌───────────────────────────────┐
-│ kfd_mem_attachment       │          │ amdgpu_bo                     │
-│  ├─ adev（目标GPU）      │          │                               │
-│  ├─ va / pte_flags       │          │ GTT/USERPTR                   │
-│  └─ bo_va                │          │  └─ ttm_tt                    │
-└────────────┬─────────────┘          │      ├─ pages[]               │
-             │                        │      └─ dma_address[]          │
-             ▼                        │                               │
-┌──────────────────────────┐          │ VRAM                          │
-│ amdgpu_bo_va             │          │  └─ ttm_resource→显存区间    │
-│ “这个BO ↔ 这套GPUVM”    │          └───────────────────────────────┘
-└────────────┬─────────────┘
-             │ 写入mapping对应的页表项
+amdgpu_bo B                         BO管理对象
+│
+└─ tbo ──→ struct ttm_buffer_object
+             │
+             ├─ resource           当前放置位置，例如GTT或VRAM
+             └─ ttm
+                 ├─ pages[]        GTT backing的system RAM页面
+                 └─ dma_address[]  这些页面供GPU使用的D0～D3
+
+真正的Ring数据位于backing中；
+B负责记录、管理和同步这份backing。
+```
+
+**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_object.h`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_object.h) 第 103～127 行。这里只保留本节需要的字段：
+
+```c
+struct amdgpu_bo {
+	/* 省略BO放置策略字段。 */
+	struct ttm_buffer_object tbo;
+	/* 省略CPU映射和BO属性字段。 */
+	struct amdgpu_vm_bo_base *vm_bo;
+	/* 省略父对象等字段。 */
+	struct kgd_mem *kfd_bo;
+	/* 省略其余字段。 */
+};
+```
+
+逐个理解：
+
+| 字段       | 本节含义                                                                   |
+| ---------- | -------------------------------------------------------------------------- |
+| `tbo`    | TTM 缓冲对象；从这里继续找到 BO 的大小、放置位置和 system RAM/VRAM backing |
+| `vm_bo`  | 这块 BO 参加过哪些 GPUVM 的关系链；`amdgpu_bo_va` 通过这里与 BO 关联     |
+| `kfd_bo` | 回指相应的 KFD 内存管理对象`kgd_mem`                                     |
+
+因此，当前对象链的前半段是：
+
+```text
+kgd_mem M
+│
+├─ va = G0              计划GPUVA
+└─ bo ──→ amdgpu_bo B   16 KiB Ring的BO管理对象
+              │
+              └─ tbo ──→ Ring backing
+```
+
+BO B 只回答“要映射的是哪一块缓冲区”。它本身不回答“映射进哪套 GPUVM”或“放在什么 GPUVA”。为此，AMDGPU 另外使用 `amdgpu_vm_bo_base`、`amdgpu_bo_va` 和 `amdgpu_bo_va_mapping`：
+
+**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_vm.h`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_vm.h) 第 200～203 行，以及 [`drivers/gpu/drm/amd/amdgpu/amdgpu_object.h`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_object.h) 第 64～87 行。下面三个片段分别摘自这些位置，并按概念顺序排列；它们不是源码中的一段连续定义。这里只保留本节需要的字段：
+
+```c
+struct amdgpu_vm_bo_base {
+	struct amdgpu_vm *vm;
+	struct amdgpu_bo *bo;
+	/* 省略状态管理字段。 */
+};
+
+struct amdgpu_bo_va {
+	struct amdgpu_vm_bo_base base;
+	/* 省略引用计数。 */
+	struct dma_fence *last_pt_update;
+	struct list_head invalids;
+	struct list_head valids;
+	/* 省略其余字段。 */
+};
+
+struct amdgpu_bo_va_mapping {
+	struct amdgpu_bo_va *bo_va;
+	/* 省略链表和区间树节点。 */
+	uint64_t start;
+	uint64_t last;
+	uint64_t offset;
+	uint32_t flags;
+};
+```
+
+三个对象逐层增加信息：
+
+```text
+amdgpu_bo B
+    只表示“哪块缓冲区”
+
+amdgpu_bo_va X
+    base.bo = B
+    base.vm = V
+    增加“这块BO与哪套GPUVM发生关系”
+
+amdgpu_bo_va_mapping K
+    bo_va = X
+    start/last、offset、flags
+    再增加“具体映射到哪段GPUVA、从BO哪个偏移开始”
+```
+
+KFD 的 attachment 把这些 AMDGPU 对象串回当前 `kgd_mem`。它的最小定义也在这里重复一次：
+
+**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd.h`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd.h) 第 62～69 行：
+
+```c
+struct kfd_mem_attachment {
+	struct list_head list;
+	enum kfd_mem_attachment_type type;
+	bool is_mapped;
+	struct amdgpu_bo_va *bo_va;
+	struct amdgpu_device *adev;
+	uint64_t va;
+	uint64_t pte_flags;
+};
+```
+
+有了这次复习，现在把 `entry` 展开，区分两个名字很像、含义却完全不同的字段：
+
+```text
+struct kfd_mem_attachment E（entry）
+│
+├─ bo_va ──→ struct amdgpu_bo_va X
+│               │
+│               ├─ base.bo ──→ amdgpu_bo B
+│               │               要映射的16 KiB Ring BO
+│               │
+│               └─ base.vm ──→ amdgpu_vm V
+│                               要写入的当前进程GPUVM
+│
+├─ va = G0
+│      真正的GPUVA数值，表示映射从哪里开始
+│
+├─ pte_flags
+│      本次映射的访问和缓存属性
+│
+└─ adev
+       当前GPU
+```
+
+在调用 `amdgpu_vm_bo_map()` 前，BO B、GPUVM V 和计划地址 `G0` 都已经存在，但还缺少最后一条范围关系：
+
+```text
+已经知道：
+bo_va X = “BO B与GPUVM V的关系对象”
+entry->va = G0
+
+仍然不知道：
+GPUVM V中的哪段GPUVA，应该对应BO B中的哪段字节
+```
+
+`amdgpu_vm_bo_map()` 的目的，就是创建这条范围关系。当前 16 KiB Ring 的目标是：
+
+```text
+在GPUVM V中：
+
+GPUVA [G0, G0 + 16 KiB)
+             │
+             │ software mapping
              ▼
-┌──────────────────────────┐
-│ amdgpu_vm（目标GPUVM）   │
-│  GPUVA范围 → GPU PTE     │
-└──────────────────────────┘
-
-同一kgd_mem/backing连接到GPU0和GPU1时：
-kgd_mem.attachments
-  ├─ attachment[GPU0] → bo_va[GPU0] → amdgpu_vm[GPU0]
-  └─ attachment[GPU1] → bo_va[GPU1] → amdgpu_vm[GPU1]
-
-这两条attachment是两条地址关系，不是两份BO数据。
+BO B   [0,       0 + 16 KiB)
 ```
 
-需要记住的不是五个名字，而是四句话：
-
-1. handle 只是用户态查表编号，不是地址。
-2. `kgd_mem` 与 `amdgpu_bo` 管理同一份内存，不是两份 16 KiB 数据。
-3. `kgd_mem.va` 是 KFD 预先记录的计划 GPUVA，不表示 GPU PTE 已经存在；`amdgpu_bo` 本身也没有一个已经生效的唯一虚拟地址。
-4. `amdgpu_bo_va` 表示某个目标设备上的 BO 与一套 GPUVM 的映射关系；同一份受管内存可以通过各自 attachment 映射到不止一个 GPU。
-
-至此，对象关系已经明确，但 CPU 和 GPU 分别通过哪条地址通路访问同一份 backing 还没有并排比较；下一节只处理这个问题。
-
-### 2.5 CPU 映射和 GPU 映射分别怎样建立
-
-2.4 说明了“同一 BO 可以连接到某套 GPUVM”；本节把地址路径单独拿出来，并把前文的 GTT Ring 扩展到 USERPTR 和 VRAM。一份存储可以同时有 CPU 映射和 GPU 映射，但两条路径各自独立：
+因此，MAP 在这里分成两个动作：
 
 ```text
-CPU侧：
-CPU VA → CPU页表/BAR窗口 → 数据
+动作一：创建软件mapping
+        记录“在GPUVM V中，GPUVA G0开始的16 KiB
+              对应BO B从offset 0开始的16 KiB”
 
-GPU侧：
-GPUVA → GPU页表 → 数据
+动作二：提交PTE更新
+        根据BO偏移找到backing设备地址
+        把“设备地址 | PTE属性”写进对应GPU页的叶子PTE
 ```
 
-KFD 的 ALLOC 参数同时提供 `va_addr` 和 `mmap_offset`，正是因为两种映射不是一回事：
+**源码一：创建 mapping，再请求 PTE 更新**
 
-| 内存来源 | CPU 映射                                                  | GPU 映射                             |
-| -------- | --------------------------------------------------------- | ------------------------------------ |
-| GTT      | 用户态以`mmap_offset` 建立 CPU VA，落到 system RAM 页面 | GPUVA→GPU PTE→DMA 地址→system RAM |
-| USERPTR  | CPU VA 和内存映射原本就存在                               | HMM 解析对应页面后建立 GPU PTE       |
-| VRAM     | 仅当资源 CPU 可见时，经 BAR 建立 CPU VA；否则可能不能直映 | GPUVA→GPU PTE→本地 VRAM 地址       |
+`map_bo_to_gpuvm()` 的用途：先登记 GPUVA 与 BO 范围的关系，再把该关系提交给页表更新函数。
 
-**[SOURCE]** HSAKMT [`libhsakmt/src/fmm.c`](./2.源码/rocr-runtime/libhsakmt/src/fmm.c) 第 1569～1583、2078～2086 行展示 GTT 路径怎样使用 KFD 返回的 `mmap_offset` 建立 CPU 映射：
+先逐项代入 `amdgpu_vm_bo_map()` 的六个实参：
+
+| 位置 | 实参                                      | 当前示例的含义                                 |
+| ---- | ----------------------------------------- | ---------------------------------------------- |
+| 1    | `entry->adev`                           | 在当前 GPU 上操作                              |
+| 2    | `entry->bo_va`                          | 指定 BO B 和 GPUVM V；它是对象指针，不是地址值 |
+| 3    | `entry->va`                             | 目标 GPUVA 起点`G0`                          |
+| 4    | `0`                                     | BO B 内的起始字节偏移                          |
+| 5    | `amdgpu_bo_size(entry->bo_va->base.bo)` | 映射整个 16 KiB BO                             |
+| 6    | `entry->pte_flags`                      | 软件 mapping 以及后续 PTE 使用的属性           |
+
+**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c) 第 1324～1337 行：
 
 ```c
-static void *fmm_map_to_cpu(void *mem, uint64_t size, bool host_access,
-			    int fd, uint64_t mmap_offset)
-{
-	int flag = MAP_SHARED | MAP_FIXED;
-	int prot = host_access ? PROT_READ | PROT_WRITE : PROT_NONE;
-	void *ret = mmap(mem, size, prot, flag, fd, mmap_offset);
-	/* 省略MADV_DONTFORK处理。 */
+ret = amdgpu_vm_bo_map(entry->adev, entry->bo_va, entry->va, 0,
+		       amdgpu_bo_size(entry->bo_va->base.bo),
+		       entry->pte_flags);
+if (ret) {
+	/* 省略错误日志。 */
 	return ret;
 }
 
-/* GTT分配成功并要求HostAccess时： */
-void *ret = fmm_map_to_cpu(mem, MemorySizeInBytes,
-			   mflags.ui32.HostAccess,
-			   gpu_drm_fd, mmap_offset);
+if (no_update_pte)
+	return 0;
+
+ret = update_gpuvm_pte(mem, entry, sync);
 ```
 
-这段代码中的 `fd` 是目标 AMDGPU render node 的文件描述符；render node 是 DRM 提供给普通用户态计算/渲染客户端的设备节点，例如 `/dev/dri/renderD*`，这里把它理解成“用于 mmap AMDGPU BO 的 DRM fd”即可。`mmap_offset` 来自 KFD ALLOC。`mmap()` 只建立 CPU VA→BO 的映射；它没有把 BO 写入 GPUVM，后者仍要通过独立的 `MAP_MEMORY_TO_GPU` 完成。`MADV_DONTFORK` 用来避免子进程继承额外 BO 引用，不影响本章的地址关系。
-
-把 16 KiB system RAM Ring 放进来。它在具体 Runtime 配置中可以通过 GTT 或 USERPTR 路径建立，但 CPU/GPU 两侧最终仍访问同一组系统页面：
+把变量换成当前例子的对象后，这次调用可以直接读成：
 
 ```text
-CPU写Ring第0页：
-CPU VA C0
-  → CPU页表
-  → Host PA H0
-  → system RAM页面P0
-
-GPU读Ring第0页：
-GPUVA G0
-  → GPU页表
-  → DMA地址D0
-  → 可选Host IOMMU
-  → 同一个system RAM页面P0
+amdgpu_vm_bo_map(
+    当前GPU，
+    “BO B + GPUVM V”关系对象X，
+    GPUVA起点G0，
+    BO偏移0，
+    长度16 KiB，
+    PTE属性)
 ```
 
-CPU VA 与 GPUVA 可以数值不同。即使某些统一地址配置让两者数值相同，它们仍由不同 MMU、不同页表关系解释，不能因为数字相同就认为只建立了一张页表。
+函数据此创建一个 `struct amdgpu_bo_va_mapping K`。它通过 `bo_va` 归属于 BO B 和 GPUVM V，同时记录 GPUVA 范围、BO offset 和属性：
 
-到这里，本章已经回答了“存储在哪里、对象怎样管理、CPU/GPU 怎样到达它”。下一节不再建立新地址关系，而是讨论这些对象、映射和使用者必须按什么顺序退出。
+```text
+software mapping K
+│
+├─ bo_va ──→ X
+│             ├─ base.bo ──→ BO B
+│             └─ base.vm ──→ GPUVM V
+│
+├─ start/last ──→ GPUVA [G0, G0 + 16 KiB)
+├─ offset = 0  ──→ BO B从第0字节开始
+└─ flags       ──→ entry->pte_flags
+```
+
+所以 `amdgpu_vm_bo_map()` 完成后，Host Driver 已经知道“GPUVM V 的 `G0～G0+16 KiB` 对应 BO B 的 `0～16 KiB`”。但它只创建了软件 mapping，没有创建 BO、没有复制 Ring 数据，也还没有把 `D0～D3` 写进 GPU 页表。
+
+如果软件地址范围与已有 mapping 冲突、参数不合法或管理内存分配失败，`amdgpu_vm_bo_map()` 返回负错误码，当前函数立即停止。`no_update_pte` 只用于“先登记关系、以后再写页表”的特殊路径；当前正常 AQL Ring MAP 中它为假，所以代码继续调用 `update_gpuvm_pte()`。
+
+`update_gpuvm_pte()` 随后才沿着 `bo_va->base.bo` 找到 BO backing 的 `D0～D3`，并按照 mapping 中的 GPUVA 范围生成真实 PTE。完整效果是：
+
+```text
+software mapping提供                    BO backing提供
+
+GPUVM V、G0、offset 0、16 KiB           D0、D1、D2、D3
+                │                              │
+                └───────────┬──────────────────┘
+                            ▼
+                     写入GPUVM V的页表
+
+PTE(G0 + 0x0000) = D0 | flags
+PTE(G0 + 0x1000) = D1 | flags
+PTE(G0 + 0x2000) = D2 | flags
+PTE(G0 + 0x3000) = D3 | flags
+```
+
+也就是说，这段代码的两个可观察结果是：先得到“GPUVA范围 ↔ BO字节范围”的软件 mapping，再请求把它落实为“GPUVA页 → backing设备地址”的真实 PTE。后续若 PTE 更新失败，完整函数还会撤销刚建立的 mapping 和相关 DMA attachment；这里省略的只是错误回滚，不改变成功主线。
+
+软件 mapping 的结果仍然只是 Host Driver 状态。为了把字段算清楚，下面假设 GPU 基本页大小为 4 KiB，`G0 = 0x1000_0000`，16 KiB Ring 从 BO 偏移 0 开始映射：
+
+```text
+entry->va = G0 = 0x1000_0000          GPUVA字节地址
+
+mapping->start  = G0 / 4KiB
+                = 0x1_0000            GPUVA起始页号
+
+mapping->last   = 0x1_0003            一共覆盖4个GPU页
+
+mapping->offset = 0                    从BO第0字节开始
+
+mapping->flags  = PTE访问属性          例如有效、可读写和缓存属性
+```
+
+这些量和 TTM/backing 的关系不是并列的两套映射，而是一前一后：
+
+```text
+mapping回答：映射到哪段GPUVA？从BO哪个偏移开始？
+TTM/backing回答：这个BO偏移背后是哪一个RAM页面或VRAM地址？
+GPUVM建表代码：把上面两个答案接成PTE。
+```
+
+对于当前 GTT Ring，逐页连接过程如下。`P7、P2、P9、P4` 只是用来强调 system RAM 页面可以不连续：
+
+```text
+当前进程的GPUVA             software mapping             BO backing设备地址        最终RAM页面
+
+G0 + 0x0000                 BO offset 0x0000              dma_address[0] = D0       P7
+0x1000_0000 ──────────────→ 第0个BO页 ──────────────────→ D0 ─────────────────────→ P7
+
+G0 + 0x1000                 BO offset 0x1000              dma_address[1] = D1       P2
+0x1000_1000 ──────────────→ 第1个BO页 ──────────────────→ D1 ─────────────────────→ P2
+
+G0 + 0x2000                 BO offset 0x2000              dma_address[2] = D2       P9
+0x1000_2000 ──────────────→ 第2个BO页 ──────────────────→ D2 ─────────────────────→ P9
+
+G0 + 0x3000                 BO offset 0x3000              dma_address[3] = D3       P4
+0x1000_3000 ──────────────→ 第3个BO页 ──────────────────→ D3 ─────────────────────→ P4
+```
+
+用展平后的记号表示，局部页下标 `i = 0～3` 时：
+
+```text
+GPU页号 = mapping->start + i
+BO页号  = mapping->offset / 4KiB + i
+
+对应GPU页的叶子PTE
+  = dma_address[BO页号] | mapping->flags
+```
+
+“对应 GPU 页的叶子 PTE”不是说 GPU 页表在实现上必然是一张平坦数组。真实 GPU 页表通常是多级的，GPUVA 中的各级索引先选择 PDE，最后才到叶子 PTE：
+
+```text
+GPUVA = 0x1000_2000
+│
+├─ 高位索引 ──→ 根页目录中的PDE
+│                │
+│                └─→ 下一级页目录/页表
+│                           │
+├─ 叶子索引 ─────────────────┴─→ 本页对应的PTE
+│                                  ├─ 目标地址 = D2
+│                                  └─ 属性位   = mapping->flags
+│
+└─ 低12位页内偏移 = 0
+
+GPU运行时取出PTE中的D2后，形成设备访问地址D2 + 页内偏移；
+若Host IOMMU启用，D2是IOVA并继续翻译到Host PA；否则D2是直连DMA/总线地址。
+```
+
+若 BO 位于 VRAM，mapping 一侧完全不变，只是叶子 PTE 的目标换成对应 BO 偏移的 VRAM 本地地址，不再从 `dma_address[]` 取 system RAM 的 DMA 地址。
+
+**源码二：确保设备地址可用并提交页表更新**
+
+`update_gpuvm_pte()` 的用途：确保当前 GPU 能访问 BO backing，提交该 `bo_va` 的页表更新，并记录完成 Fence。
+
+入参与返回含义：
+
+| 项目           | 含义                                                 |
+| -------------- | ---------------------------------------------------- |
+| `mem`        | 当前`kgd_mem`                                      |
+| `entry`      | 当前目标 GPUVM 的 attachment                         |
+| `sync`       | 页表更新 Fence 的收集集合                            |
+| `GFP_KERNEL` | 为同步记录分配内部管理内存时使用的普通内核分配上下文 |
+| 返回值         | 三步都成功时返回`0`；任一步失败时返回负错误码      |
+
+**[SOURCE]** 同一文件第 1295～1314 行：
+
+```c
+struct amdgpu_bo_va *bo_va = entry->bo_va;
+struct amdgpu_device *adev = entry->adev;
+int ret;
+
+ret = kfd_mem_dmamap_attachment(mem, entry);
+if (ret)
+	return ret;
+
+ret = amdgpu_vm_bo_update(adev, bo_va, false);
+if (ret)
+	return ret;
+
+return amdgpu_sync_fence(
+	sync, bo_va->last_pt_update, GFP_KERNEL);
+```
+
+这段代码按三个阶段工作。首先，它从 attachment 取得 `bo_va` 和目标 GPU，并调用 `kfd_mem_dmamap_attachment()`，确保当前 GPU 已经拥有访问该 BO backing 所需的设备地址。对 GTT/USERPTR 来说，后续 PTE 需要的是逐页 DMA 地址；对本地 VRAM 来说，则使用显存资源地址。设备地址准备失败时，函数立即返回，不会提交页表更新。
+
+其次，`amdgpu_vm_bo_update(adev, bo_va, false)` 读取 `bo_va` 中待生效的 mapping，把 GPUVA 页、BO 偏移、backing 设备地址和 PTE 属性组合起来，并把 PDE/PTE 写入任务提交给配置好的页表更新后端。第三个参数 `false` 表示本次是在建立有效映射，不是在清空这些 PTE。
+
+最后，页表写入是一个可能异步完成的操作。`bo_va->last_pt_update` 保存这次更新对应的 Fence；`amdgpu_sync_fence()` 只是把它登记进 `sync` 等待集合，并不在这一行立刻阻塞。`GFP_KERNEL` 只用于同步管理结构所需的内核内存分配，与 GPU PTE 的权限或缓存属性无关。三阶段全部成功时返回 `0`，任一阶段失败时返回负错误码。
+
+这里必须把“谁在写什么”画清楚。GPU 页表本身也存放在驱动创建的页表 BO 中；Host Driver 先算出 PTE 内容，再根据当前配置（页表存储在 system ram / vram）选择 CPU 或 SDMA 后端，把这些值真正写进页表 BO：
+
+```text
+                    amdgpu_vm_bo_update()
+                             │
+                             │ 遍历software mapping
+                             │ 计算每个PTE的目标地址和属性
+                             ▼
+                 已算好的PTE0、PTE1、PTE2、PTE3
+                             │
+               ┌─────────────┴─────────────┐
+               │                           │
+               ▼                           ▼
+        CPU更新后端                    SDMA更新后端
+        ──────────                    ──────────
+        CPU获得页表BO                 Host Driver生成一份
+        的可写映射                    内部页表更新命令
+               │                           │
+        CPU写入PTE值                  提交到内部SDMA Ring
+               │                           │
+               │                      GPU上的SDMA引擎执行命令
+               │                           │
+               └─────────────┬─────────────┘
+                             ▼
+                    当前进程的页表BO被更新
+                    ├─ 叶子PTE(G0+0页) = D0 | flags
+                    ├─ 叶子PTE(G0+1页) = D1 | flags
+                    ├─ 叶子PTE(G0+2页) = D2 | flags
+                    └─ 叶子PTE(G0+3页) = D3 | flags
+                             │
+                             ▼
+                   产生last_pt_update Fence
+```
+
+两条后端路径的区别只在“由谁把已经算好的值写入页表 BO”：CPU 后端由 CPU 直接写；SDMA 后端由 Host Driver 生成内部命令，再让 GPU 的 **System DMA** 引擎完成写入。SDMA 写的是页表 BO，不是 AQL Ring 里的 Packet，也不是把 Kernel 结果刷回 system RAM。
+
+还要把这个内部 SDMA 任务和 AQL Dispatch 分开：
+
+```text
+[Queue建立阶段：本节发生一次]
+
+MAP_MEMORY_TO_GPU
+  → Host Driver创建software mapping
+  → CPU或SDMA后端写页表BO
+  → 等待last_pt_update Fence
+  → invalidate旧TLB翻译
+  → CREATE_QUEUE
+
+
+[Queue运行阶段：每个Packet反复发生]
+
+CPU写已有AQL Ring槽位
+  → release发布Packet
+  → 写Doorbell
+  → CP/MEC读取已有Ring
+  → GPU MMU使用上面已经写好的页表
+
+这里不会因为每来一个Packet就再次提交SDMA页表更新任务。
+```
+
+所以“AQL 是否走 SDMA 页表更新路径”的准确答案是：AQL Ring 在 **建立 GPU 映射时**，底层 GPUVM 可能选择 SDMA 后端写页表；映射完成后，每次 AQL Dispatch 只是复用已有 PTE，并不重复这条 MAP/SDMA 流程。
+
+> **[BOUNDARY]** 页表 BO 的 VRAM/GTT 放置、`vm_update_mode` 的后端选择条件、CPU/Large BAR 限制，以及 SDMA 内部 IB/job 的具体包格式，已登记到后续“GPUVM 页表更新后端实现”。当前阶段保留上图的职责和时序，不展开实现分支。
+
+#### 2.3.4 等待页表完成并 invalidate 旧 TLB 翻译
+
+“PTE 更新已经提交”不等于“GPUVA 已经安全可用”：
+
+```text
+阶段A：提交页表更新
+        │
+        ├─ CPU或SDMA后端尚可能在写页表BO
+        └─ 得到last_pt_update Fence
+        │
+        ▼
+阶段B：等待Fence完成
+        │
+        └─ 确认新的PDE/PTE已经写完
+        │
+        ▼
+阶段C：invalidate目标GPUVM的旧TLB翻译
+        │
+        └─ 让下一次访问重新遍历新页表
+        │
+        ▼
+阶段D：MAP成功返回
+        │
+        └─ 此后GPU才能安全使用G0访问Ring
+```
+
+如果不等待，GPU 可能在页表尚未写完时访问；如果不处理旧 TLB，GPU 可能继续使用先前缓存的翻译。
+
+TLB 和页表是两份不同状态。假设 `G0` 以前没有映射，或者曾经指向旧页面 `D_old`，只改 PTE 而不处理 TLB 时可能出现：
+
+```text
+                         页表中的状态                 GPU TLB中的缓存
+
+更新前                   G0 → D_old                   G0 → D_old
+
+页表写完、TLB未失效       G0 → D0                      G0 → D_old
+                         已经是新关系                  仍可能命中旧关系
+
+invalidate之后           G0 → D0                      G0对应旧项无效
+                                                       │
+GPU下一次访问G0                                          │ 发生页表遍历
+       └─────────────────────────────────────────────────┘
+                         最终重新得到G0 → D0
+```
+
+这里的 invalidate 是“让旧地址翻译缓存无效”。它不清空 Ring 数据，也不表示把 GPU 数据 Cache 写回 DDR。Linux 函数名仍叫 `kfd_flush_tlb()`，但本节在概念图中统一写成“invalidate 旧 TLB 翻译”，避免与数据 Cache 的 write-back flush 混淆。
+
+**源码：外层等待后再处理 TLB**
+
+用途：等待本次内存对象关联的页表更新全部完成，然后让目标 GPUVM 的旧翻译失效。
+
+入参与返回含义：
+
+| 项目                                         | 含义                                               |
+| -------------------------------------------- | -------------------------------------------------- |
+| `dev->adev`                                | 内存所属 AMD GPU                                   |
+| `(struct kgd_mem *)mem`                    | 当前内存对象，其中保存待等待的同步状态             |
+| `true`                                     | 允许等待被用户信号中断                             |
+| `amdgpu_amdkfd_gpuvm_sync_memory()` 返回值 | `0` 表示等待成功；负错误码表示等待失败或被中断   |
+| `peer_pdd`                                 | 当前进程在目标 GPU 上的 PDD，用来定位`amdgpu_vm` |
+| `kfd_flush_tlb()` 返回值                   | `void`；该包装函数不向调用者返回状态             |
+
+**[SOURCE]** Linux [`drivers/gpu/drm/amd/amdkfd/kfd_chardev.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) 第 1362～1375 行：
+
+```c
+err = amdgpu_amdkfd_gpuvm_sync_memory(
+	dev->adev, (struct kgd_mem *)mem, true);
+if (err)
+	goto sync_memory_failed;
+
+/* Flush TLBs after waiting for the page table updates to complete */
+for (i = 0; i < args->n_devices; i++) {
+	peer_pdd = kfd_process_device_data_by_id(
+		p, devices_arr[i]);
+	if (WARN_ON_ONCE(!peer_pdd))
+		continue;
+	kfd_flush_tlb(peer_pdd);
+}
+```
+
+源码英文注释的中文翻译：等待页表更新完成之后，再处理 TLB。
+
+这段代码首先调用 `amdgpu_amdkfd_gpuvm_sync_memory()`，等待当前 `kgd_mem` 关联的页表更新 Fence。`dev->adev` 和 `mem` 确定等待哪块设备、哪次内存映射，第三个参数 `true` 表示等待可以被用户信号中断。如果等待失败或被中断，代码跳到错误清理路径，不能向 HSAKMT 报告 MAP 成功。
+
+只有 Fence 等待成功后，代码才遍历本次请求的目标 GPU。通用实现支持一次映射到多块 GPU，因此源码使用循环；当前单 GPU 案例中循环只执行一次。`kfd_process_device_data_by_id()` 取回当前进程在目标 GPU 上的 PDD，`kfd_flush_tlb(peer_pdd)` 再据此定位对应 GPUVM，并请求该地址空间的旧 TLB 翻译失效。PDD 缺失属于不应出现的内部状态，`WARN_ON_ONCE()` 记录警告并防止继续解引用空指针。
+
+这段源码体现的关键顺序不是“调用了两个函数”，而是：**必须先等页表 BO 写完，才能 invalidate TLB**。顺序反过来会留下竞态——GPU 可能在新 PTE 尚未到位时重新遍历页表，又缓存一个错误或旧的结果。
+
+正常 MAP 返回后，后续 AQL 路径只有：
+
+```text
+CPU填写已有Ring Packet
+  → release发布header
+  → Doorbell
+  → CP/MEC发出Ring GPUVA
+  → GPU MMU使用已经完成的PTE
+  → 读取Packet
+```
+
+因此，当前 2.3 最终只需记住：
+
+```text
+handle找到BO和目标GPUVM
+  → 创建GPUVA到BO偏移的软件mapping
+  → 把backing设备地址写入PTE
+  → 等待页表更新Fence
+  → invalidate旧TLB翻译
+  → GPUVA真正可用
+```
+
+### 2.4 AQL MAP 使用的最小对象关系
+
+这里有意重复一次主图，但把“查找对象”“建立映射”和“GPU 运行时访问”放到同一条线上。以后阅读源码时，先判断自己正处在哪一层：
+
+```text
+┌────────────────────────────── 第一层：KFD查找内存对象 ──────────────────────────────┐
+│                                                                                   │
+│  用户handle                                                                       │
+│      │                                                                            │
+│      ▼                                                                            │
+│  PDD->alloc_idr ──查表──→ kgd_mem M                                               │
+│                             ├─ va = G0                                             │
+│                             └─ bo ──→ amdgpu_bo B ──→ 16 KiB Ring backing          │
+└───────────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      │ MAP把两端连接起来
+                                      ▼
+┌────────────────────────────── 第二层：Host Driver建立GPUVM映射 ────────────────────┐
+│                                                                                   │
+│  kgd_mem M                                                                        │
+│      │                                                                            │
+│      └─ attachment E                                                              │
+│             ├─ 当前GPU                                                            │
+│             ├─ va = G0                                                            │
+│             └─ bo_va X                                                            │
+│                    ├─ base.bo ──→ 同一个amdgpu_bo B                               │
+│                    ├─ base.vm ──→ 当前进程amdgpu_vm V                             │
+│                    └─ mapping K                                                   │
+│                         ├─ GPU页范围 = G0对应的4页                                 │
+│                         ├─ BO offset = 0                                           │
+│                         └─ PTE flags                                               │
+│                                      │                                            │
+│                                      ▼                                            │
+│  CPU或SDMA页表更新后端 ──→ 把D0～D3和属性写入GPUVM V的叶子PTE                     │
+│                                      │                                            │
+│                         等待Fence → invalidate旧TLB                               │
+└───────────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      │ MAP完成，后续Dispatch复用
+                                      ▼
+┌────────────────────────────── 第三层：GPU运行时真的取Packet ───────────────────────┐
+│                                                                                   │
+│  CP/MEC发出Ring GPUVA G0 + packet_offset                                          │
+│      │                                                                            │
+│      ▼                                                                            │
+│  当前Queue携带的地址空间身份（PASID/活动VMID）                                    │
+│      │ 选择当前进程GPUVM的页表根                                                   │
+│      ▼                                                                            │
+│  GPU MMU / GPU TLB                                                                │
+│      │ 未命中时遍历PDE/PTE                                                        │
+│      ▼                                                                            │
+│  PTE给出D0～D3中的一个DMA地址                                                     │
+│      │                                                                            │
+│      ├─ Host IOMMU开启：IOVA → Host PA                                            │
+│      └─ Host IOMMU关闭：直连DMA/总线地址                                          │
+│      ▼                                                                            │
+│  System RAM中的AQL Ring页面                                                       │
+└───────────────────────────────────────────────────────────────────────────────────┘
+```
+
+再把软件对象和真实数据分开看一次：
+
+```text
+软件管理对象（主要在system RAM中）
+PDD、kgd_mem、amdgpu_bo、attachment、bo_va、mapping、amdgpu_vm
+                 │
+                 │ 描述、连接和管理
+                 ▼
+真实Ring数据（本例在4个system RAM页面中）
+P7、P2、P9、P4
+```
+
+本文当前 ROCr 单 GPU 路径只要求先掌握一个直接主 BO、一条 attachment 和一段 mapping。图中重复这些对象，是为了让后面的 ALLOC、MAP、Queue 持有引用和最终释放都能回到同一张结构图；它们不是每次 AQL Packet 都重新创建。
+
+下一节只把 CPU 与 GPU 两条最终访问通路并排收束，不再引入新对象。
+
+### 2.5 CPU 与 GPU 访问通路：最终检查点
+
+前文已经分别建立 CPU mmap 和进程 GPUVM mapping。本节不再重复源码，只把同一份 backing 的两条访问通路并排确认：
+
+```text
+CPU通路
+CPU VA → CPU页表或BAR窗口 → backing
+
+GPU通路
+进程GPUVA → 进程GPUVM PTE → backing
+```
+
+两条通路独立建立；CPU VA 与 GPUVA 即使数值相同，也由不同 MMU 和页表解释。
+
+| backing 来源 | CPU 通路                                   | GPU 通路                                        |
+| ------------ | ------------------------------------------ | ----------------------------------------------- |
+| GTT          | 使用 KFD 返回的`mmap_offset` 建立 CPU VA | 进程 PTE 指向逐页 DMA 地址                      |
+| USERPTR      | 应用原有 CPU VA 已存在                     | HMM 查询→AMDGPU 填页面数组→DMA 映射→进程 PTE |
+| VRAM         | 仅在 BAR 可见并建立 CPU 映射时可直接访问   | 进程 PTE 指向 VRAM 本地地址                     |
+
+把本文的两种 AQL Ring 放进来：
+
+```text
+[AQL主线：system RAM Ring]
+
+CPU写：
+CPU VA → CPU页表 → system RAM页面P0
+
+GPU读：
+Ring GPUVA → 进程GPUVM PTE → DMA地址D0
+           → 可选Host IOMMU → 同一个页面P0
+
+
+[AQL主线：VRAM Ring]
+
+CPU写：
+CPU VA → CPU页表 → BAR可见地址 → VRAM
+
+GPU读：
+Ring GPUVA → 进程GPUVM PTE → VRAM本地地址 → 同一份VRAM数据
+```
+
+CPU mmap 的实际调用在 2.0.4.2；`MAP_MEMORY_TO_GPU` 怎样建立 GPU 通路在 2.3。本节只负责最终核对，不再引入第三条固定映射层。
+
+到这里，“数据在哪里、对象怎样管理、CPU/GPU 怎样到达它”已经闭合。下一节转向相反问题：谁还在使用这些关系，以及何时允许删除。
 
 ### 2.6 引用、映射与最终释放
 
 前面已经把存储、对象和两侧地址通路建立起来。本节只问一个相反的问题：谁仍可能使用它，以及每一层关系何时才允许删除。
 
 “用户还拿着 handle”“CPU VA 仍有映射”“GPUVM 还有映射”“Queue 正在使用”是四种不同的存活关系。AQL Ring 能说明为什么仅有一个 BO 引用还不够。
+
+建议分两遍阅读：
+
+```text
+首次阅读
+  → 2.6.1 状态图：合法生命周期顺序
+  → 2.6.2 Queue引用：为什么使用期间不能UNMAP
+  → 2.6.5 FREE：为什么必须最后发生
+
+第二遍源码
+  → 2.6.3 PTE删除、Fence、TLB与DMA unmap顺序
+  → 2.6.4 GPU UNMAP与CPU munmap的独立关系
+```
 
 #### 2.6.1 先固定合法状态顺序
 
@@ -2978,24 +4260,22 @@ sequenceDiagram
     participant M as GPU TLB / DMA 映射
 
     U->>K: ① UNMAP_MEMORY_FROM_GPU ioctl
-    loop ② 对每个目标 GPU
-        K->>B: unmap_memory_from_gpu()
-        B->>B: ③ 检查 queue_refcount == 0
-        B->>V: ④ 删除 GPUVA mapping，提交页表清理
-        V-->>B: ⑤ 返回 last_pt_update dma_fence
-        B->>B: ⑥ is_mapped=false，mapping计数--
-    end
-    opt 当前硬件路径需要显式 TLB flush
+    K->>B: ② 对当前GPU执行unmap_memory_from_gpu()
+    B->>B: ③ 检查 queue_refcount == 0
+    B->>V: ④ 删除 GPUVA mapping，提交页表清理
+    V-->>B: ⑤ 返回 last_pt_update dma_fence
+    B->>B: ⑥ is_mapped=false，mapping计数--
+    opt 当前硬件路径需要显式 TLB invalidation
         K->>B: ⑦ sync_memory()
         B->>B: 等待 dma_fence 完成
-        K->>M: ⑧ flush 目标 GPU TLB
+        K->>M: ⑧ invalidate目标GPU的旧TLB翻译
     end
     K->>B: ⑨ dmaunmap_mem()
     B->>M: 删除目标设备的 DMA 映射
     K-->>U: ⑩ UNMAP 成功返回
 ```
 
-第一次阅读只需记住两个约束：③ 不通过就不能删映射；⑨ 必须位于必要的页表等待和 TLB flush 之后。下面的源码依次验证图中的 Queue 引用、页表删除、状态递减和最终 DMA unmap。
+第一次阅读只需记住两个约束：③ 不通过就不能删映射；⑨ 必须位于必要的页表等待和 TLB invalidation 之后。下面的源码依次验证图中的 Queue 引用、页表删除、状态递减和最终 DMA unmap。
 
 #### 2.6.2 Queue 为什么能阻止 UNMAP
 
@@ -3036,7 +4316,9 @@ mapping->bo_va->queue_refcount++;
 
 为什么两个都需要？只保留 BO 引用，只能保证“数据对象还活着”；如果 GPUVM mapping 被删除，同一个 BO 虽然仍存在，Queue 持有的旧 GPUVA 也已经无法到达它。`queue_refcount` 单独保护的正是这条地址关系。
 
-Queue 销毁路径必须反向放下这两种保护。下面先展示 Queue 销毁流程怎样依次调用“映射使用计数释放、硬件 Queue 销毁、BO 引用释放”，再展开其中与 Ring 对应的两种计数动作。
+Queue 销毁路径必须反向放下这两种保护。下面源码中的 `pdd` 仍是 Process Device Data，即当前进程在当前 GPU 上的 KFD 状态；`pdd->qpd` 是这个 PDD 内嵌的 Queue/调度状态。源码通过同一个 PDD 找到当前进程 GPUVM 并销毁该 GPU 上的 Queue。
+
+下面先展示 Queue 销毁流程怎样依次调用“映射使用计数释放、硬件 Queue 销毁、BO 引用释放”，再展开其中与 Ring 对应的两种计数动作。
 
 **[SOURCE]** Linux [`drivers/gpu/drm/amd/amdkfd/kfd_process_queue_manager.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_process_queue_manager.c) 第 536～552 行，以及 [`drivers/gpu/drm/amd/amdkfd/kfd_queue.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_queue.c) 第 228～232、351～360、377～403 行：
 
@@ -3120,9 +4402,9 @@ list_for_each_entry(entry, &mem->attachments, list) {
 }
 ```
 
-`entry->is_mapped = false` 表示当前 attachment 已不再映射到这套 GPUVM；`mapped_to_gpu_memory--` 则让后续 FREE 能判断所有 GPU mapping 是否都已撤销。多 GPU 对象会对每个目标 GPU 分别执行这一步。
+`entry->is_mapped = false` 表示当前 attachment 已不再映射到这套 GPUVM；`mapped_to_gpu_memory--` 则让后续 FREE 判断当前 GPU mapping 已经撤销。
 
-**[SOURCE]** KFD ioctl 入口 [`drivers/gpu/drm/amd/amdkfd/kfd_chardev.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) 第 1431～1465 行给出了“等待→TLB→DMA unmap”的次序：
+**[SOURCE]** KFD ioctl 入口 [`drivers/gpu/drm/amd/amdkfd/kfd_chardev.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) 第 1431～1465 行给出了“等待→TLB invalidation→DMA unmap”的次序。源码使用通用设备循环；当前单 GPU 示例中循环只执行一次。这里的 `pdd` 和 `peer_pdd` 仍统一表示当前进程＋当前 GPU 的同一个 PDD：
 
 ```c
 for (i = args->n_success; i < args->n_devices; i++) {
@@ -3152,7 +4434,18 @@ for (i = 0; i < args->n_devices; i++) {
 }
 ```
 
-两条源码英文注释的中文翻译：必须先等待页表更新完成，再刷新 TLB；而设备 DMA 映射必须在 TLB flush 之后删除，以避免仍持有旧翻译的 GPU 发起访问并触发 `IO_PAGE_FAULT`（设备 I/O 页故障）。
+在当前单 GPU 主线中逐项读取：
+
+```text
+pdd->dev
+  → 当前GPU，用来判断该硬件是否需要显式TLB invalidation并等待页表更新
+
+peer_pdd->dev / peer_pdd->drm_priv
+  → 仍是当前GPU及当前进程GPUVM
+  → 用于删除mapping、invalidate旧翻译、撤销这套GPUVM使用的DMA映射
+```
+
+两条源码英文注释的中文翻译：必须先等待页表更新完成，再使旧 TLB 翻译失效；而设备 DMA 映射必须在 TLB invalidation 之后删除，以避免仍持有旧翻译的 GPU 发起访问并触发 `IO_PAGE_FAULT`（设备 I/O 页故障）。
 
 因此，UNMAP 成功不等于“调用了 `amdgpu_vm_bo_unmap()` 就结束”。完整完成条件是：页表删除已经提交并在需要时等待完成，旧 TLB 翻译已经失效，最后才撤销目标设备访问 system RAM 所需的 DMA 映射；没有建立这类 DMA mapping 的路径在最后一步可以不做实际解除工作。
 
@@ -3205,7 +4498,7 @@ static void mmap_aperture_release(manageable_aperture_t *aper,
 所以 CPU/GPU 两条清理关系应分开记：
 
 ```text
-GPU侧：GPUVA mapping → 等待页表更新 → flush TLB → DMA unmap
+GPU侧：GPUVA mapping → 等待页表更新 → invalidate旧TLB翻译 → DMA unmap
 CPU侧：CPU VA mapping ─────────────────────────────→ munmap/释放VA区域
 对象层：                         KFD FREE → 删除handle并放下BO引用
 ```
@@ -3247,7 +4540,7 @@ drm_gem_handle_delete(adev->kfd.client.file, mem->gem_handle);
 drm_gem_object_put(&mem->bo->tbo.base);
 ```
 
-外层 `kfd_ioctl_free_memory_of_gpu()` 的对应代码是：
+外层 `kfd_ioctl_free_memory_of_gpu()` 的对应代码是。这里的 `pdd` 仍是当前单 GPU 的 PDD：`pdd->dev` 指向当前 GPU，`pdd->drm_priv` 对应该进程 GPUVM，`pdd` 本身还持有用于删除 KFD handle 的 `alloc_idr` 对象表。
 
 ```c
 ret = amdgpu_amdkfd_gpuvm_free_memory_of_gpu(pdd->dev->adev,
@@ -3269,56 +4562,18 @@ BO 管理对象销毁以后，底层存储怎样处理取决于谁拥有它：
 
 这与本节开头的状态图完全对应：Queue 引用先归零，才能 UNMAP；GPUVM mapping 归零以后，才能 FREE；FREE 成功后删除 KFD handle，并在最后一个对象引用消失时销毁 BO 管理对象。只有 GTT/VRAM 这类驱动拥有的 backing 才随资源回收；USERPTR 不能被概括成“KFD 释放用户页面”。
 
-到 2.6 为止，第 2 章的概念主线已经闭合。2.7 不再引入新的内存层次，只把 ROCr 的 `system_allocator()` 源码重新对应到前面的三步，属于可选的源码回填。
+到 2.6 为止，第 2 章的概念主线已经闭合。2.7 不再引入新的内存层次，只保留 Runtime 选择 system/device backing，以及 system memory 内部选择 USERPTR/GTT 的两个源码分支。
 
-### 2.7 AQL Ring 的 Runtime 源码回填（可选）
+### 2.7 可选源码索引：Runtime 怎样选择 Ring backing
 
-如果当前目标只是掌握第 2 章的内存模型，可以直接进入第 3 章。本节只回答一个源码问题：ROCr 的 `system_allocator()` 怎样沿 Runtime、MemoryRegion、KfdDriver 和 HSAKMT 落到前文的 KFD ALLOC/MAP 三步。
-
-ROCr 的 Ring 既可能来自 system allocator，也可能在条件允许时来自 device memory。本文继续使用 system RAM 中的 16 KiB Ring 对应前文示例。
-
-源码中的 `system_allocator()` 和 `coarsegrain_allocator()` 都是 Runtime 保存的分配器函数对象，不是新的内核内存类型。本节只把 `coarsegrain_allocator()` 识别为当前 Ring 的 device/local-memory 分支；“coarse-grained”在一致性上的完整含义属于第 3 章，不在这里提前展开。
-
-先看完整分支图。它把后面的几段源码放回同一个调用中，避免把外层 allocator、内部 KFD ALLOC 和 KFD MAP 误解成三次互不相关的分配：
+到 2.6 为止，第 2 章主线已经闭合。本节不再重复 ROCr→HSAKMT→KFD 的完整申请时序，也不再重复 ALLOC/MAP；这些分别在 2.0.4 和 2.3。这里只保留两个仍有独立价值的源码分支：
 
 ```text
-AqlQueue::AllocRegisteredRingBuffer(16 KiB)
-│
-├─ IsDeviceMemRingBuf() = true
-│    │
-│    └─ coarsegrain_allocator()
-│         → device/local memory路径
-│         → 本章不继续展开
-│
-└─ IsDeviceMemRingBuf() = false
-     │
-     └─ system_allocator()                 ← 一个最外层调用
-          │
-          ├─ Runtime::AllocateMemory()
-          │    → MemoryRegion按页对齐
-          │    → KfdDriver::AllocateMemory()
-          │
-          ├─ paged && userptr_for_paged_mem
-          │    → HSAKMT mmap 16 KiB CPU VA/映射（物理页可按需就位）
-          │    → KFD ALLOC(USERPTR)：登记这段映射对应的页面
-          │
-          └─ 其他system-memory配置
-               → KFD ALLOC(GTT)：TTM取得4个system RAM页面
-               → HSAKMT为CPU建立映射
-
-USERPTR与GTT在这里汇合
-     │
-     ├─ KFD MAP
-     │    → amdgpu_bo_va
-     │    → 目标GPUVM中的4个PTE
-     │    → 等待页表更新并flush TLB
-     │
-     └─ allocator返回CPU可写的Ring地址
+问题一：ROCr选择system memory Ring还是device memory Ring？
+问题二：system memory内部选择USERPTR还是GTT？
 ```
 
-后面的源码按图从上到下验证三件事：ROCr 选择 allocator、system allocator 选择 USERPTR/GTT、KFD driver 发出 ALLOC/MAP。本节到 allocator 返回为止，不继续追 Queue 初始化和 KFD CREATE_QUEUE。
-
-#### 2.7.1 ROCr 先选择 Ring allocator
+#### 2.7.1 ROCr 选择 system 或 device-memory Ring
 
 **[SOURCE]** ROCr [`runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp) 第 518～535 行：
 
@@ -3326,8 +4581,6 @@ USERPTR与GTT在这里汇合
 void AqlQueue::AllocRegisteredRingBuffer(uint32_t queue_size_pkts) {
   ring_buf_alloc_bytes_ =
       queue_size_pkts * sizeof(core::AqlPacket);
-  assert(IsMultipleOf(ring_buf_alloc_bytes_, 4096) &&
-         "Ring buffer sizes must be 4KiB aligned.");
 
   if (IsDeviceMemRingBuf()) {
     /* 省略Large BAR检查。 */
@@ -3343,61 +4596,37 @@ void AqlQueue::AllocRegisteredRingBuffer(uint32_t queue_size_pkts) {
 }
 ```
 
-中文翻译：ROCr 先按 Packet 数量计算 Ring 字节数并保证 4 KiB 对齐；根据配置选择设备内存分配器或系统内存分配器。
+中文解释：
 
-这段代码只证明“选择哪个 allocator”，还没有证明 allocator 内部怎样落到 KFD。`system_allocator()` 不是已经在别处完成的一次独立物理页分配，而是一个会继续向下调用 Runtime、MemoryRegion 和驱动的函数对象。
+```text
+IsDeviceMemRingBuf() = true
+  → 使用device/local-memory allocator
+  → CPU还必须具备填写Ring的访问通路，源码因此检查Large BAR条件
 
-#### 2.7.2 system allocator 继续进入 Runtime 和 KfdDriver
-
-**[SOURCE]** ROCr [`runtime/hsa-runtime/core/runtime/amd_gpu_agent.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_gpu_agent.cpp) 第 2451～2462 行与 [`runtime/hsa-runtime/core/runtime/amd_memory_region.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_memory_region.cpp) 第 129～154 行：
-
-```cpp
-system_allocator_ = [pool](size_t size, size_t alignment,
-                           MemoryRegion::AllocateFlags alloc_flags) -> void* {
-  assert(alignment <= 4096);
-  void* ptr = nullptr;
-  return (HSA_STATUS_SUCCESS ==
-          core::Runtime::runtime_singleton_->AllocateMemory(
-              pool, size, alloc_flags, &ptr))
-      ? ptr
-      : nullptr;
-};
-
-hsa_status_t MemoryRegion::AllocateImpl(size_t& size,
-                                        AllocateFlags alloc_flags,
-                                        void** address, int agent_node_id) const {
-  /* 省略参数、内存类型和大小检查。 */
-  size = AlignUp(size, GetPageSize());
-  return owner()->driver().AllocateMemory(
-      *this, alloc_flags, address, size, agent_node_id);
-}
+IsDeviceMemRingBuf() = false
+  → 使用system_allocator()
+  → backing位于system RAM
 ```
 
-逐层理解：
+`coarsegrain_allocator()` 是 Runtime 保存的分配器函数对象；这里不能仅凭名字把它等同为第 3 章完整的 coarse-grained 内存语义。无论选择哪种 backing，普通用户 AQL Queue 最终仍使用进程 GPUVA 和进程 GPUVM，不会因此改走 VMID 0/GART。
 
-1. `system_allocator_` 选择一个 system-memory pool，然后调用 `Runtime::AllocateMemory()`。
-2. `MemoryRegion` 检查并按页对齐大小，再调用该 region 所属驱动的 `AllocateMemory()`。
-3. 到这里仍是同一个最外层 allocator 调用；后续即使先由 `mmap()` 建立用户 CPU VA/映射，KFD 也只是登记这段映射解析出的同一组页面，不会重新分配一份数据副本。
+#### 2.7.2 system memory 内部选择 USERPTR 或 GTT
 
-#### 2.7.3 HSAKMT 在 USERPTR 与 GTT 之间选择
+`system_allocator()` 只承诺使用 system-memory pool，并不保证内部固定选择 KFD GTT。离散 GPU 路径还会根据运行时配置和 `NonPaged` 属性选择 USERPTR 或 GTT。
 
-“system allocator”只承诺数据位于 system RAM，不等于固定选择 KFD 的 GTT 类型。在离散 GPU 路径中，HSAKMT 会按运行时配置和 `NonPaged` 属性在 USERPTR 与 GTT 之间选择。这里的 `NonPaged` 是 HSAKMT 分配属性：在下面这段分支中，它要求走 KFD 管理的 GTT 路径，而不是先建立匿名 USERPTR 映射；本章不把这个名字扩展成对所有系统换页行为的绝对保证。
-
-**[SOURCE]** ROCr HSAKMT [`libhsakmt/src/fmm.c`](./2.源码/rocr-runtime/libhsakmt/src/fmm.c) 第 2043～2086 行：
+**[SOURCE]** HSAKMT [`libhsakmt/src/fmm.c`](./2.源码/rocr-runtime/libhsakmt/src/fmm.c) 第 2043～2086 行：
 
 ```c
 /* Paged memory is allocated as a userptr mapping, non-paged
  * memory is allocated from KFD
  */
 if (!mflags.ui32.NonPaged && svm.userptr_for_paged_mem) {
-	/* 省略aperture加锁。 */
-	mem = aperture_allocate_area_aligned(aperture, address, size, alignment);
-	/* 省略aperture解锁和空指针检查。 */
+	/* 省略地址区间管理。 */
 	if (mmap(mem, MemorySizeInBytes, PROT_READ | PROT_WRITE,
 		 MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED, -1, 0)
 	    == MAP_FAILED)
 		goto out_release_area;
-	/* 省略内存节点绑定和madvise。 */
+
 	mmap_offset = (uint64_t)mem;
 	ioc_flags |= KFD_IOC_ALLOC_MEM_FLAGS_USERPTR;
 	vm_obj = fmm_allocate_memory_object(preferred_gpu_id, mem, size,
@@ -3411,78 +4640,57 @@ if (!mflags.ui32.NonPaged && svm.userptr_for_paged_mem) {
 }
 ```
 
-源码英文注释的中文翻译：分页 system memory 使用 USERPTR mapping；non-paged system memory 由 KFD 分配。
+源码注释的中文翻译：paged system memory 使用 USERPTR mapping；non-paged system memory 由 KFD 分配。
 
-这验证了分支图的中段：USERPTR 是“HSAKMT `mmap` 建立 CPU VA/映射→物理页按需就位→KFD 登记”，GTT 是“KFD/TTM 取得页面→HSAKMT 建立 CPU 映射”。两条路径都继续经过 KFD MAP，最终形成 GPU PTE。
+对应两条准备路径：
 
-#### 2.7.4 KfdDriver 依次调用 KFD ALLOC 与 MAP
+```text
+USERPTR
+  → HSAKMT先建立CPU VA/映射
+  → KFD登记这段CPU映射
+  → HMM查询、AMDGPU填页面数组、DMA映射
 
-KFD driver 随后把同一个请求拆成内核 UAPI 中仍然独立的 ALLOC 与 MAP 操作。`restricted` 对应源码中的 `AllocateRestrict`：这种 system-memory 分配默认只允许 CPU 访问，不在分配时映射到 GPU；当前 Ring 使用的是普通、非 restricted 分配，因此 Runtime 会选择所有 GPU 节点并在返回前调用 KFD MAP。
-
-**[SOURCE]** ROCr [`runtime/hsa-runtime/core/driver/kfd/amd_kfd_driver.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/driver/kfd/amd_kfd_driver.cpp) 第 284～326 行先分配再调用 `MakeKfdMemoryResident()`；HSAKMT [`libhsakmt/src/fmm.c`](./2.源码/rocr-runtime/libhsakmt/src/fmm.c) 第 1177～1181、3302～3306 行分别发出 KFD ALLOC 与 MAP ioctl：
-
-```cpp
-*mem = AllocateKfdMemory(kmt_alloc_flags, node_id, size);
-/* 省略失败后的回收与重试。 */
-
-if (*mem != nullptr) {
-	/* 省略NoAddress分支。 */
-	HsaMemMapFlags map_flag = m_region.map_flags();
-	size_t map_node_count = 1;
-	const uint32_t owner_node_id = m_region.owner()->node_id();
-	const uint32_t *map_node_id = &owner_node_id;
-
-	if (m_region.IsSystem()) {
-		if ((alloc_flags & core::MemoryRegion::AllocateRestrict) == 0) {
-			map_node_count =
-				core::Runtime::runtime_singleton_->gpu_ids().size();
-			if (map_node_count == 0)
-				return HSA_STATUS_SUCCESS;
-			map_node_id =
-				&core::Runtime::runtime_singleton_->gpu_ids()[0];
-		} else {
-			return HSA_STATUS_SUCCESS;
-		}
-	}
-
-	uint64_t alternate_va = 0;
-	const bool is_resident = MakeKfdMemoryResident(
-		map_node_count, map_node_id, *mem, size,
-		&alternate_va, map_flag);
-	/* 省略结果检查和返回。 */
-}
+GTT
+  → KFD/TTM取得system RAM页面
+  → HSAKMT按需建立CPU映射
 ```
 
-这段 `AllocateRestrict` 分支还解释了“普通、非 restricted”的边界：普通 system memory 选择 Runtime 当前枚举到的全部 GPU；restricted system memory 在这里直接返回，只保留默认 CPU 访问。
+两条路径随后都进入已经讲过的共同阶段：
 
-`AllocateKfdMemory()` 进入 HSAKMT 后，ALLOC 对应：
-
-```c
-if (hsakmt_ioctl(hsakmt_kfd_fd,
-		 AMDKFD_IOC_ALLOC_MEMORY_OF_GPU, &args))
-	goto err_hsakmt_ioctl_failed;
+```text
+KFD MAP
+  → 创建目标进程GPUVM mapping
+  → 提交PTE
+  → 等待页表更新
+  → invalidate旧TLB翻译
+  → allocator返回CPU可写的Ring地址
 ```
 
-`MakeKfdMemoryResident()` 进入 HSAKMT 后，MAP 对应：
+因此，2.7 只需要记住：
 
-```c
-ret_ioctl = hsakmt_ioctl(hsakmt_kfd_fd,
-			 AMDKFD_IOC_MAP_MEMORY_TO_GPU, &args);
-```
+> ROCr 先选择 Ring 位于 system memory 还是 device memory；如果选择 system memory，HSAKMT 内部还可能选择 USERPTR 或 GTT。选择 backing 与最终映射进进程 GPUVM 是两个问题。
 
-因此，`MakeKfdMemoryResident()` 是 ROCr 对“让指定 GPU 节点可访问这块内存”的包装名；在本路径中它实际发出 KFD MAP。它不表示把 system RAM 搬进 VRAM，也不能直接等同于 TTM placement 意义上的物理驻留。对于非 restricted system memory，Runtime 会在分配返回前尝试建立这些 GPU mapping；Runtime 怎样处理映射失败不影响本章的成功路径，这里不展开。
-
-至此，分支图中的整条 system allocator 路径都已有源码对应：最外层只有一次 allocator 调用，但其内部按来源分别安排 CPU 地址准备与 KFD ALLOC，再统一执行 KFD MAP；只有 CPU 可写地址和 GPUVM mapping 都准备好以后，allocator 才返回。
-
-这里的 `AllocateExecutable` 是传给内存分配路径的访问属性，不表示 CPU 或 GPU 会把 Ring 中的 Packet 字节当成 Kernel ISA 直接执行；本章只使用它作为源码中真实存在的分配属性，不展开 Queue 对各权限位的完整要求。
-
-本节最后只需固定一个源码结论：`system_allocator()` 是一次外层调用；它内部可以选择 USERPTR 或 GTT，但成功路径都会在返回 CPU 可写地址前完成所需的 KFD ALLOC 和 GPU MAP。生命周期与释放顺序已经在 2.6 完整说明，这里不再重复。
-
-> **[BOUNDARY]** allocator 返回后的 Ring 初始化、Ring 地址与读写指针怎样传入建队 ioctl、MQD/HQD 怎样保存这些地址，以及硬件怎样取包，属于后续 AQL Queue/Dispatch 文档。本章不继续沿 Queue 调度路径展开。
+> **[BOUNDARY]** allocator 返回后的 Packet 槽位使用、Doorbell、MQD/HQD 和硬件取包属于后续 AQL Queue/Dispatch 路径，本章不继续展开。
 
 ## 3. CPU 和 GPU 怎样看见彼此的写入
 
 第 1～2 章解决了“地址怎样到达同一份数据”：GPUVA 已经能够经过 GPUVM/PTE 找到 Ring、Kernarg 或结果缓冲区。本章不再建立地址映射，而是继续追问：CPU 和 GPU 何时可以把对方的写入当成已经发布的数据。
+
+> **[AQL主线]** 本章中的 Ring、Packet、Doorbell 和 Completion Signal 都属于 AQL Queue 路径。除非特别说明，Ring 图继续使用本文选定的 system RAM backing 案例；本章不讨论 AMDGPU 内核 Ring 或普通 DRM IB。
+
+建议分层阅读：
+
+```text
+首次阅读主线
+  → 3.1 地址可达与数据可见是两层问题
+  → 3.2 fine/coarse-grained的概念边界
+  → 3.4 release/acquire与scope
+  → 3.5～3.7 Packet发布、Doorbell与完成通知
+
+第二遍源码
+  → 3.3 具体代际怎样把BO属性转换成PTE MTYPE
+  → 3.7 Signal wait的伪唤醒与返回值细节
+```
 
 ### 3.1 “地址可访问”不等于“数据已经可见”
 
@@ -3583,6 +4791,8 @@ Coarse-grained区域：
 
 KFD 的 `COHERENT`、`UNCACHED` 是更低层的分配/映射属性。它们先成为 BO 属性，映射 GPUVM 时再由具体 GPU 代际的 GMC 代码转换成 PTE memory type（MTYPE）等硬件属性。
 
+> 首次阅读只需掌握“HSA fine/coarse 语义不等于 AMDGPU coherent/uncached flag”。下面从 KFD flag 追到具体代际 PTE MTYPE 的源码属于第二遍阅读。
+
 ```text
 HSA内存池语义（fine/coarse-grained）
                 │ Runtime选择实现属性
@@ -3596,12 +4806,12 @@ AMDGPU BO flags
 GPU PTE的MTYPE/相关一致性属性
 ```
 
-**[SOURCE]** Linux [`include/uapi/linux/kfd_ioctl.h`](./2.源码/linux/include/uapi/linux/kfd_ioctl.h) 第 424～427 行定义属性位；[`drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c) 第 1774～1779 行把它们传入 AMDGPU BO 创建属性：
+**[SOURCE]** Linux [`include/uapi/linux/kfd_ioctl.h`](./2.源码/linux/include/uapi/linux/kfd_ioctl.h) 第 425～427 行定义当前讨论的一致性/缓存属性位；[`drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c) 第 1774～1779 行把它们传入 AMDGPU BO 创建属性：
 
 ```c
-#define KFD_IOC_ALLOC_MEM_FLAGS_AQL_QUEUE_MEM	(1 << 27)
 #define KFD_IOC_ALLOC_MEM_FLAGS_COHERENT	(1 << 26)
 #define KFD_IOC_ALLOC_MEM_FLAGS_UNCACHED	(1 << 25)
+#define KFD_IOC_ALLOC_MEM_FLAGS_EXT_COHERENT	(1 << 24)
 
 /* 省略其他属性转换。 */
 if (flags & KFD_IOC_ALLOC_MEM_FLAGS_COHERENT)
@@ -3779,12 +4989,14 @@ Release fence scope决定Kernel完成后、Packet被标记完成前，
 
 ### 3.5 普通内存与 MMIO 顺序
 
-AQL Ring 位于普通可共享内存中，Doorbell 则是 MMIO 通知端点。二者虽然都可由 CPU store 写入，但语义不同：
+在本文选定的 system RAM AQL Ring 案例中，Packet 通过 CPU 可写的普通内存映射保存，Doorbell 则是 MMIO 通知端点。二者虽然都可由 CPU store 写入，但语义不同：
 
 | 写入目标          | 保存什么        | 写入目的           |
 | ----------------- | --------------- | ------------------ |
 | 普通内存中的 Ring | Packet 数据     | 让 GPU 以后读取    |
 | Doorbell MMIO     | 队列进度/通知值 | 触发 GPU 检查 Ring |
+
+如果 Ring 使用 CPU 可访问的 device/local memory，具体 CPU 缓存属性和 BAR 通路可能不同，但协议边界不变：先把 Packet 内容和有效 header 按要求发布，再写 Doorbell 通知 GPU。Doorbell 不搬运 Ring 数据。
 
 所需顺序是：
 
@@ -3837,7 +5049,7 @@ signal_对应映射按uncached方式分配，因此这里不需要通过回读�
 
 `StoreRelaxed()` 的名字只表示它没有额外提供 HSA/C++ release 语义，不表示实现可以任意越过设备所需的 MMIO 顺序；因此直接硬件路径中仍有 `_mm_sfence()`。反过来，`std::atomic_thread_fence()` 也不能被简单理解成“已经刷新所有 CPU/GPU cache”，它首先建立语言和编译器可依赖的内存顺序，具体硬件屏障由平台实现补足。
 
-`hardware_doorbell_ptr` 指向 MMIO 窗口，不是 Ring 数据。SFENCE 约束 store 顺序，也不是第 2 章的 TLB flush。不同 CPU 架构会使用不同屏障指令，但“先发布普通内存，再通知设备”的跨平台要求不变。
+`hardware_doorbell_ptr` 指向 MMIO 窗口，不是 Ring 数据。SFENCE 约束 store 顺序，也不是第 2 章的 TLB invalidation。不同 CPU 架构会使用不同屏障指令，但“先发布普通内存，再通知设备”的跨平台要求不变。
 
 ### 3.6 AQL 发布案例
 
@@ -3980,6 +5192,8 @@ sequenceDiagram
 
 为什么不能只看到 Signal 数值变化就直接读取数据？因为“完成通知”必须和此前 GPU 写结果建立 release/acquire 关系，才能成为可靠的可见性边界；同时，CPU 必须确认观察值确实满足完成条件，而不是把一次提前返回当成完成。
 
+> 首次阅读先记住“GPU release结果→Completion Signal→CPU确认条件并acquire→读取结果”。下面 Signal wait 的伪唤醒和返回值规范属于第二遍阅读。
+
 **[SPEC]** ROCr [`runtime/hsa-runtime/inc/hsa.h`](./2.源码/rocr-runtime/runtime/hsa-runtime/inc/hsa.h) 第 2900～2906 行已经说明，Packet 的 release fence 发生在 Kernel 完成后、Packet 被标记完成前。CPU 侧的 acquire 则体现在 Signal 等待接口中；同一文件第 2023～2067 行写道：
 
 ```text
@@ -4063,7 +5277,18 @@ system RAM 或 VRAM
 
 地址路径：
 CPU VA → CPU页表/BAR → 数据
-GPUVA → GPU页表 → DMA地址或VRAM地址 → 数据
+
+[AQL主线：system RAM]
+进程GPUVA → 进程GPUVM页表 → DMA地址
+          → 可选Host IOMMU → system RAM
+
+[AQL主线：VRAM]
+进程GPUVA → 进程GPUVM页表 → VRAM本地地址 → VRAM
+
+[GPU系统上下文/非AQL对照]
+GART aperture地址 → VMID 0/GART页表 → DMA地址 → system resource
+
+上面三条地址关系并列，不串联。
 
 建立与释放：
 ALLOC → 可选CPU映射 → MAP → Queue/使用者持有引用
