@@ -26,13 +26,9 @@
 
 ### 2.2 历史 CLR
 
-除当前 CLR 工作树外，笔记还引用历史对象 `914c2eb8b60a13436eb532c9e256ad68b49e3b20`。该对象已下载，并保存为 Git ref：
+除当前 CLR 工作树外，参考文档还引用历史对象 `914c2eb8b60a13436eb532c9e256ad68b49e3b20`，并通过 `20c71738491871ee7d373240c0e3e51b84bcd992^1` 引用该 merge 的第一父提交。当前本地对象库既不包含 `914c2eb8b60a13436eb532c9e256ad68b49e3b20`，也不包含 merge `20c71738491871ee7d373240c0e3e51b84bcd992`，同时缺少 `refs/notes-baselines/clr-historical`，因此相关历史源码暂时无法在本地复现。
 
-```powershell
-git -C .\2.源码\rocm-clr show refs/notes-baselines/clr-historical:rocclr/runtime/device/pal/palvirtual.cpp
-```
-
-笔记所用 merge `20c71738491871ee7d373240c0e3e51b84bcd992` 及其父提交也已存在于本地对象库，所以原笔记里的 `20c717384^1` 检索方式可直接使用。
+这个缺口影响 `1.笔记/5. AMD 队列提交：从 API 到 AQL 与硬件.md` 中对历史 `palvirtual.cpp` 的检索，不影响当前 CLR 工作树 `81277d69e3352e7144ced2ee9601484f9b48d950`，也不影响 `02_GPU 内存管理基础.md` 使用的现行 CLR 源码。恢复历史对象并重新建立固定 ref 后，才能再次使用原笔记中的历史检索命令。
 
 ## 3. Linux 工作树说明
 
@@ -77,4 +73,4 @@ git -C .\2.源码\vortex rev-parse HEAD
 pwsh -File .\tools\check-doc-dependencies.ps1
 ```
 
-该检查会验证笔记中的本地 Markdown 链接、章节锚点、`2.源码/...` 路径、源码行号范围、七个源码仓库的固定 commit，以及保存的历史 CLR 对象。检查不访问网络。
+该检查会验证笔记中的本地 Markdown 链接、章节锚点、`2.源码/...` 路径、源码行号范围、七个源码仓库的固定 commit，以及历史 CLR 对象。检查不访问网络。当前历史 CLR 对象和固定 ref 缺失，因此检查会报告对应错误；其余固定源码基线仍可正常核验。

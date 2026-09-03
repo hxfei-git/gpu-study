@@ -80,7 +80,7 @@
 | VPN                   | Virtual Page Number                                        | 虚拟页号                                     |
 | VRAM                  | Video Random-Access Memory                                 | 显存                                         |
 
-> **[BOUNDARY]** 本文是早期的 ARM/MMU 引入草稿，停在问题定义处；完整且带本地 Linux/AMDGPU 源码基线的版本见 [2A. Linux 内存管理基础](<./1.笔记/2A. Linux 内存管理基础：从物理内存、PFN 与 struct page 到 GEM、TTM、HMM.md>)。
+> **[BOUNDARY]** 本文以 ARM/MMU 为切入点，讲解 Linux 地址空间、物理页和常用内存接口。更完整且带本地 Linux/AMDGPU 源码基线的扩展笔记见 [2A. Linux 内存管理基础](<./1.笔记/2A. Linux 内存管理基础：从物理内存、PFN 与 struct page 到 GEM、TTM、HMM.md>)。
 
 ## 0. 为什么要引入虚拟地址
 
@@ -96,7 +96,7 @@
      物理内存
 ```
 
-带操作系统的系统需要同时管理多个进程或任务。即使不使用虚拟地址，操作系统也可以通过 MPU、特权级等机制限制各任务能够访问的物理区域；但是，所有程序仍然共用同一套物理地址编号，程序使用的地址也会与实际物理位置直接绑定，由此带来下面的问题。
+带操作系统的系统需要同时管理多个进程或任务。即使不使用虚拟地址，操作系统也可以通过 MPU、特权级等机制限制各任务能够访问的物理区域。不过，所有程序仍共用一套物理地址编号，程序地址也直接绑定实际物理位置，由此产生以下问题。
 
 ### 0.1 所有程序共用同一套地址编号
 
@@ -211,7 +211,7 @@ PFN 100                    PFN 900
 物理地址PA
 ```
 
-更准确地说，地址翻译按照页面进行：
+地址翻译实际以页面为单位：
 
 ```text
 虚拟页号VPN
@@ -231,7 +231,7 @@ VA = VPN + offset
 PA = PFN对应的页基地址 + 相同offset
 ```
 
-这就引出了本文接下来需要解释的三个核心对象：
+由此需要解释三个对象：
 
 ```text
 Linux页表：保存VPN到PFN的映射关系
@@ -241,9 +241,7 @@ TTBR（Translation Table Base Register，转换表基址寄存器）：告诉MMU
   └─ TTBR1_EL1（Translation Table Base Register 1, EL1）：Linux通常用于内核地址空间
 ```
 
-接下来的问题是：
-
-> ARM MMU 如何从一个虚拟地址出发，通过 `TTBR` 和多级页表，一步一步找到最终物理地址？
+第 1 章将回答：ARM MMU 如何从一个虚拟地址出发，通过 `TTBR` 和多级页表找到最终物理地址？
 
 ## 1. ARM MMU：从虚拟地址到物理地址
 
@@ -408,7 +406,7 @@ descriptor 类型需要结合当前 Level 判断：
 | `01`        | 不支持（Fault） | 1 GiB Block | 2 MiB Block | 不支持（Fault） |
 | `11`        | Table → L1     | Table → L2 | Table → L3 | 4 KiB Page      |
 
-特别注意：`0b11` 在不同 Level 的含义不同。
+`0b11` 的含义取决于当前 Level：
 
 ```text
 L0、L1、L2中的0b11 → Table descriptor，继续查询下一级
@@ -585,7 +583,7 @@ L1 和 L2 使用完全相同的方法，只是地址字段分别变成 `0x120000
 
 **L3：Page descriptor**
 
-在 L3，`bits[1:0]=0b11` 不再表示 Table descriptor，而是表示 Page descriptor。也就是说，相同的类型位编码会根据当前层级产生不同含义。
+在 L3，`bits[1:0]=0b11` 表示 Page descriptor，不再表示 Table descriptor。同一类型位编码会随当前层级改变含义。
 
 为了给本例补充一个可解析的完整值，假设最终页面具有以下属性：
 
@@ -708,7 +706,7 @@ TTBR0_EL1 → Level 0 → Level 1 → Level 2 Block descriptor
 PA = 2 MiB对齐的物理块基地址 + VA低21位
 ```
 
-需要注意，映射范围是 2 MiB，不代表一定使用 PMD Block；普通映射也可以由 512 个 4 KiB PTE 组成。下面只讨论 `[1:0] = 0b01` 的 PMD Block descriptor。
+2 MiB 的映射不一定使用 PMD Block，也可以由 512 个 4 KiB PTE 组成。下面只讨论 `[1:0] = 0b01` 的 PMD Block descriptor。
 
 PMD 不会逐个保存 512 个 PFN，而是保存 2 MiB 对齐物理块基地址的高位：
 
@@ -736,7 +734,7 @@ PA = PMD中的物理块基地址 + VA低21位
 
 因此，从硬件格式看，PMD 保存的是物理块基地址的高位；从 Linux 的 4 KiB 页面视角看，它也确定了这段物理块的起始 PFN。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[arch/arm64/include/asm/pgtable-hwdef.h](./2.源码/linux/arch/arm64/include/asm/pgtable-hwdef.h) 第 52～57、136～151 行定义 PMD 映射大小、描述符类型和属性；[arch/arm64/include/asm/pgtable.h](./2.源码/linux/arch/arm64/include/asm/pgtable.h) 第 614～630 行实现 PMD Block 类型及起始 PFN 的转换。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[arch/arm64/include/asm/pgtable-hwdef.h](./2.源码/linux/arch/arm64/include/asm/pgtable-hwdef.h) 第 52～57、136～151 行定义 PMD 映射大小、描述符类型和属性；[arch/arm64/include/asm/pgtable.h](./2.源码/linux/arch/arm64/include/asm/pgtable.h) 第 614～630 行实现 PMD Block 类型及起始 PFN 的转换。
 
 ### 1.8 MMU 实际执行时还会先查询 TLB
 
@@ -758,15 +756,15 @@ CPU产生VA
 
 Translation Fault 如何进入 Linux、Linux 如何分配物理页并更新页表，将在后续 page fault 章节继续说明。
 
-[SOURCE] Arm，[《Learn the Architecture: Memory Management》](<https://developer.arm.com/-/media/Arm%20Developer%20Community/PDF/Learn%20the%20Architecture/LearnTheArchitecture-MemoryManagement-101811_0100_00_en.pdf>)，Version 1.0，§7“Translation granule”、§7.1“The starting level of address translation”、§7.2“Registers that control address translation”。
+> **[SOURCE]** Arm，[《Learn the Architecture: Memory Management》](<https://developer.arm.com/-/media/Arm%20Developer%20Community/PDF/Learn%20the%20Architecture/LearnTheArchitecture-MemoryManagement-101811_0100_00_en.pdf>)，Version 1.0，§7“Translation granule”、§7.1“The starting level of address translation”、§7.2“Registers that control address translation”。
 
-[SOURCE] [Arm Architecture Reference Manual DDI 0487](https://developer.arm.com/documentation/ddi0487/mc/-Part-D-The-AArch64-System-Level-Architecture/-Chapter-D8-The-AArch64-Virtual-Memory-System-Architecture/-D8-2-Translation-process/-D8-2-8-VMSAv8-64-translation-using-the-4KB-granule?lang=en)，D8.2.8.1“VMSAv8-64 Stage 1 address translation using the 4KB translation granule”。
+> **[SOURCE]** [Arm Architecture Reference Manual DDI 0487](https://developer.arm.com/documentation/ddi0487/mc/-Part-D-The-AArch64-System-Level-Architecture/-Chapter-D8-The-AArch64-Virtual-Memory-System-Architecture/-D8-2-Translation-process/-D8-2-8-VMSAv8-64-translation-using-the-4KB-granule?lang=en)，D8.2.8.1“VMSAv8-64 Stage 1 address translation using the 4KB translation granule”。
 
-[SOURCE] Linux kernel [`Documentation/arch/arm64/memory.rst`](https://docs.kernel.org/arch/arm64/memory.html)，“Translation table lookup with 4KB pages”。
+> **[SOURCE]** Linux kernel [`Documentation/arch/arm64/memory.rst`](https://docs.kernel.org/arch/arm64/memory.html)，“Translation table lookup with 4KB pages”。
 
-[SOURCE] Arm，[《Armv8-A Memory Model》](<https://developer.arm.com/-/media/Arm%20Developer%20Community/PDF/Learn%20the%20Architecture/Armv8-A%20memory%20model%20guide.pdf>)，§3“Describing memory in Armv8-A”、§8“Describing the memory type”、§10“Permissions attributes”、§11“Access Flag”。
+> **[SOURCE]** Arm，[《Armv8-A Memory Model》](<https://developer.arm.com/-/media/Arm%20Developer%20Community/PDF/Learn%20the%20Architecture/Armv8-A%20memory%20model%20guide.pdf>)，§3“Describing memory in Armv8-A”、§8“Describing the memory type”、§10“Permissions attributes”、§11“Access Flag”。
 
-[SOURCE] Linux kernel [`arch/arm64/include/asm/pgtable-hwdef.h`](https://github.com/torvalds/linux/blob/master/arch/arm64/include/asm/pgtable-hwdef.h)，ARM64 hardware page-table descriptor bit definitions。
+> **[SOURCE]** Linux kernel [`arch/arm64/include/asm/pgtable-hwdef.h`](https://github.com/torvalds/linux/blob/master/arch/arm64/include/asm/pgtable-hwdef.h)，ARM64 hardware page-table descriptor bit definitions。
 
 ## 2. Linux 进程与地址空间
 
@@ -786,9 +784,9 @@ Translation Fault 如何进入 Linux、Linux 如何分配物理页并更新页�
              TTBR、ASID、TLB与MMU
 ```
 
-> [SOURCE] 本章源码基线为本地 `2.源码/linux`，Git commit `248951ddc14de84de3910f9b13f51491a8cd91df`。该提交的根 `Makefile` 标识为 Linux `7.2.0-rc4` 开发阶段。
+> **[SOURCE]** 本章源码基线为本地 `2.源码/linux`，Git commit `248951ddc14de84de3910f9b13f51491a8cd91df`。该提交的根 `Makefile` 标识为 Linux `7.2.0-rc4` 开发阶段。
 
-> [SOURCE] `arch/arm64` 已经展开到本地工作目录。本章引用的 ARM64 文件现在都可以从 `2.源码/linux/arch/arm64` 直接打开，并且属于上述同一提交。
+> **[SOURCE]** `arch/arm64` 已经展开到本地工作目录。本章引用的 ARM64 文件现在都可以从 `2.源码/linux/arch/arm64` 直接打开，并且属于上述同一提交。
 
 ### 2.1 `task_struct`：Linux 如何描述任务
 
@@ -855,7 +853,7 @@ pid_t pid;
 pid_t tgid;
 ```
 
-[SOURCE] 本地 Linux `248951ddc14d`：[include/linux/sched.h](./2.源码/linux/include/linux/sched.h) 第 845、971～972、1071～1072 行；地址空间是否共享的实际分支见 [kernel/fork.c](./2.源码/linux/kernel/fork.c) 第 1568～1601 行。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[include/linux/sched.h](./2.源码/linux/include/linux/sched.h) 第 845、971～972、1071～1072 行；地址空间是否共享的实际分支见 [kernel/fork.c](./2.源码/linux/kernel/fork.c) 第 1568～1601 行。
 
 #### 2.1.2 `current` 如何找到当前任务
 
@@ -873,9 +871,9 @@ static __always_inline struct task_struct *get_current(void)
 #define current get_current()
 ```
 
-这里的重点不是把 `SP_EL0` 当成普通内存，而是：ARM64 Linux 在内核执行期间利用这个寄存器快速保存当前任务指针。
+`SP_EL0` 在这里不是普通内存。ARM64 Linux 在内核执行期间利用该寄存器快速保存当前任务指针。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[arch/arm64/include/asm/current.h](./2.源码/linux/arch/arm64/include/asm/current.h)，第 15～24 行。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[arch/arm64/include/asm/current.h](./2.源码/linux/arch/arm64/include/asm/current.h)，第 15～24 行。
 
 #### 2.1.3 `task->mm` 与 `task->active_mm`
 
@@ -910,7 +908,7 @@ task->active_mm = 临时借用的地址空间
 
 内核线程借用 `active_mm`，主要是为了让 CPU 保持一个可用的内存上下文，并不表示这个内核线程拥有或可以任意使用被借用进程的用户内存。
 
-[SOURCE] 本地 Linux `248951ddc14d`：`include/linux/sched.h:826` 定义 `task_struct`，`include/linux/sched.h:971-972` 定义 `mm` 与 `active_mm`；`Documentation/mm/active_mm.rst` 解释二者语义。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：`include/linux/sched.h:826` 定义 `task_struct`，`include/linux/sched.h:971-972` 定义 `mm` 与 `active_mm`；`Documentation/mm/active_mm.rst` 解释二者语义。
 
 #### 2.1.4 多个任务可以共享一个地址空间
 
@@ -922,7 +920,7 @@ task_struct B ──┼──→ 同一个mm_struct ──→ 同一组VMA和用
 task_struct C ──┘
 ```
 
-因此，后面介绍的 ASID 更准确地说是标识地址空间，而不是简单标识某个 PID。
+因此，后文的 ASID 标识地址空间，不是某个 PID。
 
 Linux 创建新任务时，会使用一组 `clone_flags` 标志决定新旧任务共享哪些资源。`CLONE_VM`（Clone Virtual Memory，共享虚拟地址空间标志）是其中一个标志位：
 
@@ -930,7 +928,7 @@ Linux 创建新任务时，会使用一组 `clone_flags` 标志决定新旧任�
 #define CLONE_VM 0x00000100
 ```
 
-它不是函数，也不表示“复制物理内存”，而是在告诉内核：
+`CLONE_VM` 是标志位，不是函数，也不表示“复制物理内存”。它告诉内核：
 
 ```text
 设置CLONE_VM   → 新任务共享当前任务的mm_struct
@@ -989,7 +987,7 @@ tsk->mm ─────→ dup_mm()创建的新mm_struct
 
 `dup_mm()` 创建的是独立地址空间，但普通 `fork()` 通常不会立即复制所有物理页，而是使用 COW（Copy-on-Write，写时复制）：父子进程的私有映射可以暂时指向同一物理页，某一方写入时再复制该页。
 
-最后：
+选定地址空间后：
 
 ```c
 tsk->mm = mm;
@@ -1005,7 +1003,7 @@ tsk->active_mm = mm;
 
 `CLONE_VM` 只决定是否共享地址空间，单独设置它并不足以构成通常意义上的完整线程关系；文件表、信号处理等资源是否共享，还由其他创建标志决定。
 
-[SOURCE] 本地 Linux `248951ddc14d`：`include/uapi/linux/sched.h:11` 定义 `CLONE_VM`（该文件当前未展开，但仍在本地 Git 对象中）；[include/linux/sched/mm.h](./2.源码/linux/include/linux/sched/mm.h) 第 131～134 行定义 `mmget()`；[kernel/fork.c](./2.源码/linux/kernel/fork.c) 第 1518～1566 行实现 `dup_mm()`，第 1568～1601 行实现 `copy_mm()`。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：`include/uapi/linux/sched.h:11` 定义 `CLONE_VM`（该文件当前未展开，但仍在本地 Git 对象中）；[include/linux/sched/mm.h](./2.源码/linux/include/linux/sched/mm.h) 第 131～134 行定义 `mmget()`；[kernel/fork.c](./2.源码/linux/kernel/fork.c) 第 1518～1566 行实现 `dup_mm()`，第 1568～1601 行实现 `copy_mm()`。
 
 共享地址空间并不表示某块内存由某个线程独占。先认识下一节中的
 `mm_struct` 核心成员，再由 2.2.2 节区分内核地址空间共享、分配器的逻辑
@@ -1027,7 +1025,7 @@ tsk->active_mm = mm;
 
 `mm` 来自 MM（Memory Management，内存管理）。`mm_struct` 不是一块用户内存，也不是页表本身；它是 Linux 管理一整套用户虚拟地址空间的总控对象。
 
-为了便于理解，下面按职责重新排列字段。顺序与真实结构体的内存布局不完全相同：
+下面按职责重新排列字段，其顺序与真实结构体的内存布局不完全相同：
 
 ```c
 struct mm_struct {
@@ -1099,10 +1097,10 @@ VA 范围定位描述该范围软件规则的 VMA；`pgd` 指向的页表才记�
 硬件翻译状态。VMA 的具体查找语义、锁规则以及拆分和合并过程在 2.3.5～2.3.6
 节继续展开。
 
-[SOURCE] 本地 Linux `248951ddc14d`：`include/linux/mm_types.h:920-936`
-定义 VMA 的 `[vm_start, vm_end)` 范围及其 `vm_mm` 回指，第 1177 行定义
-`mm_struct.mm_mt`；`include/linux/mm.h:968-973` 中的 `vma_init()` 将
-`vma->vm_mm` 初始化为所属 `mm_struct`。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：`include/linux/mm_types.h:920-936`
+> 定义 VMA 的 `[vm_start, vm_end)` 范围及其 `vm_mm` 回指，第 1177 行定义
+> `mm_struct.mm_mt`；`include/linux/mm.h:968-973` 中的 `vma_init()` 将
+> `vma->vm_mm` 初始化为所属 `mm_struct`。
 
 其中几个布局字段容易被误解：
 
@@ -1208,7 +1206,7 @@ R =  768页 → RSS表示约3 MiB驻留页面
 
 它表示原有 `total_vm` 增加 4096 页，而不是被设置成 4096。
 
-[INFERENCE] 不需要分别死记各种场景，只要抓住一个核心区别：
+[INFERENCE] 各种场景都可以归结为这一区别：
 
 ```text
 total_vm：VMA一共描述了多少虚拟地址范围
@@ -1241,31 +1239,30 @@ mmap()建立2 MiB文件VMA
     → 这个文件映射对RSS的贡献可以达到约512页，即2 MiB
 ```
 
-这里必须记住的是“新增驻留映射通常使 RSS 增加”，而不是“每执行一次访问，
-RSS 必定加一”。Linux 的 fault-around 机制可能在一次缺页处理中顺便映射附近
+“新增驻留映射通常使 RSS 增加”不等于“每执行一次访问，RSS 必定加一”。Linux 的 fault-around 机制可能在一次缺页处理中顺便映射附近
 已经准备好的多个文件页，所以一次访问有时会让 RSS 增加多页；反过来，预读
 只把页面放入文件缓存、尚未映射进当前进程页表时，也不等于已经计入该进程
 RSS。
 
-[SOURCE] 本地 Linux `248951ddc14d`：
-[mm/mmap.c](./2.源码/linux/mm/mmap.c) 第 1359～1369 行的
-`vm_stat_account()` 按 VMA 页数更新 `total_vm`；
-[include/linux/mm.h](./2.源码/linux/include/linux/mm.h) 第 3392～3403 行将
-RSS 定义为驻留匿名页、文件页和共享内存页计数之和；
-[Documentation/filesystems/proc.rst](./2.源码/linux/Documentation/filesystems/proc.rst)
-第 259～262 行给出 `VmRSS`、`RssAnon`、`RssFile` 与 `RssShmem` 的关系；
-[mm/memory.c](./2.源码/linux/mm/memory.c) 第 5775～5815 行说明
-fault-around 会尝试映射缺页地址附近的多个页面，
-[mm/filemap.c](./2.源码/linux/mm/filemap.c) 第 3884～3980 行在映射文件页后
-按实际映射页数更新 RSS 计数。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：
+> [mm/mmap.c](./2.源码/linux/mm/mmap.c) 第 1359～1369 行的
+> `vm_stat_account()` 按 VMA 页数更新 `total_vm`；
+> [include/linux/mm.h](./2.源码/linux/include/linux/mm.h) 第 3392～3403 行将
+> RSS 定义为驻留匿名页、文件页和共享内存页计数之和；
+> [Documentation/filesystems/proc.rst](./2.源码/linux/Documentation/filesystems/proc.rst)
+> 第 259～262 行给出 `VmRSS`、`RssAnon`、`RssFile` 与 `RssShmem` 的关系；
+> [mm/memory.c](./2.源码/linux/mm/memory.c) 第 5775～5815 行说明
+> fault-around 会尝试映射缺页地址附近的多个页面，
+> [mm/filemap.c](./2.源码/linux/mm/filemap.c) 第 3884～3980 行在映射文件页后
+> 按实际映射页数更新 RSS 计数。
 
-最后要明确软硬件边界：MMU 不读取 `mm_struct`。Linux 通过 `mm_struct` 查找 VMA、管理页表并准备 TTBR；真正进行地址翻译时，MMU 读取的是 TTBR 指向的页表。
+软硬件边界如下：MMU 不读取 `mm_struct`。Linux 通过 `mm_struct` 查找 VMA、管理页表并准备 TTBR；进行地址翻译时，MMU 读取的是 TTBR 指向的页表。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[include/linux/mm_types.h](./2.源码/linux/include/linux/mm_types.h) 第 1160～1305 行定义上述核心成员；其中第 1215～1221 行是页表开销、VMA 数量和页表锁，第 1265～1273 行是虚拟内存统计，第 1289～1305 行是程序布局、RSS 与架构上下文。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[include/linux/mm_types.h](./2.源码/linux/include/linux/mm_types.h) 第 1160～1305 行定义上述核心成员；其中第 1215～1221 行是页表开销、VMA 数量和页表锁，第 1265～1273 行是虚拟内存统计，第 1289～1305 行是程序布局、RSS 与架构上下文。
 
 #### 2.2.2 共享 `mm_struct` 后，内存属于哪个线程
 
-首先明确对象关系：多个线程各有自己的 `task_struct`，但它们的 `task->mm`
+对象关系如下：多个线程各有自己的 `task_struct`，但它们的 `task->mm`
 可以指向同一个 `mm_struct`，因而看到同一组 VMA 和同一套用户页表。
 
 ```text
@@ -1324,7 +1321,7 @@ mm_struct
 
 > **[BOUNDARY]** `malloc()` 的 arena（分配区）、线程缓存、跨线程释放等分配器内部机制留到用户态内存申请阶段，已登记在 [待补充的知识点](./待补充的知识点.md)。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[kernel/fork.c](./2.源码/linux/kernel/fork.c) 第 1568～1601 行说明 `mm_struct` 的共享；[arch/arm64/kernel/process.c](./2.源码/linux/arch/arm64/kernel/process.c) 第 413～452 行设置新任务的用户 SP。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[kernel/fork.c](./2.源码/linux/kernel/fork.c) 第 1568～1601 行说明 `mm_struct` 的共享；[arch/arm64/kernel/process.c](./2.源码/linux/arch/arm64/kernel/process.c) 第 413～452 行设置新任务的用户 SP。
 
 #### 2.2.3 `mm_users` 与 `mm_count` 为什么是两个计数
 
@@ -1338,7 +1335,7 @@ mm_count
   └─ mm_struct这个内核对象本身还有多少底层引用
 ```
 
-需要注意，`mm_users` 整体只占 `mm_count` 中的一个引用，而不是每一个 `mm_users` 都对应一个 `mm_count`：
+`mm_users` 整体只占 `mm_count` 中的一个引用，并非每个 `mm_users` 都对应一个 `mm_count`：
 
 ```text
 两个线程共享地址空间：
@@ -1357,7 +1354,7 @@ mmgrab() / mmdrop() → 操作mm_count
 
 当 `mm_users` 降为 0 时，Linux 可以拆除用户映射；只有 `mm_count` 也降为 0 时，`mm_struct` 对象本身才能最终释放。
 
-[SOURCE] 本地 Linux `248951ddc14d`：`include/linux/mm_types.h:1168-1177,1200-1208`；`include/linux/sched/mm.h:26-55,115-142`。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：`include/linux/mm_types.h:1168-1177,1200-1208`；`include/linux/sched/mm.h:26-55,115-142`。
 
 #### 2.2.4 新地址空间是如何初始化的
 
@@ -1394,7 +1391,7 @@ if (init_new_context(p, mm))
 mm->pgd = pgd_alloc(mm);
 ```
 
-[SOURCE] 本地 Linux `248951ddc14d`：`kernel/fork.c:580-590,1085-1132`。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：`kernel/fork.c:580-590,1085-1132`。
 
 ### 2.3 VMA：Linux 如何描述一段虚拟地址
 
@@ -1474,7 +1471,7 @@ VM_PFNMAP    直接管理PFN类特殊映射
 VM_MIXEDMAP  允许混合类型页面的特殊映射
 ```
 
-[SOURCE] 本地 Linux `248951ddc14d`：`include/linux/mm_types.h:920-984`；`include/linux/mm.h:398-440`。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：`include/linux/mm_types.h:920-984`；`include/linux/mm.h:398-440`。
 
 #### 2.3.3 匿名、文件、Private、Shared 是两组不同概念
 
@@ -1560,7 +1557,7 @@ COW 通常按页发生。以 4 KiB 基础页为例，只写一个页面时，通
 
 > **[BOUNDARY]** 这里仅说明 COW 的可见性和按页语义；写保护异常、物理页复制和 PTE 更新的完整路径留到后续 Page Fault 阶段。
 
-[SOURCE] 本地 Linux `248951ddc14d`：`include/linux/mm.h:2238-2248`；`mm/memory.c:1097-1112,3853-3925,4244-4336`。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：`include/linux/mm.h:2238-2248`；`mm/memory.c:1097-1112,3853-3925,4244-4336`。
 
 #### 2.3.4 一个 VMA 可以对应很多 PTE
 
@@ -1622,7 +1619,7 @@ mm_struct
 
 `mm_mt` 中仍然只有一个 VMA，而且这个 VMA 自身不保存表格右侧的状态。右侧状态来自页表，可以逐页不同。因此，“一个 VMA 对应很多 PTE”只表示这些 PTE 所服务的 VA 都落在该 VMA 范围内，不表示 VMA 持有指向这些 PTE 的列表。
 
-所以必须牢牢记住：
+由此可见：
 
 ```text
 存在VMA ≠ 已经存在有效PTE
@@ -1631,7 +1628,7 @@ mm_struct
 
 > **[BOUNDARY]** 本节只用 Swap Entry 表示“该页已经换出”，不展开它的编码、换出和换入过程；这些细节留到后续 Page Fault 阶段。
 
-[SOURCE] 本地 Linux `248951ddc14d`：`include/linux/mm_types.h:920-984,1177-1187` 分别定义 VMA 范围以及 `mm_mt`、`pgd`；`arch/arm64/include/asm/pgtable.h:114-136` 从 PTE 提取物理地址和 PFN。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：`include/linux/mm_types.h:920-984,1177-1187` 分别定义 VMA 范围以及 `mm_mt`、`pgd`；`arch/arm64/include/asm/pgtable.h:114-136` 从 PTE 提取物理地址和 PFN。
 
 #### 2.3.5 `mm_mt` 如何管理和查找 VMA
 
@@ -1665,9 +1662,9 @@ if (!vma || addr < vma->vm_start)
     /* addr不在普通VMA中 */
 ```
 
-查找和读取地址空间结构通常需要持有 `mmap_lock` 的读锁；创建、删除、拆分或合并 VMA 通常需要写锁。新内核还存在更细粒度的单 VMA 锁优化，但不改变“VMA 是受同步保护的软件对象”这个核心结论。
+查找和读取地址空间结构通常需要持有 `mmap_lock` 的读锁；创建、删除、拆分或合并 VMA 通常需要写锁。新内核还提供更细粒度的单 VMA 锁优化，但 VMA 仍是受同步保护的软件对象。
 
-[SOURCE] 本地 Linux `248951ddc14d`：`include/linux/mm_types.h:1177,1235`；`mm/mmap.c:896-908`。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：`include/linux/mm_types.h:1177,1235`；`mm/mmap.c:896-908`。
 
 #### 2.3.6 哪些操作会创建或改变 VMA
 
@@ -1698,7 +1695,7 @@ mprotect()只把中间一页改为只读
 
 `mmap()` 成功首先表示虚拟地址范围和规则已经建立，并不保证所有物理页已经立即准备完成。
 
-[SOURCE] 本地 Linux `248951ddc14d`：`mm/mmap.c:116-205` 的 `brk`，`mm/mmap.c:280-340` 的 `do_mmap()`，`mm/mmap.c:613-618` 的 `mmap_pgoff`，`mm/mmap.c:1062-1079` 的 `munmap`；`mm/mprotect.c:836-988`；`mm/vma.c:495-600` 的 VMA 拆分实现。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：`mm/mmap.c:116-205` 的 `brk`，`mm/mmap.c:280-340` 的 `do_mmap()`，`mm/mmap.c:613-618` 的 `mmap_pgoff`，`mm/mmap.c:1062-1079` 的 `munmap`；`mm/mprotect.c:836-988`；`mm/vma.c:495-600` 的 VMA 拆分实现。
 
 #### 2.3.7 VMA 如何参与 Page Fault
 
@@ -1793,7 +1790,7 @@ handle_mm_fault()进入合法缺页处理
 
 因此，Page Fault 不等于程序一定出错。它可能只是“VMA 允许访问，但对应 PTE 和物理页尚未准备好”；VMA 合法与 PTE 已经就绪是两件不同的事。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[arch/arm64/mm/fault.c](./2.源码/linux/arch/arm64/mm/fault.c) 第 729～751 行；`mm/mmap_lock.c:496-550`；`mm/memory.c:6417-6425,6651-6716`。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[arch/arm64/mm/fault.c](./2.源码/linux/arch/arm64/mm/fault.c) 第 729～751 行；`mm/mmap_lock.c:496-550`；`mm/memory.c:6417-6425,6651-6716`。
 
 #### 2.3.8 驱动映射为什么也需要 VMA
 
@@ -1805,7 +1802,7 @@ handle_mm_fault()进入合法缺页处理
 void *ptr = mmap(NULL, size, prot, flags, driver_fd, offset);
 ```
 
-这里不是驱动重新实现了一套 `mmap()` 系统调用，而是：
+驱动没有重新实现一套 `mmap()` 系统调用。调用关系是：
 
 ```text
 用户程序调用Linux mmap()
@@ -1856,7 +1853,7 @@ vm_ops->fault
 应该映射普通struct page，还是特殊PFN？
 ```
 
-这些信息只有驱动知道，所以必须通过 VMA 把地址范围、驱动对象和缺页回调关联起来。
+这些信息由驱动掌握，因此 VMA 需要把地址范围、驱动对象和缺页回调关联起来。
 
 假设用户访问：
 
@@ -1969,7 +1966,7 @@ CPU首次访问某页时：
 
 因此，驱动的 `fault` 回调负责解释驱动对象并选择后端页面，通常不直接取得 `pte_t *` 随意修改页表。驱动已经持有普通 `struct page` 时，可以使用 `vmf_insert_page()` 一类接口；驱动只有 PFN，或者处理特殊设备内存时，可以使用 `vmf_insert_pfn()` 一类接口。具体使用限制以及 GEM、TTM 中的实际处理留到后续驱动映射阶段。
 
-[SOURCE] 本地 Linux `248951ddc14d`：`include/linux/fs.h:1921-1935` 定义设备文件的 `mmap` 回调；`mm/internal.h:155-172`、`mm/vma.c:2483-2504` 展示 Linux 调用文件映射钩子的路径；`include/linux/mm_types.h:920-984` 定义 VMA 核心字段；`include/linux/mm.h:783-833,4532-4533,4547-4565` 定义 VMA 操作、`remap_pfn_range()` 和插页接口；`mm/memory.c:2754-2806,3152-3225` 实现按 PFN 插入和范围映射的主要入口，第 5250～5360 行展示普通匿名页由内存管理核心准备并安装 PTE。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：`include/linux/fs.h:1921-1935` 定义设备文件的 `mmap` 回调；`mm/internal.h:155-172`、`mm/vma.c:2483-2504` 展示 Linux 调用文件映射钩子的路径；`include/linux/mm_types.h:920-984` 定义 VMA 核心字段；`include/linux/mm.h:783-833,4532-4533,4547-4565` 定义 VMA 操作、`remap_pfn_range()` 和插页接口；`mm/memory.c:2754-2806,3152-3225` 实现按 PFN 插入和范围映射的主要入口，第 5250～5360 行展示普通匿名页由内存管理核心准备并安装 PTE。
 
 ### 2.4 从 `mm->pgd` 到 `TTBR0_EL1`
 
@@ -2017,7 +2014,7 @@ MMU进行页表遍历时：
 使用根页表的物理地址
 ```
 
-它们不是两张不同的根页表，而是同一块页表内存的两种地址表示：
+这两种地址指向同一块根页表内存：
 
 ```text
 mm->pgd
@@ -2112,7 +2109,7 @@ TTBR0_EL1
 
 > **[BOUNDARY]** 本小节只追踪根页表基地址。ASID 如何区分不同地址空间的 TLB 记录，将在 2.7 节介绍。
 
-[SOURCE] 本地 Linux `248951ddc14d`：`kernel/fork.c:578-587` 分配并保存 `mm->pgd`；`arch/arm64/include/asm/mmu_context.h:56-62` 将 `pgd` 从内核虚拟地址转换为物理地址；`arch/arm64/mm/context.c:349-371` 构造并写入 `TTBR0_EL1`。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：`kernel/fork.c:578-587` 分配并保存 `mm->pgd`；`arch/arm64/include/asm/mmu_context.h:56-62` 将 `pgd` 从内核虚拟地址转换为物理地址；`arch/arm64/mm/context.c:349-371` 构造并写入 `TTBR0_EL1`。
 
 ### 2.5 TLB：缓存地址翻译结果
 
@@ -2209,7 +2206,7 @@ CPU产生VA
              └─ 产生相应的地址翻译或权限异常
 ```
 
-最重要的区别是：
+两者的区别是：
 
 ```text
 TLB Miss ≠ Page Fault
@@ -2257,7 +2254,7 @@ typedef struct {
 
 因此 ASID 与地址空间生命周期绑定；线程共享 `mm_struct` 时，也共享这套 ASID 上下文。
 
-[SOURCE] 本地 Linux `248951ddc14d`：`include/linux/mm_types.h:1302-1305`；[arch/arm64/include/asm/mmu.h](./2.源码/linux/arch/arm64/include/asm/mmu.h) 第 19～28、56 行。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：`include/linux/mm_types.h:1302-1305`；[arch/arm64/include/asm/mmu.h](./2.源码/linux/arch/arm64/include/asm/mmu.h) 第 19～28、56 行。
 
 #### 2.7.2 用户映射通常 `nG = 1`，内核映射通常 `nG = 0`
 
@@ -2287,7 +2284,7 @@ typedef struct {
 #define PTE_NG (1 << 11)
 ```
 
-[SOURCE] 本地 Linux `248951ddc14d`：[arch/arm64/include/asm/pgtable-hwdef.h](./2.源码/linux/arch/arm64/include/asm/pgtable-hwdef.h) 第 164～176 行；[arch/arm64/include/asm/pgtable-prot.h](./2.源码/linux/arch/arm64/include/asm/pgtable-prot.h) 第 53～65 行。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[arch/arm64/include/asm/pgtable-hwdef.h](./2.源码/linux/arch/arm64/include/asm/pgtable-hwdef.h) 第 164～176 行；[arch/arm64/include/asm/pgtable-prot.h](./2.源码/linux/arch/arm64/include/asm/pgtable-prot.h) 第 53～65 行。
 
 > **[BOUNDARY]** ASID 是数量有限的硬件编号，Linux 会在必要时配合 TLB 清理安全复用。本章不展开具体的分配与复用算法。
 
@@ -2302,7 +2299,7 @@ typedef struct {
 
 调度器先处理地址空间，再调用 `switch_to()` 切换寄存器和内核栈。本节只讨论两个普通用户任务之间的切换；内核线程的 `mm = NULL` 和 `active_mm` 已在 2.1.3 节说明。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[kernel/sched/core.c](./2.源码/linux/kernel/sched/core.c) 第 5471～5513 行先处理地址空间，再调用 `switch_to()`。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[kernel/sched/core.c](./2.源码/linux/kernel/sched/core.c) 第 5471～5513 行先处理地址空间，再调用 `switch_to()`。
 
 #### 2.8.1 任务切换不一定切换地址空间
 
@@ -2332,7 +2329,7 @@ CPU改用B的ASID
 
 进程 A 的 non-Global TLB 记录可以暂时保留，因为其中带有 A 的 ASID；CPU 改用 B 的 ASID 后，不会把这些记录当成 B 的地址翻译。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[arch/arm64/include/asm/mmu_context.h](./2.源码/linux/arch/arm64/include/asm/mmu_context.h) 第 236～264 行；[arch/arm64/mm/context.c](./2.源码/linux/arch/arm64/mm/context.c) 第 215～270、349～371 行。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[arch/arm64/include/asm/mmu_context.h](./2.源码/linux/arch/arm64/include/asm/mmu_context.h) 第 236～264 行；[arch/arm64/mm/context.c](./2.源码/linux/arch/arm64/mm/context.c) 第 215～270、349～371 行。
 
 #### 2.8.2 按时间顺序看一次完整切换
 
@@ -2422,7 +2419,7 @@ T4：恢复B的用户现场               │
 
 > **[BOUNDARY]** 图中只展示普通用户进程之间的主线，不展开安全配置和 `current` 指针恢复等实现分支。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[kernel/sched/core.c](./2.源码/linux/kernel/sched/core.c) 第 5471～5513 行展示地址空间切换先于寄存器和栈切换；[arch/arm64/include/asm/ptrace.h](./2.源码/linux/arch/arm64/include/asm/ptrace.h) 第 152～172 行定义 `pt_regs`；[arch/arm64/include/asm/processor.h](./2.源码/linux/arch/arm64/include/asm/processor.h) 第 136～150 行定义 `cpu_context`；[arch/arm64/kernel/entry.S](./2.源码/linux/arch/arm64/kernel/entry.S) 第 197～224、281～304、335～366、813～848 行保存和恢复异常现场与内核切换现场。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[kernel/sched/core.c](./2.源码/linux/kernel/sched/core.c) 第 5471～5513 行展示地址空间切换先于寄存器和栈切换；[arch/arm64/include/asm/ptrace.h](./2.源码/linux/arch/arm64/include/asm/ptrace.h) 第 152～172 行定义 `pt_regs`；[arch/arm64/include/asm/processor.h](./2.源码/linux/arch/arm64/include/asm/processor.h) 第 136～150 行定义 `cpu_context`；[arch/arm64/kernel/entry.S](./2.源码/linux/arch/arm64/kernel/entry.S) 第 197～224、281～304、335～366、813～848 行保存和恢复异常现场与内核切换现场。
 
 ### 2.9 页表修改与 TLB 一致性
 
@@ -2550,7 +2547,7 @@ CPU0修改PTE
 才构成完整的映射更新
 ```
 
-[SOURCE] 本地 Linux `248951ddc14d`：[arch/arm64/include/asm/tlbflush.h](./2.源码/linux/arch/arm64/include/asm/tlbflush.h) 第 280～358 行说明接口语义，第 360～385 行实现全局、本地和按 `mm` 清理，第 623～649 行实现范围与页面清理。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[arch/arm64/include/asm/tlbflush.h](./2.源码/linux/arch/arm64/include/asm/tlbflush.h) 第 280～358 行说明接口语义，第 360～385 行实现全局、本地和按 `mm` 清理，第 623～649 行实现范围与页面清理。
 
 ### 2.10 CPU VA、物理地址、DMA 地址与 GPU VA 的连续性
 
@@ -2640,7 +2637,7 @@ GPU页表 ────────────────┘
 
 > **[BOUNDARY]** IOMMU 如何建立设备地址映射，以及 GEM、TTM 如何创建 GPU VA 映射，将在对应章节展开。本节只建立“连续性属于某一个地址空间”的概念。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[Documentation/core-api/dma-api-howto.rst](./2.源码/linux/Documentation/core-api/dma-api-howto.rst) 第 16～40、75～88 行区分 CPU VA、物理地址和设备 DMA 地址；[Documentation/gpu/amdgpu/amdgpu-glossary.rst](./2.源码/linux/Documentation/gpu/amdgpu/amdgpu-glossary.rst) 第 93～98 行说明 AMDGPU 可以把 VRAM 和系统内存资源映射进 GPU 虚拟地址空间。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[Documentation/core-api/dma-api-howto.rst](./2.源码/linux/Documentation/core-api/dma-api-howto.rst) 第 16～40、75～88 行区分 CPU VA、物理地址和设备 DMA 地址；[Documentation/gpu/amdgpu/amdgpu-glossary.rst](./2.源码/linux/Documentation/gpu/amdgpu/amdgpu-glossary.rst) 第 93～98 行说明 AMDGPU 可以把 VRAM 和系统内存资源映射进 GPU 虚拟地址空间。
 
 ### 2.11 本章总结与源码索引
 
@@ -2677,7 +2674,7 @@ CPU访问VA
                          └─ 失败 → 进入Linux异常处理
 ```
 
-需要记住八个结论：
+本章结论如下：
 
 1. `task_struct` 表示任务，`mm_struct` 表示地址空间，二者不是一一对应。
 2. VMA 描述“这段 VA 应该怎样使用”，页表描述“这个虚拟页当前映射到哪里”。
@@ -2688,23 +2685,23 @@ CPU访问VA
 7. 修改页表后还必须根据情况执行 TLB 无效化和同步。
 8. 连续 CPU VA 可以映射离散 PFN，也不自动等于连续 DMA 地址或连续 GPU VA。
 
-[SOURCE] 本章本地源码索引：
-
-| 主题                        | Linux`248951ddc14d` 源码路径                                                                                                                                                                                                                                                                                           |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 当前任务与`task_struct`   | [arch/arm64/include/asm/current.h](./2.源码/linux/arch/arm64/include/asm/current.h)、[include/linux/sched.h](./2.源码/linux/include/linux/sched.h)                                                                                                                                                                         |
-| `active_mm`               | `Documentation/mm/active_mm.rst`（当前仍在 Git 对象中）、[kernel/sched/core.c](./2.源码/linux/kernel/sched/core.c)                                                                                                                                                                                                      |
-| `mm_struct` 与 VMA        | [include/linux/mm_types.h](./2.源码/linux/include/linux/mm_types.h)、[include/linux/mm.h](./2.源码/linux/include/linux/mm.h)                                                                                                                                                                                               |
-| 地址空间创建与共享          | [kernel/fork.c](./2.源码/linux/kernel/fork.c)                                                                                                                                                                                                                                                                             |
-| Maple Tree 与 VMA 操作      | [mm/mmap.c](./2.源码/linux/mm/mmap.c)、[mm/vma.c](./2.源码/linux/mm/vma.c)、[mm/mprotect.c](./2.源码/linux/mm/mprotect.c)                                                                                                                                                                                                   |
-| VMA 与缺页路径              | [arch/arm64/mm/fault.c](./2.源码/linux/arch/arm64/mm/fault.c)、[mm/mmap_lock.c](./2.源码/linux/mm/mmap_lock.c)、[mm/memory.c](./2.源码/linux/mm/memory.c)                                                                                                                                                                   |
-| ARM64`mm_context_t`       | [arch/arm64/include/asm/mmu.h](./2.源码/linux/arch/arm64/include/asm/mmu.h)                                                                                                                                                                                                                                               |
-| TTBR 与地址空间切换         | [arch/arm64/include/asm/mmu_context.h](./2.源码/linux/arch/arm64/include/asm/mmu_context.h)、[arch/arm64/mm/context.c](./2.源码/linux/arch/arm64/mm/context.c)、[arch/arm64/mm/proc.S](./2.源码/linux/arch/arm64/mm/proc.S)                                                                                                 |
-| 异常入口与任务现场切换      | [arch/arm64/kernel/entry.S](./2.源码/linux/arch/arm64/kernel/entry.S)、[arch/arm64/kernel/process.c](./2.源码/linux/arch/arm64/kernel/process.c)、[arch/arm64/include/asm/processor.h](./2.源码/linux/arch/arm64/include/asm/processor.h)、[arch/arm64/include/asm/ptrace.h](./2.源码/linux/arch/arm64/include/asm/ptrace.h) |
-| ARM64 页表保护位            | [arch/arm64/include/asm/pgtable-hwdef.h](./2.源码/linux/arch/arm64/include/asm/pgtable-hwdef.h)、[arch/arm64/include/asm/pgtable-prot.h](./2.源码/linux/arch/arm64/include/asm/pgtable-prot.h)                                                                                                                             |
-| TLB 无效化                  | [arch/arm64/include/asm/tlbflush.h](./2.源码/linux/arch/arm64/include/asm/tlbflush.h)                                                                                                                                                                                                                                     |
-| CPU VA、物理地址与 DMA 地址 | [Documentation/core-api/dma-api-howto.rst](./2.源码/linux/Documentation/core-api/dma-api-howto.rst)                                                                                                                                                                                                                       |
-| AMDGPU GPU 虚拟地址空间     | [Documentation/gpu/amdgpu/amdgpu-glossary.rst](./2.源码/linux/Documentation/gpu/amdgpu/amdgpu-glossary.rst)                                                                                                                                                                                                               |
+> **[SOURCE]** 本章本地源码索引：
+>
+> | 主题                        | Linux`248951ddc14d` 源码路径                                                                                                                                                                                                                                                                                           |
+> | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+> | 当前任务与`task_struct`   | [arch/arm64/include/asm/current.h](./2.源码/linux/arch/arm64/include/asm/current.h)、[include/linux/sched.h](./2.源码/linux/include/linux/sched.h)                                                                                                                                                                         |
+> | `active_mm`               | `Documentation/mm/active_mm.rst`（当前仍在 Git 对象中）、[kernel/sched/core.c](./2.源码/linux/kernel/sched/core.c)                                                                                                                                                                                                      |
+> | `mm_struct` 与 VMA        | [include/linux/mm_types.h](./2.源码/linux/include/linux/mm_types.h)、[include/linux/mm.h](./2.源码/linux/include/linux/mm.h)                                                                                                                                                                                               |
+> | 地址空间创建与共享          | [kernel/fork.c](./2.源码/linux/kernel/fork.c)                                                                                                                                                                                                                                                                             |
+> | Maple Tree 与 VMA 操作      | [mm/mmap.c](./2.源码/linux/mm/mmap.c)、[mm/vma.c](./2.源码/linux/mm/vma.c)、[mm/mprotect.c](./2.源码/linux/mm/mprotect.c)                                                                                                                                                                                                   |
+> | VMA 与缺页路径              | [arch/arm64/mm/fault.c](./2.源码/linux/arch/arm64/mm/fault.c)、[mm/mmap_lock.c](./2.源码/linux/mm/mmap_lock.c)、[mm/memory.c](./2.源码/linux/mm/memory.c)                                                                                                                                                                   |
+> | ARM64`mm_context_t`       | [arch/arm64/include/asm/mmu.h](./2.源码/linux/arch/arm64/include/asm/mmu.h)                                                                                                                                                                                                                                               |
+> | TTBR 与地址空间切换         | [arch/arm64/include/asm/mmu_context.h](./2.源码/linux/arch/arm64/include/asm/mmu_context.h)、[arch/arm64/mm/context.c](./2.源码/linux/arch/arm64/mm/context.c)、[arch/arm64/mm/proc.S](./2.源码/linux/arch/arm64/mm/proc.S)                                                                                                 |
+> | 异常入口与任务现场切换      | [arch/arm64/kernel/entry.S](./2.源码/linux/arch/arm64/kernel/entry.S)、[arch/arm64/kernel/process.c](./2.源码/linux/arch/arm64/kernel/process.c)、[arch/arm64/include/asm/processor.h](./2.源码/linux/arch/arm64/include/asm/processor.h)、[arch/arm64/include/asm/ptrace.h](./2.源码/linux/arch/arm64/include/asm/ptrace.h) |
+> | ARM64 页表保护位            | [arch/arm64/include/asm/pgtable-hwdef.h](./2.源码/linux/arch/arm64/include/asm/pgtable-hwdef.h)、[arch/arm64/include/asm/pgtable-prot.h](./2.源码/linux/arch/arm64/include/asm/pgtable-prot.h)                                                                                                                             |
+> | TLB 无效化                  | [arch/arm64/include/asm/tlbflush.h](./2.源码/linux/arch/arm64/include/asm/tlbflush.h)                                                                                                                                                                                                                                     |
+> | CPU VA、物理地址与 DMA 地址 | [Documentation/core-api/dma-api-howto.rst](./2.源码/linux/Documentation/core-api/dma-api-howto.rst)                                                                                                                                                                                                                       |
+> | AMDGPU GPU 虚拟地址空间     | [Documentation/gpu/amdgpu/amdgpu-glossary.rst](./2.源码/linux/Documentation/gpu/amdgpu/amdgpu-glossary.rst)                                                                                                                                                                                                               |
 
 第 3 章将从 `PTE → PFN → 物理页` 继续，说明 Linux 如何用 `struct page` 描述和管理物理页。
 
@@ -2800,7 +2797,7 @@ bit 47                                                         bit 12  bit 11   
 
 PFN 只是物理页框编号，不是以字节为单位的 PA，也不是可以直接解引用的 C 指针。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[include/linux/pfn.h](./2.源码/linux/include/linux/pfn.h) 第 9～13 行定义 PFN 对齐以及 PFN 与物理地址的转换宏。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[include/linux/pfn.h](./2.源码/linux/include/linux/pfn.h) 第 9～13 行定义 PFN 对齐以及 PFN 与物理地址的转换宏。
 
 ### 3.2 `struct page` 是物理页的管理档案，不是页面数据
 
@@ -2922,7 +2919,7 @@ private            → 当前用途自行解释的附加数据
 页面属于特殊设备类型   	→ 这块空间保存设备相关状态
 ```
 
-这些用途不会在同一时刻全部成立，所以不能认为 union 中列出的所有成员一直同时有效。本章不需要记忆 union 的嵌套布局。
+这些用途不会在同一时刻全部成立，因此不能认为 union 中列出的所有成员一直同时有效。本章不展开 union 的嵌套布局。
 
 最后还要区分两个地址：
 
@@ -2936,7 +2933,7 @@ PA 0x384000
 
 `struct page *` 不是该物理页的 PA，也不是指向页面实际数据的用户地址。内核怎样从 `struct page *` 得到可以访问页面数据的内核地址，将在 3.4 节说明。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[include/linux/mm_types.h](./2.源码/linux/include/linux/mm_types.h) 第 80～202 行定义 `struct page`，第 359～376 行说明 `mapping`、`index`、`_mapcount` 和 `_refcount` 的用途；[include/linux/page-flags.h](./2.源码/linux/include/linux/page-flags.h) 第 51～63、93～112 行说明典型页面状态位，第 692～714 行说明匿名页的 `mapping` 编码；[include/linux/mm.h](./2.源码/linux/include/linux/mm.h) 第 1892～1923 行定义 `folio_mapcount()` 的语义；[include/linux/page_ref.h](./2.源码/linux/include/linux/page_ref.h) 第 65～105 行说明页面引用计数及其典型使用者。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[include/linux/mm_types.h](./2.源码/linux/include/linux/mm_types.h) 第 80～202 行定义 `struct page`，第 359～376 行说明 `mapping`、`index`、`_mapcount` 和 `_refcount` 的用途；[include/linux/page-flags.h](./2.源码/linux/include/linux/page-flags.h) 第 51～63、93～112 行说明典型页面状态位，第 692～714 行说明匿名页的 `mapping` 编码；[include/linux/mm.h](./2.源码/linux/include/linux/mm.h) 第 1892～1923 行定义 `folio_mapcount()` 的语义；[include/linux/page_ref.h](./2.源码/linux/include/linux/page_ref.h) 第 65～105 行说明页面引用计数及其典型使用者。
 
 ### 3.3 PFN 与 `struct page` 如何互相定位
 
@@ -2971,7 +2968,7 @@ Linux 支持不同的物理内存模型，所以 `pfn_to_page()` 的底层计算
 #define __page_to_pfn(page) ((unsigned long)((page) - vmemmap))
 ```
 
-本章不需要记忆具体内存模型，只需记住稳定的抽象关系：
+不同内存模型的具体实现并不相同，但都遵循以下抽象关系：
 
 ```text
 PFN N
@@ -3002,7 +2999,7 @@ struct page
 
 > **[BOUNDARY]** 本章后续都假设示例 PFN 对应 Linux 正常管理的系统内存页。设备内存、`ZONE_DEVICE` 和无普通 `struct page` 的特殊 PFN 映射留到 GPU 内存阶段讨论。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[include/asm-generic/memory_model.h](./2.源码/linux/include/asm-generic/memory_model.h) 第 43～87 行定义 `SPARSEMEM_VMEMMAP` 下的转换以及通用的 `page_to_pfn()`、`pfn_to_page()`、`page_to_phys()`；[arch/arm64/include/asm/pgtable.h](./2.源码/linux/arch/arm64/include/asm/pgtable.h) 第 136～141 行定义 `pte_pfn()`、`pfn_pte()` 和 `pte_page()`；[include/linux/mmzone.h](./2.源码/linux/include/linux/mmzone.h) 第 2247～2253 行说明 `pfn_valid()` 的边界。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[include/asm-generic/memory_model.h](./2.源码/linux/include/asm-generic/memory_model.h) 第 43～87 行定义 `SPARSEMEM_VMEMMAP` 下的转换以及通用的 `page_to_pfn()`、`pfn_to_page()`、`page_to_phys()`；[arch/arm64/include/asm/pgtable.h](./2.源码/linux/arch/arm64/include/asm/pgtable.h) 第 136～141 行定义 `pte_pfn()`、`pfn_pte()` 和 `pte_page()`；[include/linux/mmzone.h](./2.源码/linux/include/linux/mmzone.h) 第 2247～2253 行说明 `pfn_valid()` 的边界。
 
 ### 3.4 内核怎样访问物理页中的实际数据
 
@@ -3053,7 +3050,7 @@ void *address = page_address(page);
 
 > **[BOUNDARY]** ARM64 本章只使用“普通系统内存页通常具有 linear-map 内核地址”这一主线。linear map 不是 DMA 映射，驱动不能用 `virt_to_phys()` 或 `page_to_virt()` 代替 DMA API 获得设备地址。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[arch/arm64/include/asm/memory.h](./2.源码/linux/arch/arm64/include/asm/memory.h) 第 37～45、334～375、397～425 行定义 linear map 范围以及物理地址、内核虚拟地址和 `struct page` 的转换；[include/linux/mm.h](./2.源码/linux/include/linux/mm.h) 第 119～120、3005～3018 行定义 `page_to_virt()`、`lowmem_page_address()`、`page_address()` 和 `folio_address()`；[include/linux/highmem-internal.h](./2.源码/linux/include/linux/highmem-internal.h) 第 41～50、186～198 行展示 high memory 与普通页面取得内核地址时的分支。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[arch/arm64/include/asm/memory.h](./2.源码/linux/arch/arm64/include/asm/memory.h) 第 37～45、334～375、397～425 行定义 linear map 范围以及物理地址、内核虚拟地址和 `struct page` 的转换；[include/linux/mm.h](./2.源码/linux/include/linux/mm.h) 第 119～120、3005～3018 行定义 `page_to_virt()`、`lowmem_page_address()`、`page_address()` 和 `folio_address()`；[include/linux/highmem-internal.h](./2.源码/linux/include/linux/highmem-internal.h) 第 41～50、186～198 行展示 high memory 与普通页面取得内核地址时的分支。
 
 ### 3.5 基础页、复合页与 folio
 
@@ -3089,7 +3086,7 @@ folio 不会替代 PTE 完成硬件地址翻译。即使多个基础页作为一
 
 > **[BOUNDARY]** 本章只建立 `struct page` 与 folio 的关系，避免后续阅读现代 Linux MM 源码时误以为它们是两个互不相关的页面系统。透明大页、HugeTLB、复合页字段以及大 folio 的分配策略留到需要时再学习。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[include/linux/mm_types.h](./2.源码/linux/include/linux/mm_types.h) 第 359～402 行说明 folio 的范围、对齐和连续性，第 402～514 行定义 `struct folio` 并通过 `FOLIO_MATCH` 校验它与 `struct page` 的公共字段布局。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[include/linux/mm_types.h](./2.源码/linux/include/linux/mm_types.h) 第 359～402 行说明 folio 的范围、对齐和连续性，第 402～514 行定义 `struct folio` 并通过 `FOLIO_MATCH` 校验它与 `struct page` 的公共字段布局。
 
 ### 3.6 VMA、PTE、PFN、`struct page` 各自记录什么
 
@@ -3151,7 +3148,7 @@ mm_struct
 
 PFN 本身不编码“这是堆页还是页表页”。页面用途由 Linux 的分配关系、页面标志以及 `struct page` 中当前有效的状态共同表达。同一个物理页框释放后可以在另一个时刻被重新分配为其他用途，但不能因为它同时被多个进程映射，就认为它同时具有多个主要用途。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[include/linux/mm_types.h](./2.源码/linux/include/linux/mm_types.h) 第 83～186 行展示 `struct page` 针对 Page Cache、匿名页、空闲页和其他页面类型复用不同字段；[include/linux/mm.h](./2.源码/linux/include/linux/mm.h) 第 1892～1923 行说明 mapcount 表示 folio 被当前有效用户页表项映射的次数；页表页保存 descriptor 的结构已在 1.3 节结合 ARM64 页表源码说明。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[include/linux/mm_types.h](./2.源码/linux/include/linux/mm_types.h) 第 83～186 行展示 `struct page` 针对 Page Cache、匿名页、空闲页和其他页面类型复用不同字段；[include/linux/mm.h](./2.源码/linux/include/linux/mm.h) 第 1892～1923 行说明 mapcount 表示 folio 被当前有效用户页表项映射的次数；页表页保存 descriptor 的结构已在 1.3 节结合 ARM64 页表源码说明。
 
 ### 3.7 正向映射与反向映射
 
@@ -3195,7 +3192,7 @@ struct page / folio
                               mm->pgd → 页表 → 检查PTE
 ```
 
-这里最需要记住的是：`struct page` 中没有唯一的 `mm` 指针，因为同一个物理页可以被多个地址空间映射。rmap 每找到一个候选 VMA，就可以通过下面这个成员取得该 VMA 所属的地址空间：
+`struct page` 中没有唯一的 `mm` 指针，因为同一个物理页可以被多个地址空间映射。rmap 每找到一个候选 VMA，就可以通过下面这个成员取得该 VMA 所属的地址空间：
 
 ```c
 struct mm_struct *mm = vma->vm_mm;
@@ -3209,7 +3206,7 @@ PFN 900对应的struct page
    └─→ VMA_B → vm_mm → mm_B → 检查PTE_B
 ```
 
-`anon_vma_chain` 只需要理解为匿名页与相关 VMA 之间的连接，不必在本章追踪它内部使用链表还是区间树。也不是所有 VMA 都挂到同一个 `anon_vma` 上：所有 VMA 本来就由各自 `mm_struct` 的 `mm_mt` 管理；`anon_vma` 和 `address_space->i_mmap` 是为了从页面反向寻找 VMA 而建立的额外索引。
+在本章中，`anon_vma_chain` 表示匿名页与相关 VMA 之间的连接，不展开其内部使用链表还是区间树。并非所有 VMA 都挂到同一个 `anon_vma` 上：所有 VMA 原本就由各自 `mm_struct` 的 `mm_mt` 管理；`anon_vma` 和 `address_space->i_mmap` 是为从页面反向寻找 VMA 而建立的额外索引。
 
 通过这些索引找到的仍然只是候选 VMA。页面可能尚未建立 PTE、已经换出，或者经过 COW 后改为指向其他 PFN，因此内核最后必须使用 `vma->vm_mm` 和候选 VA 检查真实页表，确认 PTE 是否仍指向目标页面。
 
@@ -3221,11 +3218,11 @@ PFN 900对应的struct page
 | 页表遍历  | 某个`mm_struct` 和 VA | 当前 PTE 以及 PFN            |
 | rmap      | 某个物理页或 folio      | 候选 VMA、所属 mm 和真实 PTE |
 
-rmap 使 Linux 能够在页面回收、迁移或解除映射时找到受影响的用户页表。例如源码提供 `try_to_unmap()`、`try_to_migrate()` 和 `folio_referenced()` 等入口。不过，本章只需要掌握查找方向，不展开匿名页红黑树、页表锁和遍历算法。
+rmap 使 Linux 能够在页面回收、迁移或解除映射时找到受影响的用户页表。例如，源码提供 `try_to_unmap()`、`try_to_migrate()` 和 `folio_referenced()` 等入口。本章只说明查找方向，不展开匿名页红黑树、页表锁和遍历算法。
 
 > **[BOUNDARY]** 这个关系对后续 GPU 学习也有帮助：当后端页面准备迁移或失效时，只知道 PFN 并不够，内核还必须协调仍然引用该页面的 CPU 映射和设备映射。GPU 映射不属于 CPU 用户页表，不能仅靠 CPU rmap 找到；驱动如何跟踪 CPU 映射变化并处理 GPU 映射，留到 HMM 与 SVM 阶段说明。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[include/linux/rmap.h](./2.源码/linux/include/linux/rmap.h) 第 32～88 行定义 `anon_vma` 与 `anon_vma_chain`；[include/linux/fs.h](./2.源码/linux/include/linux/fs.h) 第 457～485 行定义文件 `address_space` 中的 `i_mmap`；[include/linux/mm_types.h](./2.源码/linux/include/linux/mm_types.h) 第 922～983 行定义 VMA 的 `vm_mm`、`anon_vma`、`vm_pgoff` 和 `vm_file`；[mm/rmap.c](./2.源码/linux/mm/rmap.c) 第 2964～3010、3031～3099 行分别从匿名页和文件页查找候选 VMA；[mm/page_vma_mapped.c](./2.源码/linux/mm/page_vma_mapped.c) 第 180～280 行使用 VMA 所属 `mm_struct` 和候选 VA 检查真实页表。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[include/linux/rmap.h](./2.源码/linux/include/linux/rmap.h) 第 32～88 行定义 `anon_vma` 与 `anon_vma_chain`；[include/linux/fs.h](./2.源码/linux/include/linux/fs.h) 第 457～485 行定义文件 `address_space` 中的 `i_mmap`；[include/linux/mm_types.h](./2.源码/linux/include/linux/mm_types.h) 第 922～983 行定义 VMA 的 `vm_mm`、`anon_vma`、`vm_pgoff` 和 `vm_file`；[mm/rmap.c](./2.源码/linux/mm/rmap.c) 第 2964～3010、3031～3099 行分别从匿名页和文件页查找候选 VMA；[mm/page_vma_mapped.c](./2.源码/linux/mm/page_vma_mapped.c) 第 180～280 行使用 VMA 所属 `mm_struct` 和候选 VA 检查真实页表。
 
 ### 3.8 引用、页表映射、设备固定与页面生命周期
 
@@ -3301,7 +3298,7 @@ rmap 使 Linux 能够在页面回收、迁移或解除映射时找到受影响�
 
 页面可能没有任何用户映射，却仍被内核、Page Cache 或设备持有；也可能被多个用户 PTE 共享。最终能否释放，必须由拥有该页面的子系统按照引用、映射和固定关系共同判断，而不能只查看其中一个计数。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[include/linux/page_ref.h](./2.源码/linux/include/linux/page_ref.h) 第 65～68 行通过 `_refcount` 取得页面引用计数；[include/linux/mm_types.h](./2.源码/linux/include/linux/mm_types.h) 第 166～185 行说明 `_mapcount` 与 `_refcount` 的职责；[Documentation/core-api/pin_user_pages.rst](./2.源码/linux/Documentation/core-api/pin_user_pages.rst) 第 18～55 行区分普通页面引用与面向 DMA 的页面固定接口。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[include/linux/page_ref.h](./2.源码/linux/include/linux/page_ref.h) 第 65～68 行通过 `_refcount` 取得页面引用计数；[include/linux/mm_types.h](./2.源码/linux/include/linux/mm_types.h) 第 166～185 行说明 `_mapcount` 与 `_refcount` 的职责；[Documentation/core-api/pin_user_pages.rst](./2.源码/linux/Documentation/core-api/pin_user_pages.rst) 第 18～55 行区分普通页面引用与面向 DMA 的页面固定接口。
 
 ### 3.9 用 `PFN 900` 串起完整关系
 
@@ -3355,7 +3352,7 @@ void *kernel_page_va = page_address(page); /* 内核访问该页数据的VA */
              = 0x384234
 ```
 
-不能把软件管理对象和硬件翻译画成一条连续访问路径。下面分成三个视角。
+软件管理对象和硬件翻译不是一条连续访问路径，需要分成三个视角。
 
 第一，首次缺页时，Linux 使用软件管理对象准备映射：
 
@@ -3458,7 +3455,7 @@ page_address(page) + 0x234
 
 ### 3.10 本章总结与源码索引
 
-本章需要记住九个结论：
+本章结论如下：
 
 1. PA 是字节地址，PFN 是物理页框编号，页内 offset 在地址翻译前后保持不变。
 2. `struct page` 是物理页的管理元数据，不是物理页数据本身。
@@ -3491,19 +3488,19 @@ PFN → struct page
        └─ rmap帮助反查用户映射
 ```
 
-[SOURCE] 本章本地源码索引：
-
-| 主题                       | Linux`248951ddc14d` 源码路径                                                                                                                                                                                               |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| PFN 与物理地址             | [include/linux/pfn.h](./2.源码/linux/include/linux/pfn.h)                                                                                                                                                                     |
-| `struct page` 与 folio   | [include/linux/mm_types.h](./2.源码/linux/include/linux/mm_types.h)                                                                                                                                                           |
-| PFN 与`struct page` 转换 | [include/asm-generic/memory_model.h](./2.源码/linux/include/asm-generic/memory_model.h)                                                                                                                                       |
-| ARM64 PTE、PFN 与页面      | [arch/arm64/include/asm/pgtable.h](./2.源码/linux/arch/arm64/include/asm/pgtable.h)                                                                                                                                           |
-| ARM64 linear map           | [arch/arm64/include/asm/memory.h](./2.源码/linux/arch/arm64/include/asm/memory.h)、[include/linux/mm.h](./2.源码/linux/include/linux/mm.h)、[include/linux/highmem-internal.h](./2.源码/linux/include/linux/highmem-internal.h) |
-| PFN 有效性边界             | [include/linux/mmzone.h](./2.源码/linux/include/linux/mmzone.h)                                                                                                                                                               |
-| 反向映射                   | [include/linux/rmap.h](./2.源码/linux/include/linux/rmap.h)、[include/linux/fs.h](./2.源码/linux/include/linux/fs.h)                                                                                                           |
-| 页面引用                   | [include/linux/page_ref.h](./2.源码/linux/include/linux/page_ref.h)                                                                                                                                                           |
-| 用户页面固定               | [Documentation/core-api/pin_user_pages.rst](./2.源码/linux/Documentation/core-api/pin_user_pages.rst)                                                                                                                         |
+> **[SOURCE]** 本章本地源码索引：
+>
+> | 主题                       | Linux`248951ddc14d` 源码路径                                                                                                                                                                                               |
+> | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+> | PFN 与物理地址             | [include/linux/pfn.h](./2.源码/linux/include/linux/pfn.h)                                                                                                                                                                     |
+> | `struct page` 与 folio   | [include/linux/mm_types.h](./2.源码/linux/include/linux/mm_types.h)                                                                                                                                                           |
+> | PFN 与`struct page` 转换 | [include/asm-generic/memory_model.h](./2.源码/linux/include/asm-generic/memory_model.h)                                                                                                                                       |
+> | ARM64 PTE、PFN 与页面      | [arch/arm64/include/asm/pgtable.h](./2.源码/linux/arch/arm64/include/asm/pgtable.h)                                                                                                                                           |
+> | ARM64 linear map           | [arch/arm64/include/asm/memory.h](./2.源码/linux/arch/arm64/include/asm/memory.h)、[include/linux/mm.h](./2.源码/linux/include/linux/mm.h)、[include/linux/highmem-internal.h](./2.源码/linux/include/linux/highmem-internal.h) |
+> | PFN 有效性边界             | [include/linux/mmzone.h](./2.源码/linux/include/linux/mmzone.h)                                                                                                                                                               |
+> | 反向映射                   | [include/linux/rmap.h](./2.源码/linux/include/linux/rmap.h)、[include/linux/fs.h](./2.源码/linux/include/linux/fs.h)                                                                                                           |
+> | 页面引用                   | [include/linux/page_ref.h](./2.源码/linux/include/linux/page_ref.h)                                                                                                                                                           |
+> | 用户页面固定               | [Documentation/core-api/pin_user_pages.rst](./2.源码/linux/Documentation/core-api/pin_user_pages.rst)                                                                                                                         |
 
 ## 4. Linux 内存申请接口的职责边界
 
@@ -3601,7 +3598,7 @@ PFN 903 → [0x387000, 0x388000)
 
 `order = 9` 表示获得 512 个连续 4 KiB 物理页，但这并不自动建立 2 MiB PMD Block 映射。物理页分配和页表描述符安装是两件不同的事。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[include/linux/gfp.h](./2.源码/linux/include/linux/gfp.h) 第 331～396 行定义 `alloc_pages()`、`alloc_page()` 及释放接口；[mm/page_alloc.c](./2.源码/linux/mm/page_alloc.c) 第 5402～5449 行说明 `alloc_pages()` 与 `__free_pages()`、`__get_free_pages()` 与 `free_pages()` 的配对关系。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[include/linux/gfp.h](./2.源码/linux/include/linux/gfp.h) 第 331～396 行定义 `alloc_pages()`、`alloc_page()` 及释放接口；[mm/page_alloc.c](./2.源码/linux/mm/page_alloc.c) 第 5402～5449 行说明 `alloc_pages()` 与 `__free_pages()`、`__get_free_pages()` 与 `free_pages()` 的配对关系。
 
 ### 4.3 `kmalloc()` 与 `vmalloc()`：都返回内核 VA，但连续性不同
 
@@ -3668,7 +3665,7 @@ VA连续，PFN可以离散
 | `kmalloc()` | 连续              | 连续       | 内核对象、较小缓冲区           |
 | `vmalloc()` | 连续              | 可以离散   | 不要求物理连续的较大内核缓冲区 |
 
-常见变体只需认识下面三个：
+常见变体有三个：
 
 | 接口           | 与基础接口的区别                                    | 释放接口     |
 | -------------- | --------------------------------------------------- | ------------ |
@@ -3678,7 +3675,7 @@ VA连续，PFN可以离散
 
 `kmalloc()` 返回的只是 CPU 使用的内核 VA，并不会自动产生设备可用的 DMA 地址。`vmalloc()` 的底层页面可能离散，因此也不能把返回指针当成一段连续 PA。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[Documentation/core-api/memory-allocation.rst](./2.源码/linux/Documentation/core-api/memory-allocation.rst) 第 132～186 行比较 `kmalloc()`、`vmalloc()`、`kvmalloc()` 及释放接口；[mm/vmalloc.c](./2.源码/linux/mm/vmalloc.c) 第 4165～4223 行说明 `vmalloc()`、`vzalloc()` 分配页面并建立连续内核 VA；[include/linux/slab.h](./2.源码/linux/include/linux/slab.h) 第 1288～1400 行定义 `kzalloc()`、`kvmalloc()` 和 `kvfree()`。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[Documentation/core-api/memory-allocation.rst](./2.源码/linux/Documentation/core-api/memory-allocation.rst) 第 132～186 行比较 `kmalloc()`、`vmalloc()`、`kvmalloc()` 及释放接口；[mm/vmalloc.c](./2.源码/linux/mm/vmalloc.c) 第 4165～4223 行说明 `vmalloc()`、`vzalloc()` 分配页面并建立连续内核 VA；[include/linux/slab.h](./2.源码/linux/include/linux/slab.h) 第 1288～1400 行定义 `kzalloc()`、`kvmalloc()` 和 `kvfree()`。
 
 ### 4.4 DMA 地址是设备视角的地址
 
@@ -3716,7 +3713,7 @@ CPU页表
 
 Linux 使用 `dma_addr_t` 保存 DMA API 返回的设备地址。驱动应该把该地址交给设备，而不是自行把 CPU 指针转换成物理地址。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[Documentation/core-api/dma-api-howto.rst](./2.源码/linux/Documentation/core-api/dma-api-howto.rst) 第 40～115 行区分 CPU VA、CPU PA、总线地址和 IOMMU 翻译；[include/linux/dma-mapping.h](./2.源码/linux/include/linux/dma-mapping.h) 第 107～116 行说明 `dma_addr_t` 保存平台有效的 DMA 或总线地址。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[Documentation/core-api/dma-api-howto.rst](./2.源码/linux/Documentation/core-api/dma-api-howto.rst) 第 40～115 行区分 CPU VA、CPU PA、总线地址和 IOMMU 翻译；[include/linux/dma-mapping.h](./2.源码/linux/include/linux/dma-mapping.h) 第 107～116 行说明 `dma_addr_t` 保存平台有效的 DMA 或总线地址。
 
 ### 4.5 `dma_alloc_coherent()`：申请内存并取得 DMA 地址
 
@@ -3892,7 +3889,7 @@ dma_free_coherent(dev, size, cpu_addr, dma_handle);
 
 其中 `dev` 和 `size` 必须与分配时一致，两个地址也必须使用该次分配返回的原值。`dma_free_coherent()` 同时解除相应 DMA 资源并释放缓冲区；这类分配不使用 `dma_unmap_*()` 释放。
 
-使用 `GFP_KERNEL` 表示这次分配允许睡眠，适合普通进程上下文。本章不展开其他 GFP 组合，只需要知道分配上下文必须与 GFP 选择相符。
+使用 `GFP_KERNEL` 表示这次分配允许睡眠，适合普通进程上下文。本章不展开其他 GFP 组合；分配上下文必须与 GFP 选择相符。
 
 #### 4.5.5 适用范围
 
@@ -3909,11 +3906,11 @@ DMA描述符
 
 > **[BOUNDARY]** `dma_alloc_coherent()` 是通用设备 DMA 接口，不代表大型 GPU 缓冲对象都由它分配。GPU 缓冲对象还会组合 system RAM、VRAM、SG 表、GPU VA 和放置策略；本节只建立 coherent DMA 缓冲区的通用使用模型。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[include/linux/dma-mapping.h](./2.源码/linux/include/linux/dma-mapping.h) 第 614～624 行定义 `dma_alloc_coherent()` 和 `dma_free_coherent()`，第 641～646 行定义 `dma_set_mask_and_coherent()`；[kernel/dma/mapping.c](./2.源码/linux/kernel/dma/mapping.c) 第 625～696 行展示 coherent 分配和释放如何选择设备专用区域、direct DMA、IOMMU 或平台 DMA 操作；[Documentation/core-api/dma-api-howto.rst](./2.源码/linux/Documentation/core-api/dma-api-howto.rst) 第 201～235 行说明 DMA mask，第 348～390 行区分 coherent 的可见性与访问顺序，第 420～464 行说明分配、返回值和配对释放，第 511～554 行说明 DMA 方向；[Documentation/memory-barriers.txt](./2.源码/linux/Documentation/memory-barriers.txt) 第 1914～1955 行说明 `dma_rmb()`、`dma_wmb()` 与 CPU—设备共享内存的顺序保证。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[include/linux/dma-mapping.h](./2.源码/linux/include/linux/dma-mapping.h) 第 614～624 行定义 `dma_alloc_coherent()` 和 `dma_free_coherent()`，第 641～646 行定义 `dma_set_mask_and_coherent()`；[kernel/dma/mapping.c](./2.源码/linux/kernel/dma/mapping.c) 第 625～696 行展示 coherent 分配和释放如何选择设备专用区域、direct DMA、IOMMU 或平台 DMA 操作；[Documentation/core-api/dma-api-howto.rst](./2.源码/linux/Documentation/core-api/dma-api-howto.rst) 第 201～235 行说明 DMA mask，第 348～390 行区分 coherent 的可见性与访问顺序，第 420～464 行说明分配、返回值和配对释放，第 511～554 行说明 DMA 方向；[Documentation/memory-barriers.txt](./2.源码/linux/Documentation/memory-barriers.txt) 第 1914～1955 行说明 `dma_rmb()`、`dma_wmb()` 与 CPU—设备共享内存的顺序保证。
 
 ### 4.6 `dma_map_*()`：为已有内存建立 DMA 映射
 
-这里的“已有内存”不是泛指机器中已经安装了 RAM，而是说：在调用 `dma_map_*()` 之前，驱动或其他内核子系统已经通过别的接口取得了用于存放数据的缓冲区或物理页。例如：
+这里的“已有内存”是指：调用 `dma_map_*()` 前，驱动或其他内核子系统已经通过其他接口取得用于存放数据的缓冲区或物理页。例如：
 
 ```text
 kmalloc()返回的内核缓冲区
@@ -4036,7 +4033,7 @@ dma_addr = dma_map_page(dev, page, offset, size, DMA_TO_DEVICE);
 
 > **[BOUNDARY]** DMA 层在实现映射时可能建立 IOMMU 页表、执行缓存维护，或者在受限平台上使用临时转换资源。“`dma_map_*()` 不申请数据内存”指的是它不会为驱动创建一块新的、用来替代原缓冲区的业务数据对象。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[include/linux/dma-mapping.h](./2.源码/linux/include/linux/dma-mapping.h) 第 603～608 行定义 `dma_map_single/page/sg()` 与解除映射接口；[Documentation/core-api/dma-api-howto.rst](./2.源码/linux/Documentation/core-api/dma-api-howto.rst) 第 119～143 行说明可用于 DMA 的普通内核内存及 `vmalloc()` 边界，第 511～554 行定义 DMA 方向，第 565～676 行给出 single、page、SG 映射及配对解除映射规则。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[include/linux/dma-mapping.h](./2.源码/linux/include/linux/dma-mapping.h) 第 603～608 行定义 `dma_map_single/page/sg()` 与解除映射接口；[Documentation/core-api/dma-api-howto.rst](./2.源码/linux/Documentation/core-api/dma-api-howto.rst) 第 119～143 行说明可用于 DMA 的普通内核内存及 `vmalloc()` 边界，第 511～554 行定义 DMA 方向，第 565～676 行给出 single、page、SG 映射及配对解除映射规则。
 
 ### 4.7 三类看起来像“申请内存”、实际不是的接口
 
@@ -4065,7 +4062,7 @@ dma_addr = dma_map_page(dev, page, offset, size, DMA_TO_DEVICE);
 
 `remap_pfn_range()` 则把已有 PFN 暴露到用户 VMA。驱动如何选择它、`vmf_insert_page()` 或 fault 回调，留到 GPU 驱动用户映射阶段。
 
-[SOURCE] 本地 Linux `248951ddc14d`：[arch/arm64/include/asm/io.h](./2.源码/linux/arch/arm64/include/asm/io.h) 第 264～289 行定义 `ioremap()`；[mm/gup.c](./2.源码/linux/mm/gup.c) 第 3359～3388 行说明 `pin_user_pages()` 为设备固定用户页面并要求使用 unpin 接口释放；[include/linux/mm.h](./2.源码/linux/include/linux/mm.h) 第 4532～4534 行声明 `remap_pfn_range()`。
+> **[SOURCE]** 本地 Linux `248951ddc14d`：[arch/arm64/include/asm/io.h](./2.源码/linux/arch/arm64/include/asm/io.h) 第 264～289 行定义 `ioremap()`；[mm/gup.c](./2.源码/linux/mm/gup.c) 第 3359～3388 行说明 `pin_user_pages()` 为设备固定用户页面并要求使用 unpin 接口释放；[include/linux/mm.h](./2.源码/linux/include/linux/mm.h) 第 4532～4534 行声明 `remap_pfn_range()`。
 
 ### 4.8 用同一个 16 KiB 需求完成比较
 
@@ -4100,7 +4097,7 @@ dma_alloc_coherent(dev, 16 KiB, ...)
 | 驱动申请 coherent DMA 缓冲区 | `dma_alloc_coherent()` | CPU 地址和 DMA 地址 | DMA 地址必然等于 CPU PA     |
 | 驱动让设备访问已有页面       | `dma_map_page/sg()`    | DMA 地址或 DMA 段   | 新页面被分配                |
 
-最核心的判断不是“申请了多少字节”，而是“调用者需要哪一种对象和哪一种地址”。
+选择接口时，应先判断调用者需要哪类对象和哪类地址，不能只看申请的字节数。
 
 ### 4.9 从 Linux 内存接口过渡到 GPU 缓冲对象
 
@@ -4137,7 +4134,7 @@ GPU缓冲对象
 
 ### 4.10 本章总结与源码索引
 
-本章需要记住八个结论：
+本章结论如下：
 
 1. “申请 16 KiB”不能确定返回的是哪类对象，必须先看调用者和接口。
 2. `alloc_pages()` 返回 `struct page *`；`order` 决定连续基础页数量。

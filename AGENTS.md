@@ -2,9 +2,9 @@
 
 ## Project Structure & Module Organization
 
-This repository is a Markdown knowledge base about Linux, AMD GPUs, memory management, and command submission. Every canonical document currently lives at the repository root; there are no separate `src/`, `test/`, or asset directories. The numbered files form a reading sequence: `1. 总索引：一个进程的 GPU 完整旅程.md` is the navigation hub, followed by focused chapters such as `2. 常规内存机制…md`, `5. AMD 队列提交…md`, and `9. AMD SVM…md`.
+本仓库是关于 Linux、AMD GPU、内存管理和命令提交的 Markdown 知识库。根目录下以 `NN_主题.md` 命名的文件是当前学习主线，例如 `01_Linux 内存管理基础.md` 和 `02_GPU 内存管理基础.md`；`1.笔记` 目录只保存参考学习文档，`2.源码` 保存笔记引用的固定源码基线，`tools` 保存文档自检脚本。
 
-Add a new topic as a numbered root-level Markdown file using the existing pattern, for example `12. GPU 中断与故障恢复.md`. Update the index when the new topic changes the recommended reading path or a topic table.
+新增学习阶段时，在根目录创建下一个连续编号的 Markdown 文件，例如 `03_主题名称.md`。开始新阶段前，先按下文流程检查 `待补充的知识点.md`；不要把 `1.笔记` 中旧式的 `1. 标题.md` 命名继续用于当前学习主线。
 
 ## Build, Test, and Development Commands
 
@@ -26,13 +26,53 @@ Follow the surrounding Chinese-language prose and retain established technical t
 
 When answering questions about this repository, keep the response concise, clear, and direct. Use a short concrete example when it helps explain an abstract concept.
 
+### 中文文档自然化检查
+
+每次新建、补充、改写或审阅本仓库的中文文档时，包括只修改一个段落，都必须使用 `humanizer-zh-docs` 技能完成最终检查和润色。不得只在用户明确要求“去 AI 味”时才使用该技能。
+
+- 修改前完整读取 `humanizer-zh-docs` 的 `SKILL.md`，并按其中的流程执行；
+- 先完成事实、结构、源码证据和 Markdown 格式，再对本次新增或改动的自然语言做自然化检查；
+- 润色时保留技术事实、数字、结论强度、术语、代码、链接、引用、标题层级和用户指定的固定措辞；
+- 局部修改只检查和润色本次改动及必要的上下文，不顺手重写无关章节；
+- 交付前再次检查文字是否具体、直接、指代清楚，并删除空泛开场、重复总结和聊天机器人式套话；
+- 如果技能缺失或无法读取，应明确告知用户，并按相同原则人工检查，不得无提示地跳过。
+
 Place an abbreviation glossary immediately after each document's `#` title. Use the columns `缩写`, `英文全称`, and `中文含义`, and include the technical abbreviations used in that document. Add a glossary entry whenever a new abbreviation is introduced.
 
-Keep filenames stable. For links to files whose names contain spaces or non-ASCII characters, preserve the repository convention: `[label](<./2. 常规内存机制：GPU 内存分配与 CPU↔GPU 访问.md>)`.
+Keep filenames stable. For links to files whose names contain spaces or non-ASCII characters, preserve the repository convention: `[label](<./02_GPU 内存管理基础.md>)`.
 
 Separate facts from analysis with the labels already used in the notes: `[SOURCE]`, `[SPEC]`, `[INFERENCE]`, `[BOUNDARY]`, and `[DESIGN]`. Cite the exact source path, version, or specification section whenever making a source-backed implementation claim.
 
-源码依据必须就近嵌入正在解释的概念，不要在小节末尾堆叠一长串 `[SOURCE]` 路径和行号。优先采用“先提出问题或结论 → 标出源码路径、版本和行号 → 截取最小必要的原始代码 → 紧接着逐行解释 → 给出本段结论”的顺序。代码摘录通常只保留当前概念所需的字段、分支或调用点；省略无关代码时用注释明确表示，不得改写成看似原始源码的伪代码。源码注释、规范或设计文档摘录为英文时，必须在原文后立即提供对应的中文翻译。保留可点击的本地源码链接，但正文必须在不跳转源码文件的情况下也能理解。规范或纯文档依据同样放在对应说明附近，不要集中到小节末尾作为参考资料列表。
+### 源码摘录与解释规则
+
+源码是结论的证据，不是学习主线。正文应先用清晰结论、具体例子、表格或图示讲懂概念，再按需要提供源码或规范验证；读者不查看源码块也应能理解主线。“最小摘录”指能够独立读懂当前结论的最小完整上下文，不以行数最少为目标。
+
+源码和规范证据的引导文字必须使用 Markdown 引用块，与学习主线形成清晰的视觉分隔。`[SOURCE]` 和 `[SPEC]` 都遵守此格式：
+
+```markdown
+> **[SOURCE]** 源码路径、固定版本、真实行号和该证据证明的结论。
+
+> **[SPEC]** 规范名称、版本、章节以及与当前结论有关的语义。
+```
+
+多条证据索引放在同一个引用块中：
+
+```markdown
+> **[SOURCE] 可选源码索引**
+>
+> - 对象或调用关系：源码路径与行号；
+> - 另一条证据：源码路径与行号。
+```
+
+引用块只包住证据说明、来源索引和必要的阅读提示。原始源码仍使用普通 fenced code block，不给源码的每一行添加 `>`；源码后的中文解释也回到普通正文。`[BOUNDARY]`、`[INFERENCE]` 和 `[DESIGN]` 按其原有用途排版，不因本规则自动改成引用块。
+
+- 加入源码前先判断必要性。实现流程、对象关系、调用顺序和生命周期保护可以使用源码；概念与硬件语义优先使用规范、例子和图示。与当前结论无关或前文已经证明的源码不要重复加入。
+- 摘录既要直接证明当前结论，也要保留读懂它所需的上下文。必要时应包含函数或结构体名称、关键入参、外围 `if/else`、调用者与被调用函数，以及影响结论的返回路径；如果只截取孤立语句会隐藏对象来源、控制流或实际执行顺序，就应扩大到完整相关分支或短函数。无关日志、调试输出、兼容细节和一般性错误路径仍可省略。
+- `[SOURCE]`、`[SPEC]` 必须给出准确的文件路径、版本或规范信息以及真实行号。代码行保留原文件行号；不连续片段分成不同代码块，并在正文中说明它们的调用关系或先后顺序。连续展示更容易理解时，不要为了减少行数强行拆开。不得把教学伪代码伪装成原始源码。
+- 源码后先说明“它主要证明什么”和“这段代码处在什么上下文中”，再按连续行号组解释关键输入、判断、状态变化、输出和必要联动。避免机械逐行复述；通常使用少量要点即可。
+- 如果源码及其解释比概念本身更长、更难理解，应先重组讲解或将源码放入可选阅读部分；不得以破坏上下文为代价继续裁剪。
+- 英文源码注释、错误信息或规范摘录后，应立即提供与当前结论有关的中文翻译。
+- 修改后核对源码内容与行号，并检查引用范围、相对链接、非连续摘录和代码围栏。
 
 ## Current-vs-Deferred Knowledge Workflow
 
@@ -47,10 +87,10 @@ Separate facts from analysis with the labels already used in the notes: `[SOURCE
 
 ## Review, Commits, and Pull Requests
 
-No local Git history is available, so no repository-specific commit convention can be inferred. Use concise imperative messages with a documentation scope, for example `docs(svm): clarify page-fault ownership`.
+现有 Git 历史采用简洁的 `docs(scope): summary` 风格，例如 `docs(gpu-memory): trace allocation and mapping lifecycle`。后续提交继续使用相同格式，并让 summary 直接说明读者可见的文档变化。
 
 Keep each pull request focused. Describe the reader-facing change, identify updated chapters and index links, and state how links/rendering were checked. Link relevant issues or source revisions. Include a screenshot only when a Mermaid diagram, table, or rendered layout materially changed.
 
 ### 学习进度
 
-`1.笔记` 目录下的内容，仅作为参考学习文档，目前已经完成 `01_Linux 内存管理基础.md` 的学习，正在进行 `02_GPU 内存管理基础.md` 的学习。
+`1.笔记` 目录下的内容仅作为参考学习文档。目前已经完成 `01_Linux 内存管理基础.md` 和 `02_GPU 内存管理基础.md` 的学习，下一阶段尚未确定。
