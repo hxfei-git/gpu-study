@@ -342,17 +342,17 @@ Signal / Fence 状态更新，必要时产生 Interrupt
                    应用线程重查完成条件后，等待 API 返回
 ```
 
-### 2.2 怎样使用这张总图
+### 2.2 按时间顺序阅读总图
 
-读到这里，先确认每个名称位于哪一层：
+这张图从上到下可以分成三个阶段。
 
-- Host 应用、Runtime 和 Driver 位于 CPU 一侧；
-- Queue/Ring 保存 Packet，Doorbell 只负责通知设备检查 Queue；
-- GPU 前端建立 Dispatch，WGP/CU/SIMD 承载后续执行；
-- Kernel Code、Kernarg 和 A/B/C 是三类不同内存对象；
-- Completion Signal、Fence 和 Interrupt 位于完成路径，但职责不同。
+第一段是初始化。Runtime 请求 Driver 建立 GPUVM、Queue 和 Doorbell，并确认进程可以使用这些资源。图中的虚线表示这类低频控制动作，它们不需要在每次 Kernel Launch 时重做。
 
-本章只提供系统坐标。第 3～6 章沿控制面讲清职责、软件栈、初始化和 Packet 发布；第 7～8 章再推导 Work-group、Wave 与 CU 的数量和状态关系。总图是后续章节共用的索引，不是另一套执行流程。
+第二段是提交。应用发起 Kernel Launch 后，Runtime 准备参数和 Packet，把 Packet 发布到 GPU 可访问的 Queue，再写 Doorbell 通知 GPU。此时任务只是到达 GPU 命令前端，CU 还不一定已经开始执行。
+
+第三段是执行与完成。GPU 命令前端根据 Packet 建立 Dispatch，把 Grid 划分为 Work-group，再把 Work-item 编成 Wave，交给 WGP、CU 和 SIMD 执行。Kernel 写完结果后，设备更新完成状态。Host 重新检查完成条件；条件满足后，对应的等待 API 才返回。
+
+后文章节会分别展开这三个阶段。再次回到这张图时，先确定当前问题发生在初始化、提交还是执行与完成阶段，再沿对应箭头继续向下查找。
 
 ## 3. Host、Driver、Firmware 与 Hardware 的职责边界
 
@@ -568,30 +568,30 @@ Linux Driver
     ▼
 ┌────────────────────────────── GPU 设备侧 ──────────────────────────────┐
 │                                                                        │
-│  ① 专用控制处理器或微引擎                                             │
-│     ┌────────┐  ┌────────┐  ┌────────────────────┐                    │
-│     │  PSP   │  │  SMU   │  │ MES/其他控制微引擎 │                    │
-│     └────────┘  └────────┘  └────────────────────┘                    │
+│  ① 专用控制处理器或微引擎                                               │
+│     ┌────────┐  ┌────────┐  ┌────────────────────┐                     │
+│     │  PSP   │  │  SMU   │  │ MES/其他控制微引擎 │                     │
+│     └────────┘  └────────┘  └────────────────────┘                     │
 │         运行各自的 Firmware：安全、功耗、Queue 控制、恢复等             │
 │                                                                        │
-│  ② 命令与派发前端                                                     │
+│  ② 命令与派发前端                                                      │
 │     Queue 中的 Packet ──► CP/Compute 命令前端 ──► SPI/Workgroup Manager│
 │                            读取任务说明          检查资源并安排 Work-group│
 │                                                                        │
-│  ③ 计算执行阵列                                                       │
+│  ③ 计算执行阵列                                                        │
 │                         RDNA 3 的一个 WGP                              │
 │                    ┌─────────────────────────┐                         │
-│                    │   CU 0       CU 1      │                         │
+│                    │   CU 0       CU 1      │                          │
 │                    │  Wave 状态   Wave 状态  │                         │
 │                    │  寄存器      寄存器     │                         │
-│                    │  Work-group 的 LDS/Barrier 资源                  │
+│                    │  Work-group 的 LDS/Barrier 资源                   │
 │                    │  执行管线    执行管线   │                         │
 │                    └─────────────────────────┘                         │
 │                         CU 执行 Kernel 指令                            │
 │                                                                        │
-│  ④ 地址与内存系统                                                     │
+│  ④ 地址与内存系统                                                      │
 │     MMU/页表遍历硬件 ── Cache ── VRAM 或映射的系统内存                  │
-│     为 Packet、Kernel 代码、参数和数据提供访问                         │
+│     为 Packet、Kernel 代码、参数和数据提供访问                          │
 │                                                                        │
 └────────────────────────────────────────────────────────────────────────┘
 ```
