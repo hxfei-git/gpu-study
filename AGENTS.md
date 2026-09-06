@@ -6,6 +6,15 @@
 
 新增学习阶段时，在根目录创建下一个连续编号的 Markdown 文件，例如 `03_主题名称.md`。开始新阶段前，先按下文流程检查 `待补充的知识点.md`；不要把 `1.笔记` 中旧式的 `1. 标题.md` 命名继续用于当前学习主线。
 
+## 硬件环境约束
+
+用户的硬件环境是 **AMD Instinct MI300 系列，采用 CDNA 3 架构**。本仓库的学习讲解、示例、源码分析和硬件行为判断默认以该环境为准。
+
+- 涉及指令、寄存器、执行模型和内存访问语义时，优先查阅仓库中的 `amd-instinct-mi300-cdna3-instruction-set-architecture.pdf`；引用时注明该文件封面日期 `2025-08-05`、章节和原文页码。
+- 引用其他 GPU 型号或架构的资料时，必须说明与 MI300 的适用关系和差异，不得直接把其他代际的行为作为 MI300 的结论。
+- 当前只确认到 MI300 系列，尚未确认具体为 MI300A 或 MI300X。涉及两者不同的内存组织、主机连接方式或其他型号特性时，先核实具体型号，不自行假定。
+- 驱动和运行时实现仍须依据仓库的固定源码基线核对；仅凭硬件属于 MI300，不能推定软件版本、配置或实现路径。
+
 ## Build, Test, and Development Commands
 
 There is no build system, package manifest, or automated test suite in this checkout. Work in a Markdown preview and use these lightweight checks:

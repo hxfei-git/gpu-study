@@ -69,7 +69,7 @@
 | PTE     | Page Table Entry                             | 页表项                                   |
 | RAM     | Random Access Memory                         | 随机存取存储器；本文主要指系统内存       |
 | ROCr    | ROCm Runtime                                 | ROCm 的 HSA 用户态运行时                 |
-| RW      | Read Write                                   | AMD GPU 的读写型 MTYPE                   |
+| RW      | Read Write                                   | 读写权限；也用于 AMD GPU 的读写型 MTYPE   |
 | RWX     | Read, Write, Execute                         | 读、写、执行三类页面访问权限             |
 | SC      | Sequential Consistency                       | 顺序一致性内存顺序                       |
 | SDMA    | System Direct Memory Access                  | AMD GPU 中负责数据搬运的专用引擎         |
@@ -2610,6 +2610,7 @@ sequenceDiagram
     participant KFD as KFD/AMDGPU
 
     ROCr->>KMT: system_allocator(整条16 KiB Ring)
+    KMT->>KMT: 预留地址 G0
     KMT->>KFD: KFD ALLOC：创建一个GTT BO，记录计划G0
     KFD-->>KMT: 返回handle和mmap_offset
     KMT->>KMT: CPU mmap：映射整条Ring
@@ -2623,6 +2624,116 @@ sequenceDiagram
 ```
 
 整张图都属于同一次 Queue 创建；Packet 提交不会重新执行这段申请时序。
+
+**CPU 地址准备：从预留范围到建立 CPU 页表**
+
+上图中的计划地址 `G0` 需要先从进程的虚拟地址空间中取得。下面选择 HSAKMT 通过 `mmap()` 预留地址的方式，再沿 USERPTR 分支跟踪可读写匿名映射和 CPU 页表的建立。这里的 RW 表示读写权限；本章后面讨论的 GPU MTYPE 有自己的 RW 属性含义。
+
+这段过程分两次设置 CPU 映射。第一次只占住虚拟地址范围；第二次允许 CPU 读写，并让 Linux 按需提供匿名内存页面。以普通私有匿名映射、未提前填充页面的情况为例：
+
+```text
+第一次 mmap：PROT_NONE
+        ↓
+Linux 在当前进程的 mm_struct 中登记 PROT_NONE VMA
+        ↓
+CPU VA 范围已占住，暂时不可读、不可写、不可执行
+通常尚未为这段 Ring 准备数据物理页
+        ↓
+第二次 mmap：PROT_READ | PROT_WRITE
+             MAP_FIXED | MAP_ANONYMOUS | MAP_PRIVATE
+        ↓
+在选定的 VA 区间重新建立可读写的私有匿名映射
+该区间原来的 PROT_NONE 映射被替换
+        ↓
+mm_struct 中已有合法的 RW VMA
+但尚未访问的页通常仍没有数据物理页和有效 CPU PTE
+        ↓
+CPU 首次写入其中一页（假设该页仍无有效 PTE）
+        ↓
+MMU 查 CPU 页表，无法完成这次地址翻译
+        ↓
+Page Fault
+        ↓
+Linux 根据 VMA 确认：地址合法，而且允许写入
+        ↓
+分配并清零物理页，填写 CPU 页表 PTE
+        ↓
+重试刚才的写入指令
+该虚拟页的 CPU VA → CPU PA 通路建立
+```
+
+图中最后建立的是被访问的那一页的 PTE。16 KiB Ring 若按 4 KiB 页组织，共有四个虚拟页；一次访问不意味着四页都必须同时完成分配和建表，物理页也不要求连续。
+
+**第一次 `mmap(PROT_NONE)` 返回了什么。** HSAKMT 的 `hsakmt_mmap_allocate_aligned()` 先申请比 Ring 略大的地址范围，为对齐和保护间隔留出空间。下面的调用只要求 Linux 找到可用的虚拟地址，尚未指定任何 CPU 物理地址：
+
+> **[SOURCE]** ROCr `ba56a24c6132c5d195686ae4adf969ca1222fbba`，[`libhsakmt/src/fmm.c`](<./2.源码/rocr-runtime/libhsakmt/src/fmm.c>) 第 770～783 行。函数入参给出大小、对齐、保护间隔和地址范围限制；第一次 mmap 先预留地址，并保留失败返回。
+
+```c
+770: void *hsakmt_mmap_allocate_aligned(int prot, int flags, uint64_t size, uint64_t align,
+771: 			    uint64_t guard_size, void *aper_base, void *aper_limit, int fd)
+772: {
+773: 	void *addr, *aligned_addr, *aligned_end, *mapping_end;
+774: 	uint64_t aligned_padded_size;
+775:
+776: 	aligned_padded_size = size + guard_size * 2 + (align - PAGE_SIZE);
+777:
+778: 	/* Map memory PROT_NONE to alloc address space only */
+779: 	addr = mmap(0, aligned_padded_size, PROT_NONE, flags | MAP_ANONYMOUS, -1, 0);
+780: 	if (addr == MAP_FAILED) {
+781: 		pr_err("mmap failed: %s\n", strerror(errno));
+782: 		return NULL;
+783: 	}
+```
+
+英文注释的含义是：“用 `PROT_NONE` 建立映射，只分配地址空间。”第 776 行计算预留长度，第 779 行请求地址，第 780～783 行在请求失败时返回空指针。
+
+| 参数 | 本次调用的含义 |
+| --- | --- |
+| 第一个 `0` | 不指定起始地址，由 Linux 在当前进程的空闲虚拟地址范围中选择 |
+| `aligned_padded_size` | 预留范围的长度，包含 Ring 大小及对齐、保护间隔所需的额外空间 |
+| `PROT_NONE` | 当前不允许 CPU 读取、写入或执行这个范围 |
+| `flags \| MAP_ANONYMOUS` | 匿名映射；在这里的调用路径中还包含 `MAP_PRIVATE`、`MAP_NORESERVE` |
+| `-1` | 匿名映射不使用文件描述符 |
+| 最后一个 `0` | 此匿名映射不使用文件偏移，也不通过这个参数指定物理地址 |
+
+`mmap()` 成功后，Linux 已登记这段地址范围。HSAKMT 随后调整起点对齐、检查 GPU 可用地址范围，并释放多余的边缘区间，再返回保留下来的 Ring 地址。对应处理位于同一函数第 785～805 行。这里说“通常尚无数据物理页”，描述的是这次新建匿名地址预留的状态；`PROT_NONE` 本身只规定访问权限。
+
+**第二次 `mmap()` 怎样让这段地址可以读写。** 在 `fmm_allocate_host_gpu()` 的 USERPTR 分支中，`mem` 先接收上述地址预留结果，随后在相同的目标区间建立读写匿名映射：
+
+> **[SOURCE]** ROCr `ba56a24c6132c5d195686ae4adf969ca1222fbba`，[`libhsakmt/src/fmm.c`](<./2.源码/rocr-runtime/libhsakmt/src/fmm.c>) 第 2043～2058 行。保留 USERPTR 分支条件、mem 的取得过程以及 RW mmap 的失败处理。这里只摘到匿名映射建立处，后续 BO 登记继续在同一分支中执行。
+
+```c
+2043: 	/* Paged memory is allocated as a userptr mapping, non-paged
+2044: 	 * memory is allocated from KFD
+2045: 	 */
+2046: 	if (!mflags.ui32.NonPaged && svm.userptr_for_paged_mem) {
+2047: 		/* Allocate address space */
+2048: 		pthread_mutex_lock(&aperture->fmm_mutex);
+2049: 		mem = aperture_allocate_area_aligned(aperture, address, size, alignment);
+2050: 		pthread_mutex_unlock(&aperture->fmm_mutex);
+2051: 		if (!mem)
+2052: 			return NULL;
+2053:
+2054: 		/* Map anonymous pages */
+2055: 		if (mmap(mem, MemorySizeInBytes, PROT_READ | PROT_WRITE,
+2056: 			 MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED, -1, 0)
+2057: 		    == MAP_FAILED)
+2058: 			goto out_release_area;
+```
+
+英文注释依次表示：paged memory 使用 USERPTR 映射；申请地址空间；映射匿名页。第 2046 行限定本段的进入条件，第 2049 行取得地址，第 2055～2058 行将该地址区间改为可读写的私有匿名映射，失败则转去释放已预留的地址。
+
+`MAP_FIXED` 固定的是虚拟地址。第二次调用会替换目标区间原有的 `PROT_NONE` 映射；Linux 根据范围调整 VMA，可能拆分或合并记录。调用成功后，该区间具备合法的 RW VMA，但普通匿名映射仍可按需分配页面，所以不能仅凭第二次 `mmap()` 返回就认定每个 CPU PTE 都已填好。
+
+**Page Fault 怎样补上物理页和 PTE。** 若 CPU 写入时仍无对应 PTE，Linux 先从 VMA 检查地址与写权限，再分配数据页并建立 CPU 页表映射，最后重试指令。首次读取匿名内存时也可能先使用共享的只读零页，后续写入再取得私有页。若尚处于 `PROT_NONE` 阶段，VMA 不允许访问，内核不会仅因为发生缺页就自动开放读写权限。
+
+> **[SOURCE]** Linux `248951ddc14de84de3910f9b13f51491a8cd91df`，[`mm/memory.c`](<./2.源码/linux/mm/memory.c>) 第 5287～5381 行的 `do_anonymous_page()` 包含读访问使用零页、分配匿名页和安装 CPU PTE 的处理。VMA 与访问权限检查的前置关系见 [01 的 2.3.7“VMA 如何参与 Page Fault”](<./01_Linux 内存管理基础.md#237-vma-如何参与-page-fault>)。
+
+**接回实际 Ring 路径。** 上面的 CPU 首次访问展示了按需建表的常见触发方式。在当前 USERPTR Ring 的正常创建路径里，KFD 登记 BO 时会通过 `init_user_pages()` 主动获取用户页面；缺失页可以在这里被准备好。因此，ROCr 后来初始化 Ring 时，CPU 页表可能已经可用，不必再次触发这次缺页。
+
+> **[SOURCE]** Linux `248951ddc14de84de3910f9b13f51491a8cd91df`，[`amdgpu_amdkfd_gpuvm.c`](<./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c>) 第 1845～1849 行调用 `init_user_pages()`，其第 1061～1136 行继续取得用户页面；[`amdgpu_hmm.c`](<./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_hmm.c>) 第 186～202 行设置缺页与写访问要求，再调用 `hmm_range_fault()`。
+
+CPU 页面准备好后，GPU MAP 还要建立 GPUVM 页表，GPU 才能使用同一组页面。本节原有 GTT 主线则通过 KFD 分配 BO，再使用 BO 的 `mmap_offset` 建立 CPU 映射；其第二次映射是 BO 文件映射，不是上面的 `MAP_ANONYMOUS` 分支。下面继续展开这条 GTT 流程。
 
 进入 KFD ALLOC 时，Ring 的大小、来源和计划 GPUVA 已经确定，但内存对象尚未创建。
 
@@ -4086,7 +4197,7 @@ MAP_MEMORY_TO_GPU阶段                 ← 2.3展开
 
 #### 2.2.4 USERPTR：从 CPU 页表取得现有页面
 
-USERPTR 复用用户已有的数据。用户先拥有 CPU VA 及其内存映射，驱动再解析对应页面并跟踪 CPU 页表变化。
+USERPTR 复用用户已有的数据。用户先拥有 CPU VA 及其内存映射，驱动再解析对应页面并跟踪 CPU 页表变化。匿名内存怎样从 `PROT_NONE` 预留变成 RW VMA，再按需建立 CPU PTE，见 [2.0.4 的 CPU 地址准备过程](#204-整条-ring-的申请流程)。
 
 “从现有映射取得页面”是指 CPU VA 和内存映射已经存在，不要求所有物理页在调用前都已驻留。匿名内存等映射可以按需分配物理页；HMM 范围查询会解析当前页表状态，并在条件允许时让缺失页面进入可用状态。
 
@@ -5943,6 +6054,58 @@ Ring GPUVA → 进程GPUVM PTE → VRAM本地地址 → 同一份VRAM数据
 
 CPU mmap 的调用见 2.0.4.2，`MAP_MEMORY_TO_GPU` 建立 GPU 通路的过程见 2.3。两条通路之间没有第三层固定映射。
 
+**为什么同一块 Ring 可以使用相同的 CPU VA 和 GPUVA**
+
+本文 Ring 的同值地址由 HSAKMT 和 KFD 的映射过程共同建立：先选定 `X = 0x10000000`，CPU 通路使用 X，GPU 通路也明确要求在 X 建立映射。CPU 和 GPU 分别在自己的地址空间查页表，因此可以使用相同的输入数值。
+
+| 要求 | 本例怎样满足 |
+| --- | --- |
+| 数值 X 能被 CPU 和目标 GPU 使用 | HSAKMT 从可用虚拟地址范围取得地址，并检查对齐和允许范围 |
+| CPU 可以通过 X 访问 Ring | 在 X 建立 CPU 映射，由 CPU 页表到达 Ring backing |
+| GPU 可以通过 X 访问同一块 Ring | 把 X 作为 `va_addr` 交给 KFD；GPU MAP 按记录的 X 映射这份 backing |
+
+两种 system RAM 来源的动作顺序不同，但都可以保留同值地址：
+
+```text
+GTT Ring（本章主例）
+预留地址 X
+  → KFD ALLOC 创建 BO，记录计划 GPUVA X
+  → CPU mmap 使用 MAP_FIXED，把 BO 映射到 CPU VA X
+  → GPU MAP 将同一 BO 映射到 GPUVA X
+
+USERPTR Ring
+预留地址 X
+  → 在 X 建立 CPU 读写匿名映射
+  → KFD ALLOC：CPU 页面来源为 X，计划 GPUVA 也为 X
+  → 取得用户页面，再由 GPU MAP 建立 GPUVA X 的映射
+```
+
+GTT 路径中的 `fmm_map_to_cpu()` 明确使用 `MAP_FIXED`，将已经取得的 `mem` 作为 CPU 映射起点。USERPTR 路径则把 `mem` 同时用于计划 GPUVA 和 CPU 页面来源地址。它们使用同一个数值的动作发生在用户态参数准备和内核建表过程中；CPU 的 `mmap()` 本身只负责 CPU 地址空间。
+
+> **[SOURCE]** ROCr `ba56a24c6132`，[`libhsakmt/src/fmm.c`](<./2.源码/rocr-runtime/libhsakmt/src/fmm.c>) 第 785～805 行检查地址范围，第 1150～1177 行填写 `va_addr` 和 USERPTR CPU 地址，第 1527～1584 行取得地址、创建内存对象，并定义指定 CPU 地址的 BO 映射函数；第 2070～2092 行并列展示 USERPTR 与 GTT 分支。相关赋值的就近摘录见 [03 的 2.3.1“Ring 的地址准备：CPU 映射与 GPU 同值映射”](<./03_AMD GPU 队列与 AQL Dispatch.md#231-ring-的地址准备cpu-映射与-gpu-同值映射>)。
+
+KFD MAP 根据内存 handle 找回分配对象，使用已经保存的 `kgd_mem.va` 建立 GPUVM 映射；它不需要重新选择另一个 GPU 地址。ALLOC 记录地址计划，MAP 完成后这个计划才成为 GPU 可以使用的映射。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`amdgpu_amdkfd_gpuvm.c`](<./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c>) 第 1838 行保存 `va`，第 876、987 行将它传到 attachment，第 1317～1351 行使用 `entry->va` 建立软件映射并按条件更新 GPU PTE。正常映射完成后的通路如下。
+
+```mermaid
+flowchart LR
+    C["CPU VA：X"] --> CP["CPU 页表"]
+    CP --> PA["CPU PA"]
+    PA --> R["同一组 Ring 页面"]
+    G["GPUVA：X"] --> GP["进程 GPUVM 页表"]
+    GP --> D["DMA 地址／IOVA"]
+    D --> I["Host IOMMU<br/>启用翻译时"]
+    I --> R
+    D -. "无需该级翻译时" .-> R
+```
+
+同值发生在图左侧的虚拟地址 X 上。CPU 页表与 GPUVM 页表各自建立映射，system RAM 在 GPU PTE 中使用的设备侧地址还可能经过 Host IOMMU 翻译。两条通路最终访问同一组页面，页表项内容和中间地址可以不同。
+
+以 slot 37 为例，偏移为 `37 × 64 = 0x940` 字节。CPU 和 GPU 都用数值 `X + 0x940` 定位该槽位；各自的页表负责把这个地址翻译到同一份 Ring 数据。这让 Runtime 可以沿用一个 Ring base，而不必为该 Ring 在两个不同起点之间换算。
+
+**[BOUNDARY]** 这里讨论的是已按上述流程建立映射的 Ring。其他 CPU 内存仍需满足对应 GPU API 的访问要求；仅有同一个地址数值，不能说明 GPU 已有该地址的映射。其他分配接口也可以分别选择 CPU VA 和 GPUVA，地址是否同值取决于具体接口及映射安排。
+
 前文已经说明数据位置、管理对象和 CPU/GPU 访问通路。下一节讨论这些关系的使用者和删除条件。
 
 ### 2.6 引用、映射与最终释放
@@ -6314,7 +6477,6 @@ Queue 释放 buffer 时执行相反动作：
 - 第 1451 行表示同步等待被用户信号中断。
 - 第 1456 行要求先等待页表更新完成，再处理 TLB。
 - 第 1464 行要求在 TLB 处理完成后删除 DMA mapping，以避免设备 I/O 页故障。
-
 - 第 1392～1400 行给出 UNMAP ioctl 的入口与关键局部状态，说明 `flush_tlb` 是这条路径自己计算的硬件策略，不是用户参数。
 - 第 1431～1444 行先对每块目标 GPU 调用 2.6.3 前半部分展示的 `amdgpu_amdkfd_gpuvm_unmap_memory_from_gpu()`；只有 software mapping/PTE 删除成功，才增加 `n_success`。
 - 第 1446～1454 行随后判断当前硬件是否需要显式 flush；需要时等待 `kgd_mem` 收集的页表 Fence。
