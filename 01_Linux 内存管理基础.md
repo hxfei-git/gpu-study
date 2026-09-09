@@ -13,6 +13,7 @@
 | ASID                  | Address Space Identifier                                   | 地址空间标识符                               |
 | AttrIndx              | Attribute Index                                            | 内存属性索引                                 |
 | BADDR                 | Base Address                                               | 基地址                                       |
+| CDNA | Compute DNA | AMD 面向数据中心计算的 GPU 架构系列；本文 GPU 参考架构为 CDNA 3 |
 | CLONE_VM              | Clone Virtual Memory flag                                  | 创建任务时共享虚拟地址空间的标志             |
 | COW                   | Copy-on-Write                                              | 写时复制                                     |
 | CPU                   | Central Processing Unit                                    | 中央处理器                                   |
@@ -24,11 +25,13 @@
 | GEM                   | Graphics Execution Manager                                 | 图形执行管理器                               |
 | GFP                   | Get Free Pages                                             | Linux 内存分配行为标志                       |
 | GPU                   | Graphics Processing Unit                                   | 图形处理器                                   |
+| GPUVM | GPU Virtual Memory | GPU 虚拟地址空间及其页表 |
 | HMM                   | Heterogeneous Memory Management                            | 异构内存管理                                 |
 | IOMMU                 | Input/Output Memory Management Unit                        | 输入/输出内存管理单元                        |
 | IOVA                  | Input/Output Virtual Address                               | 输入/输出虚拟地址；设备使用的一类 DMA 地址   |
 | IPI                   | Inter-Processor Interrupt                                  | 处理器间中断                                 |
 | IRQ                   | Interrupt Request                                          | 中断请求                                     |
+| ISA | Instruction Set Architecture | 指令集架构 |
 | ISB                   | Instruction Synchronization Barrier                        | 指令同步屏障                                 |
 | KiB / MiB / GiB       | Kibibyte / Mebibyte / Gibibyte                             | 二进制千字节 / 兆字节 / 吉字节               |
 | L0～L3                | Level 0 through Level 3                                    | 第 0 级到第 3 级页表                         |
@@ -45,12 +48,12 @@
 | PAN                   | Privileged Access Never                                    | 特权访问禁止                                 |
 | PC                    | Program Counter                                            | 程序计数器                                   |
 | PFN                   | Page Frame Number                                          | 物理页框编号                                 |
-| PID / TGID            | Process Identifier / Thread Group Identifier               | 任务标识符 / 线程组标识符                    |
 | PGD                   | Page Global Directory                                      | 页全局目录                                   |
+| PID / TGID            | Process Identifier / Thread Group Identifier               | 任务标识符 / 线程组标识符                    |
 | PMD                   | Page Middle Directory                                      | 页中间目录                                   |
 | PSTATE                | Process State                                              | 处理器状态                                   |
-| PTE                   | Page Table Entry                                           | 页表项                                       |
 | pt_regs               | Linux structure name; regs means Registers                 | Linux 保存异常现场的寄存器结构体             |
+| PTE                   | Page Table Entry                                           | 页表项                                       |
 | PUD                   | Page Upper Directory                                       | 页上级目录                                   |
 | PXN                   | Privileged Execute Never                                   | 特权级禁止执行                               |
 | RAM                   | Random Access Memory                                       | 随机存取存储器；本章主要指系统物理内存       |
@@ -80,7 +83,9 @@
 | VPN                   | Virtual Page Number                                        | 虚拟页号                                     |
 | VRAM                  | Video Random-Access Memory                                 | 显存                                         |
 
-> **[BOUNDARY]** 本文以 ARM/MMU 为切入点，讲解 Linux 地址空间、物理页和常用内存接口。更完整且带本地 Linux/AMDGPU 源码基线的扩展笔记见 [2A. Linux 内存管理基础](<./1.笔记/2A. Linux 内存管理基础：从物理内存、PFN 与 struct page 到 GEM、TTM、HMM.md>)。
+**[BOUNDARY]** 本文服务于 **AMD Instinct MI300 / CDNA 3** 的内存学习。Linux 的 `mm_struct`、VMA、PFN、`struct page` 和 DMA 接口是 CPU 侧基础；ARM64 页表、TTBR、ASID 与 TLBI 只作为 CPU 架构教学对照，不代表 MI300 的 GPU 页表或指令，也不表示已经确认实际 Host CPU 为 ARM64。MI300A/MI300X 型号、Host CPU 和内核配置须分别核实。GPU 指令与内存语义以本地 MI300 ISA（封面日期 2025-08-05）为准，CPU/GPU 映射关系继续见 [02_GPU 内存管理基础](<./02_GPU 内存管理基础.md>)。
+
+本文保留 ARM/MMU 例子，用于理解 Linux 地址空间、物理页和常用内存接口。更完整且带本地 Linux/AMDGPU 源码基线的扩展笔记见 [2A. Linux 内存管理基础](<./1.笔记/2A. Linux 内存管理基础：从物理内存、PFN 与 struct page 到 GEM、TTM、HMM.md>)。
 
 ## 0. 为什么要引入虚拟地址
 
@@ -245,7 +250,7 @@ TTBR（Translation Table Base Register，转换表基址寄存器）：告诉MMU
 
 ## 1. ARM MMU：从虚拟地址到物理地址
 
-[BOUNDARY] 本节只讨论 ARM64 EL0/EL1 的 Stage-1 地址翻译，并固定使用 4 KiB granule、48 位用户虚拟地址。暂不讨论虚拟化场景中的 Stage-2 翻译。
+**[BOUNDARY]** 本节是 ARM64 CPU 侧对照，固定 EL0/EL1 的 Stage-1 翻译、4 KiB granule 和 48 位用户虚拟地址。TTBR、描述符位域及后面的 ASID/TLBI 例子都只适用于这里的 ARM64 配置；MI300 GPUVM 的页表根选择和失效机制见 02。本文中的 4 KiB 和 48 位是教学配置，不能由 MI300 型号推定 Host 的配置。
 
 ### 1.1 Linux、MMU 与 TTBR 分别负责什么
 
@@ -764,7 +769,7 @@ Translation Fault 如何进入 Linux、Linux 如何分配物理页并更新页�
 
 > **[SOURCE]** Arm，[《Armv8-A Memory Model》](<https://developer.arm.com/-/media/Arm%20Developer%20Community/PDF/Learn%20the%20Architecture/Armv8-A%20memory%20model%20guide.pdf>)，§3“Describing memory in Armv8-A”、§8“Describing the memory type”、§10“Permissions attributes”、§11“Access Flag”。
 
-> **[SOURCE]** Linux kernel [`arch/arm64/include/asm/pgtable-hwdef.h`](https://github.com/torvalds/linux/blob/master/arch/arm64/include/asm/pgtable-hwdef.h)，ARM64 hardware page-table descriptor bit definitions。
+> **[SOURCE]** Linux `248951ddc14d`，[`arch/arm64/include/asm/pgtable-hwdef.h`](./2.源码/linux/arch/arm64/include/asm/pgtable-hwdef.h) 第 89～190 行，定义页表描述符类型、属性及地址掩码的相关宏。该文件不是 MI300 GPU PTE 的规范。
 
 ## 2. Linux 进程与地址空间
 
@@ -2612,7 +2617,7 @@ PFN 500 → PFN 501 → PFN 502 → PFN 503
 
 DMA 地址不是 CPU VA。在一些简单平台中，DMA 地址可能与系统物理地址相同，但一般不能依赖这一点。存在 IOMMU 时，它可以把设备使用的 DMA 地址转换到缓冲区所在的系统物理页。
 
-GPU VA 也不是 CPU VA。驱动可以把缓冲区映射到 GPU 虚拟地址空间，使 GPU 通过自己的页表访问系统内存或 VRAM。即使 CPU 和 GPU 最终访问同一批后端页面，它们使用的虚拟地址也可以完全不同。
+GPU VA 和 CPU VA 分别属于 GPU 与 CPU 的访问上下文。驱动可以把缓冲区映射进 GPUVM；两侧地址数值可以相同，也可以不同，须分别确认映射。对于 MI300，是否共享物理内存、数据是否需要搬运，还取决于具体型号和分配方式，不能仅凭“系统内存/VRAM”两个名称判断。
 
 下面以系统内存缓冲区为例，假设 CPU、DMA 设备和 GPU 都具有一段连续地址，三种地址分别映射到同一批系统内存页：
 
@@ -3904,7 +3909,7 @@ DMA描述符
 
 `dma_alloc_coherent()` 没有单独的 DMA 方向参数；在 DMA API 中，这类分配按双向访问处理。它也不表示所有设备数据都适合放入 coherent 内存：如果缓冲区已经由其他接口创建，或者只是用于一次数据传输，下一节的 streaming DMA 映射通常更合适。
 
-> **[BOUNDARY]** `dma_alloc_coherent()` 是通用设备 DMA 接口，不代表大型 GPU 缓冲对象都由它分配。GPU 缓冲对象还会组合 system RAM、VRAM、SG 表、GPU VA 和放置策略；本节只建立 coherent DMA 缓冲区的通用使用模型。
+> **[BOUNDARY]** `dma_alloc_coherent()` 是通用设备 DMA 接口，不代表大型 GPU 缓冲对象都由它分配。MI300 缓冲对象的后端还取决于具体型号与驱动分配路径，并会组合 SG 表、GPU VA 和放置策略；本节只建立 coherent DMA 缓冲区的通用使用模型。
 
 > **[SOURCE]** 本地 Linux `248951ddc14d`：[include/linux/dma-mapping.h](./2.源码/linux/include/linux/dma-mapping.h) 第 614～624 行定义 `dma_alloc_coherent()` 和 `dma_free_coherent()`，第 641～646 行定义 `dma_set_mask_and_coherent()`；[kernel/dma/mapping.c](./2.源码/linux/kernel/dma/mapping.c) 第 625～696 行展示 coherent 分配和释放如何选择设备专用区域、direct DMA、IOMMU 或平台 DMA 操作；[Documentation/core-api/dma-api-howto.rst](./2.源码/linux/Documentation/core-api/dma-api-howto.rst) 第 201～235 行说明 DMA mask，第 348～390 行区分 coherent 的可见性与访问顺序，第 420～464 行说明分配、返回值和配对释放，第 511～554 行说明 DMA 方向；[Documentation/memory-barriers.txt](./2.源码/linux/Documentation/memory-barriers.txt) 第 1914～1955 行说明 `dma_rmb()`、`dma_wmb()` 与 CPU—设备共享内存的顺序保证。
 
@@ -4130,7 +4135,7 @@ GPU缓冲对象
 - 获得 DMA 地址，不等于 GPU 页表已经建立 GPU VA 映射。
 - 建立 GPU VA 映射，也不自动建立 CPU 用户 VA 映射。
 
-[BOUNDARY] 上图只建立进入 GPU 内存管理前的分层关系，不表示所有 GPU 缓冲区都调用同一组 Linux 接口。后续学习 GEM、TTM、VRAM 放置和 GPU 虚拟内存管理时，再追踪具体对象如何组合这些层次。
+[BOUNDARY] 上图只建立进入 GPU 内存管理前的分层关系，不表示所有 GPU 缓冲区都调用同一组 Linux 接口。MI300 的相关对象关系见 [02_GPU 内存管理基础](<./02_GPU 内存管理基础.md>)；GEM/TTM 的完整放置、驱逐和迁移仍留到后续专题。
 
 ### 4.10 本章总结与源码索引
 

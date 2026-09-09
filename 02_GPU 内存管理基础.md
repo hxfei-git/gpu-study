@@ -4,20 +4,22 @@
 
 | 缩写    | 英文全称                                     | 中文含义                                 |
 | ------- | -------------------------------------------- | ---------------------------------------- |
-| AMDGPU  | AMD GPU Linux Kernel Driver                  | AMD GPU Linux 内核驱动                   |
 | AGP     | Accelerated Graphics Port                    | 加速图形端口；GART 名称的历史来源        |
-| APU     | Accelerated Processing Unit                  | 集成 CPU 与 GPU 的加速处理器             |
+| AMDGPU  | AMD GPU Linux Kernel Driver                  | AMD GPU Linux 内核驱动                   |
 | API     | Application Programming Interface            | 应用程序编程接口                         |
+| APU     | Accelerated Processing Unit                  | 集成 CPU 与 GPU 的加速处理器             |
 | AQL     | Architected Queuing Language                 | HSA 定义的架构化队列包格式               |
 | ASIC    | Application-Specific Integrated Circuit      | 专用集成电路；本文指具体 GPU 芯片/代际   |
 | ATC     | Address Translation Cache                    | AMD GPU 地址翻译缓存及相关映射单元       |
 | BAR     | Base Address Register                        | PCIe 基址寄存器；用于暴露设备地址窗口    |
 | BO      | Buffer Object                                | 驱动用于管理一块缓冲区的对象             |
 | CC      | Cache Coherent                               | GPU 可缓存并由硬件参与一致性维护的类型   |
+| CDNA | Compute DNA | AMD 面向数据中心计算的架构系列；本文使用 CDNA 3 |
 | CLR     | Common Language Runtime                      | ROCm 中承接上层计算接口的运行时层        |
 | CP      | Command Processor                            | GPU 命令处理器                           |
 | CPSCH   | Command Processor Scheduling                 | 由 GPU 命令处理器调度 Queue 的路径       |
 | CPU     | Central Processing Unit                      | 中央处理器                               |
+| CPX | Core Partitioned eXecution | 按计算核心划分的执行分区模式 |
 | CU      | Compute Unit                                 | GPU 计算单元                             |
 | CWSR    | Compute Wave Save/Restore                    | 计算 Wave 上下文的保存与恢复机制         |
 | DMA     | Direct Memory Access                         | 设备直接内存访问                         |
@@ -26,6 +28,7 @@
 | DRM     | Direct Rendering Manager                     | Linux 直接渲染管理框架                   |
 | EOP     | End of Pipe                                  | 管线末端；Queue 完成状态使用的缓冲区     |
 | FB      | Frame Buffer                                 | 帧缓冲；源码中的 FB BAR 指显存窗口       |
+| FLAT | Flat Addressing | GPU 根据地址范围选择全局、LDS 或 scratch 访问的寻址方式 |
 | GART    | Graphics Address Remapping Table             | AMDGPU 内核驱动使用的 GPUVM 页表         |
 | GEM     | Graphics Execution Manager                   | DRM 的图形内存对象管理框架               |
 | GFP     | Get Free Pages                               | Linux 物理页分配标志                     |
@@ -35,6 +38,7 @@
 | GPUVA   | GPU Virtual Address                          | GPU 虚拟地址                             |
 | GPUVM   | GPU Virtual Memory                           | GPU 虚拟地址空间及其页表                 |
 | GTT     | Graphics Translation Tables                  | TTM 管理的 system-resource 内存池        |
+| HBM | High Bandwidth Memory | 高带宽内存 |
 | HMM     | Heterogeneous Memory Management              | 异构内存管理                             |
 | HQD     | Hardware Queue Descriptor                    | 硬件队列描述状态                         |
 | HSA     | Heterogeneous System Architecture            | 异构系统架构                             |
@@ -42,28 +46,31 @@
 | HWS     | Hardware Scheduling                          | 由 GPU 调度固件管理 Queue 驻留的硬件调度 |
 | IB      | Indirect Buffer                              | 间接命令缓冲区                           |
 | IDR     | ID Radix                                     | Linux 内核中把整数 ID 映射到对象的机制   |
+| ioctl   | Input/Output Control                         | 用户态向内核驱动发送控制请求的接口       |
 | IOMMU   | Input/Output Memory Management Unit          | 输入/输出内存管理单元                    |
 | IOVA    | Input/Output Virtual Address                 | 输入/输出虚拟地址                        |
 | ISA     | Instruction Set Architecture                 | 指令集架构                               |
-| ioctl   | Input/Output Control                         | 用户态向内核驱动发送控制请求的接口       |
-| KFD     | Kernel Fusion Driver                         | Linux AMD GPU 计算驱动接口               |
 | Kernarg | Kernel Arguments                             | Kernel Dispatch 使用的参数数据/参数段    |
+| KFD     | Kernel Fusion Driver                         | Linux AMD GPU 计算驱动接口               |
 | KGD     | Kernel Graphics Driver                       | 向 KFD 提供底层 GPU 服务的图形驱动侧     |
 | KiB     | Kibibyte                                     | 二进制千字节，1 KiB 等于 1024 字节       |
+| L1 | Level 1 Cache | 一级缓存 |
+| L2 | Level 2 Cache | 二级缓存 |
+| LDS | Local Data Share | 工作组共享的片上存储 |
 | LRU     | Least Recently Used                          | 最近最少使用；用于资源回收与淘汰管理     |
 | MEC     | Micro Engine Compute                         | AMD GPU 中处理计算队列的命令处理引擎     |
-| MES     | Micro Engine Scheduler                       | AMD GPU 的微引擎调度器                   |
 | MMIO    | Memory-Mapped Input/Output                   | 内存映射输入/输出                        |
 | MMU     | Memory Management Unit                       | 内存管理单元                             |
 | MQD     | Memory Queue Descriptor                      | 保存在内存中的队列配置描述               |
-| MTYPE   | Memory Type                                  | GPU PTE 中选择缓存/一致性行为的内存类型  |
+| MTYPE | Memory Type | 驱动和 GPU PTE 使用的内存类型；两者编码需转换 |
 | NC      | Non-Coherent                                 | GPU 可缓存但不自动保持硬件一致性的类型   |
+| NT | Non-Temporal | 指令的非时间局部性提示 |
 | NUMA    | Non-Uniform Memory Access                    | 非一致性内存访问                         |
 | PA      | Physical Address                             | 物理地址                                 |
 | PASID   | Process Address Space ID                     | 进程地址空间标识                         |
-| PDD     | Process Device Data                          | KFD 中某个进程在某个 GPU 上的状态        |
 | PCI     | Peripheral Component Interconnect            | 外设组件互连标准                         |
 | PCIe    | Peripheral Component Interconnect Express    | 高速外设互连总线                         |
+| PDD     | Process Device Data                          | KFD 中某个进程在某个 GPU 上的状态        |
 | PDE     | Page Directory Entry                         | 页目录项                                 |
 | PFN     | Page Frame Number                            | 物理页框编号                             |
 | PTE     | Page Table Entry                             | 页表项                                   |
@@ -71,7 +78,7 @@
 | ROCr    | ROCm Runtime                                 | ROCm 的 HSA 用户态运行时                 |
 | RW      | Read Write                                   | 读写权限；也用于 AMD GPU 的读写型 MTYPE   |
 | RWX     | Read, Write, Execute                         | 读、写、执行三类页面访问权限             |
-| SC      | Sequential Consistency                       | 顺序一致性内存顺序                       |
+| SC | Sequential Consistency / System Cache level | 同步语境指顺序一致性；MI300 向量访存 SC[1:0] 指缓存作用域控制 |
 | SDMA    | System Direct Memory Access                  | AMD GPU 中负责数据搬运的专用引擎         |
 | SFENCE  | Store Fence                                  | x86 中约束先前 store 完成顺序的屏障指令  |
 | SG      | Scatter-Gather                               | 分散—聚集页面描述                       |
@@ -79,16 +86,19 @@
 | TLB     | Translation Lookaside Buffer                 | 地址翻译缓存                             |
 | TMZ     | Trusted Memory Zone                          | AMD GPU 的受保护/加密内存区域机制        |
 | TTM     | Translation Table Maps                       | DRM 的缓冲对象放置和迁移管理器           |
-| UC      | Uncached                                     | 当前 GPU 不缓存该内存的类型              |
 | UAPI    | User-space Application Programming Interface | 内核提供给用户态的接口                   |
+| UC | Uncached | GPU 侧 uncached 属性；不能据此排除内存侧末级缓存 |
 | USERPTR | User Pointer                                 | 使用现有用户态指针及页面的内存路径       |
 | VA      | Virtual Address                              | 虚拟地址                                 |
 | VMID    | Virtual Memory ID                            | GPU 活动地址空间使用的硬件上下文编号     |
 | VRAM    | Video Random-Access Memory                   | GPU 本地显存                             |
 | WC      | Write Combining                              | 允许合并写请求的内存类型                 |
+| XCC | Accelerator Core Complex | 驱动中用于标识 MI300 计算实例的名称 |
 | XGMI    | inter-chip Global Memory Interconnect        | AMD GPU/CPU 或 GPU 间的高速互连          |
 
 > 缩写表只用于查阅。正文会在概念首次出现时重新解释，不要求预先背诵。
+
+**[BOUNDARY]** 本文以 **AMD Instinct MI300 / CDNA 3** 为 GPU 硬件基线。指令与内存访问语义以本地 MI300 ISA（封面日期 2025-08-05）为准，软件实现按下列固定提交核对。MI300A/MI300X 尚未确认：system RAM、VRAM 首先表示分配和映射中的资源类别，不预设二者一定是两套独立物理内存。PCIe/BAR 示例只适用于明确标出的连接条件。
 
 ## 全文大纲
 
@@ -138,45 +148,27 @@ CPU和GPU各自获得可用地址
 
 ### 0.2 CPU 和 GPU 访问内存的总矩阵
 
-本文以带独立 VRAM 的离散 AMD GPU 为主，讨论以下四种常见访问：
+MI300 系列不能统一套用“CPU 有主机内存，GPU 有独立显存，两者都通过 PCIe 互访”的模型。具体型号尚未确认，先保留两种条件：
 
-| 访问者 | 目标       | 典型路径                                    | 是否经过 PCIe |
-| ------ | ---------- | ------------------------------------------- | ------------- |
-| CPU    | system RAM | CPU VA → CPU MMU → Host PA → RAM         | 否            |
-| CPU    | VRAM       | CPU VA → CPU 页表 → PCIe BAR 窗口 → VRAM | 是            |
-| GPU    | system RAM | GPUVA → GPU MMU → DMA 地址 → PCIe → RAM | 是            |
-| GPU    | VRAM       | GPUVA → GPU MMU → 本地显存地址 → VRAM    | 否            |
+| 条件 | 内存关系 | 本文如何使用 |
+| --- | --- | --- |
+| MI300X 接入外部 Host | GPU 本地 HBM 与 Host 内存分别管理；主机连接采用 PCIe | 可用下表说明 PCIe/BAR 访问，但窗口大小仍须核实 |
+| MI300A | CPU 与 GPU 集成并共享 HBM 内存系统 | 按各自地址空间和映射判断访问；不能把 CPU/GPU 交接都画成 PCIe 复制 |
 
-四条路径如下：
+> **[SPEC]** [AMD CDNA 3 架构白皮书](https://www.amd.com/content/dam/amd/en/documents/instinct-tech-docs/white-papers/amd-cdna-3-white-paper.pdf)，原文第 2～4、12～14 页，区分 MI300X 的独立 GPU 组织与 MI300A 的共享 HBM 组织。这里只列型号差异，不将其中一种认定为当前机器。
 
-```text
-CPU访问system RAM                 CPU访问CPU可见VRAM
+对于采用 PCIe 连接、Host RAM 与 GPU 本地 HBM 分开的条件示例：
 
-CPU load/store                    CPU load/store
-      ↓                                 ↓
-CPU MMU                           CPU MMU
-      ↓                                 ↓
-Host PA                           BAR映射的MMIO地址
-      ↓                                 ↓ PCIe
-system RAM                        VRAM
+| 访问者 | 目标 | 典型逻辑路径 | 是否经过 Host—GPU PCIe 连接 |
+| --- | --- | --- | --- |
+| CPU | Host RAM | CPU VA → CPU 页表 → Host PA → RAM | 否 |
+| CPU | CPU 可见的本地 HBM | CPU VA → CPU 页表 → BAR 窗口 → HBM | 是 |
+| GPU | Host RAM | GPUVA → GPU 页表 → DMA 地址 → 主机互连与必要的 IOMMU → RAM | 是 |
+| GPU | 本地 HBM | GPUVA → GPU 页表 → 本地内存地址 → HBM | 否 |
 
+GPU 页表、Host IOMMU 和互连在表中按逻辑职责列出，不表示芯片内部物理排列。MI300A 的共享内存仍需要正确的 CPU/GPU 地址映射与同步，不能从“共享 HBM”直接推导出共用页表或省略 release/acquire。
 
-GPU访问system RAM                 GPU访问本地VRAM
-
-GPU load/store或取包              GPU load/store
-      ↓                                 ↓
-GPU MMU                           GPU MMU
-      ↓                                 ↓
-DMA地址                           本地显存地址
-      ↓ PCIe                            ↓
-system RAM                        VRAM
-```
-
-从主机平台看，GPU 对 system RAM 的读写属于设备 DMA 访问，但执行者不一定是 SDMA。Shader、命令处理前端和 SDMA 都可以发起访问；其中，SDMA 是专门执行“读源再写目标”的搬运引擎。
-
-是否经过 PCIe，取决于访问是否跨越主机与离散 GPU 的边界：
-
-> 不是所有 CPU↔GPU 内存访问都经过 PCIe。CPU 访问本机 RAM、GPU 访问本地 VRAM 都不经过 PCIe；只有跨越主机与离散 GPU 边界的路径才通常经过 PCIe。
+GPU 发起内存访问时，执行者可以是 Shader、命令处理前端或 SDMA。SDMA 是专门搬运数据的引擎；普通 Kernel 的 load/store 不必经过 SDMA。
 
 ### 0.3 访问、拷贝和通知不是同一件事
 
@@ -256,7 +248,7 @@ GPU侧：GPUVA ──→ GPU页表 ┘
 
 ### 1.1 数据可能放在哪里
 
-在当前离散 GPU 模型中，主要有两类物理存储：
+本文先区分两类内存资源。下表中的物理分离和 PCIe 访问特征用于 MI300X 式条件示例；MI300A 共享 HBM 的分配不能直接套用这张物理位置表：
 
 | 存储       | 所在位置     | 谁访问更自然 | 典型特点                                      |
 | ---------- | ------------ | ------------ | --------------------------------------------- |
@@ -321,13 +313,13 @@ GPU 访问本地 VRAM 仍然可以从 GPUVA 开始，但最终落在 GPU 本地�
 GPUVA → GPU MMU / GPU页表 → 本地显存地址 → VRAM
 ```
 
-GPU 访问 system RAM 则跨过离散 GPU 与主机之间的互连：
+在第 0.2 节的 MI300X 式条件示例中，GPU 访问 Host system RAM 需要经过主机连接：
 
 ```text
 GPUVA → GPU MMU / GPU页表 → DMA地址 → PCIe → system RAM
 ```
 
-CPU 访问 VRAM 时，CPU 不能直接使用 GPUVA。驱动要把可见 VRAM 通过 PCIe BAR 暴露到 CPU 的物理/MMIO 地址空间，再由 CPU 页表建立 CPU VA：
+同一 PCIe 条件下，CPU 访问 GPU 本地 VRAM 时，驱动通过 BAR 窗口和 CPU 页表建立 CPU VA；CPU 不能直接把 GPUVA 作为可用的 CPU 指针：
 
 ```text
 CPU VA
@@ -364,10 +356,10 @@ CPU VA
 驱动需要对内存控制器FB位置附近所报告的VRAM大小作特殊处理。
 ```
 
-这组字段把“PCIe 向 CPU 暴露的窗口”和“GPU 自己看到的显存地址”分开保存：
+这组字段分别保存 CPU 可访问窗口与 GPU 视角的内存地址。PCIe/BAR 是窗口的一种来源，APU 或 CPU—GPU XGMI 路径另有处理：
 
 - 第 223 行表明这些字段属于同一个 GMC 状态对象，但它们不是同一种地址。
-- 第 224～230 行定义 CPU 侧 aperture：`aper_base` 是 BAR 在 CPU 物理/MMIO 地址空间中的起点，`aper_size` 是这个窗口的长度。CPU 后续 mmap VRAM BO 时依赖这类窗口，而不是使用 GPUVA。
+- 第 224～230 行定义 CPU 侧 aperture：`aper_base` 是 CPU 可访问窗口的起点，`aper_size` 是窗口长度；PCIe 路径从 BAR 取得，其他平台路径可覆盖这两个字段。CPU 后续 mmap VRAM BO 时依赖这类窗口，而不是使用 GPUVA。
 - 第 231～233 行的 `mc_vram_size` 保存内存控制器视角下需要经过芯片特殊规则修正的显存大小；它不是 BAR 长度。
 - 第 234 行的 `visible_vram_size` 是驱动最终认定“当前具备 CPU 直访条件”的 VRAM 长度，后面还会受到 BAR、真实 VRAM 大小和模块参数的共同限制。
 
@@ -380,7 +372,7 @@ CPU VA
 软件最终采用：visible_vram_size
 ```
 
-> **[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/gmc_v9_0.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gmc_v9_0.c) 第 1683～1704、1731 行展示调用和返回后的处理：
+> **[SOURCE]** Linux `248951ddc14d`，[`gmc_v9_0.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gmc_v9_0.c) 第 1683～1731 行。CPU aperture 先读取 BAR，再按平台条件选择是否覆盖；必须保留中间分支才能解释 MI300 系列。
 
 ```c
 1683: static int gmc_v9_0_mc_init(struct amdgpu_device *adev)
@@ -405,30 +397,52 @@ CPU VA
 1702: 	}
 1703: 	adev->gmc.aper_base = pci_resource_start(adev->pdev, 0);
 1704: 	adev->gmc.aper_size = pci_resource_len(adev->pdev, 0);
-```
-
-```c
+1705:
+1706: #ifdef CONFIG_X86_64
+1707: 	/*
+1708: 	 * AMD Accelerated Processing Platform (APP) supporting GPU-HOST xgmi
+1709: 	 * interface can use VRAM through here as it appears system reserved
+1710: 	 * memory in host address space.
+1711: 	 *
+1712: 	 * For APUs, VRAM is just the stolen system memory and can be accessed
+1713: 	 * directly.
+1714: 	 *
+1715: 	 * Otherwise, use the legacy Host Data Path (HDP) through PCIe BAR.
+1716: 	 */
+1717:
+1718: 	/* check whether both host-gpu and gpu-gpu xgmi links exist */
+1719: 	if ((!amdgpu_sriov_vf(adev) &&
+1720: 		(adev->flags & AMD_IS_APU) && !amdgpu_passthrough(adev)) ||
+1721: 	    (adev->gmc.xgmi.supported &&
+1722: 	     adev->gmc.xgmi.connected_to_cpu)) {
+1723: 		adev->gmc.aper_base =
+1724: 			adev->gfxhub.funcs->get_mc_fb_offset(adev) +
+1725: 			adev->gmc.xgmi.physical_node_id *
+1726: 			adev->gmc.xgmi.node_segment_size;
+1727: 		adev->gmc.aper_size = adev->gmc.real_vram_size;
+1728: 	}
+1729:
+1730: #endif
 1731: 	adev->gmc.visible_vram_size = adev->gmc.aper_size;
 ```
 
-源码英文内容的中文翻译：第 1687 行说明 SI 路径报告的显存大小单位为兆字节；第 1692 行调试信息表示“对应用型 APU 把 `mc_vram_size` 设为 0”。
+英文注释与调试信息的相关含义：容量回调以 MiB 为单位；应用型 APU 分支把 `mc_vram_size` 设为 0。x86-64 条件块说明，CPU—GPU XGMI 或满足条件的 APU 可以通过主机地址空间直接访问相应内存，其余路径使用 PCIe BAR。源码中的 SI、APU 等注释属于公共实现的历史和平台分支，不是 MI300 全系列采用同一种内存组织的证据。
 
-这段初始化代码证明，显存容量和 CPU 可见范围分阶段确定：
+这段代码主要证明 aperture 的选择顺序：
 
-- 第 1683～1685 行定义 GMC v9 初始化入口和错误返回变量。
-- 第 1687～1695 行通过 `adev->nbio.funcs->get_memsize()` 回调读取显存容量并换算为字节；应用型 APU 走单独分支。随后把初始 `real_vram_size` 设为 `mc_vram_size`。这一步确定显存容量，尚未确定 CPU 可见范围。
-- 第 1697～1702 行只对非 APU 且不通过 XGMI 连接 CPU 的路径调用 `amdgpu_device_resize_fb_bar()`，因此并非所有 AMD GPU 都会在初始化时调整 PCIe BAR。
-- 第 1703～1704 行在调整尝试返回后，通过 PCI 核心重新读取 BAR0 的起点和长度。这里读取的是最终平台状态，而不是继续使用函数调用前的期望值。
-- 第 1731 行先令 `visible_vram_size = aper_size`，表示初始 CPU-visible 上限来自实际 BAR 长度；下面的通用 GMC 代码还可能继续缩小它。
-
-第 1699 行先请求调整 BAR，第 1703～1704 行再重新读取资源。只有后一步才把调整结果同步到 `aper_base/aper_size`。
+- 第 1683～1695 行进入初始化并确定驱动采用的容量字段。
+- 第 1697～1704 行在非 APU、非 CPU—GPU XGMI 条件下尝试调整 BAR，再读取当前 BAR0 的起点和长度。
+- 第 1706～1730 行是关键平台分支：满足 APU 或 CPU—GPU XGMI 条件时，按节点内存布局重算 `aper_base`，并令 `aper_size = real_vram_size`。
+- 第 1731 行使用上述分支最终确定的 `aper_size` 初始化 `visible_vram_size`。因此最终 CPU 可见范围的来源可能是 BAR，也可能是平台内存映射。
 
 ```text
-调用amdgpu_device_resize_fb_bar()调整BAR0
-  → 返回内存控制器初始化
-  → 重新读取BAR0的base和size
-  → aper_size = 调整后的BAR长度
-  → visible_vram_size先初始化为aper_size
+读取 BAR0 → 得到初始 aper_base / aper_size
+              ↓
+符合 APU 或 CPU—GPU XGMI 条件？
+  是：用平台内存地址和 real_vram_size 覆盖 aperture
+  否：保留 BAR aperture
+              ↓
+visible_vram_size = 最终 aper_size
 ```
 
 > **[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_gmc.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_gmc.c) 第 225～229 行随后还可能缩小这个软件可用长度：
@@ -441,7 +455,7 @@ CPU VA
 229: 		mc->visible_vram_size = mc->real_vram_size;
 ```
 
-这五行用两个软件上限收紧前面由 BAR 得到的初始可见长度：
+这五行用两个软件上限收紧前面按平台分支确定的初始可见长度：
 
 - 第 225～226 行先处理用户通过模块参数设置的 `vis_limit`。只有该限制非 0 且比当前值更小时才生效，因此它只能缩小 CPU-visible VRAM，不能凭空扩大硬件 BAR。
 - 第 228～229 行再用 `real_vram_size` 封顶，防止可见窗口长度超过真实显存容量。即使平台报告了更大的 BAR，也不能据此访问不存在的 VRAM。
@@ -457,7 +471,7 @@ visible_vram_size <= real_vram_size
 
 `visible_vram_size` 表示具备 CPU 直访条件的 VRAM 长度，不表示某个进程已经建立对应的 CPU VA；具体 BO 仍需单独 mmap。
 
-Large BAR 与 Small BAR 的基础区别只在“CPU 一次能看见多少 VRAM”：
+在 PCIe/BAR 路径中，Large BAR 与 Small BAR 的基础区别在“CPU 一次能看见多少 VRAM”：
 
 | 情况      | CPU 可见范围      | CPU 映射条件                                                       |
 | --------- | ----------------- | ------------------------------------------------------------------ |
@@ -510,7 +524,7 @@ Large BAR 与 Small BAR 的基础区别只在“CPU 一次能看见多少 VRAM�
 - 第 1178～1184 行在改动资源前关闭 PCI memory decoding，并拆除依赖现有 BAR 的 Doorbell 状态，避免硬件仍按旧 BAR 地址响应访问。
 - 第 1186～1188 行调用 `pci_resize_resource()` 修改资源编号 0，也就是 BAR0。最后一个参数是代际相关的资源对齐要求，说明 BAR 调整还受 ASIC 规则约束。
 
-本摘录没有展示函数后半段的错误恢复和重新初始化，因此不能仅凭第 1186 行认定调整一定成功。前面的 `gmc_v9_0_mc_init()` 会在本函数返回后重新读取 BAR0，才得到最终 `aper_base/aper_size`。
+本摘录没有展示函数后半段的错误恢复和重新初始化，因此不能仅凭第 1186 行认定调整一定成功。前面的 `gmc_v9_0_mc_init()` 会在本函数返回后重新读取 BAR0；如果随后进入 APU/XGMI 分支，还会继续覆盖 `aper_base/aper_size`。
 
 `pci_resize_resource(..., 0, ...)` 中的 `0` 表示 PCI BAR0。这个函数不直接修改 `visible_vram_size`；它先调整 BAR0 资源，调用者返回后再读取新的 `pci_resource_len()`，由此更新 `aper_size` 和 `visible_vram_size`。
 
@@ -682,6 +696,8 @@ PTE 保存目标页面地址和访问属性，不保存缓冲区数据。
 
 `VALID` 表示映射有效，`SYSTEM` 表示目标是 system memory，`READABLE`、`WRITEABLE`、`EXECUTABLE` 表示访问权限。地址部分在不同目标下含义不同：
 
+**[BOUNDARY]** 下表中的 Host IOMMU 分支沿用第 0.2 节外部 Host 的 DMA 访问条件。MI300A 的共享 HBM 路径须按实际平台的地址映射确认。
+
 | PTE 映射目标             | PTE 地址部分可怎样理解 | 后续是否经过 Host IOMMU |
 | ------------------------ | ---------------------- | ----------------------- |
 | system RAM，IOMMU 开启   | DMA 地址，通常是 IOVA  | 是                      |
@@ -709,9 +725,11 @@ PTE 保存目标页面地址和访问属性，不保存缓冲区数据。
 
 - 第 1162 行定义 `WATCH_START` 宏，并把公共 Shader 开头和 32 位辅助宏拼接进同一段 ISA 字符串。行尾反斜杠只是 C/C++ 预处理器续行，不是 GPU 指令的一部分。
 - 第 1163～1166 行把标量寄存器 `s0～s3` 中的四个 32 位输入复制到向量寄存器 `v0～v3`。后面的 `v[2:3]` 会把 `v2`、`v3` 组合成一个 64 位地址操作数。
-- 第 1167 行的 `flat_load_dword` 从 `v[2:3]` 指定的 GPU 虚拟地址读取一个 32 位 dword，并把返回值放入 `v4`。从这一行开始，地址才进入 GPU TLB/Page Walker 和内存系统；前面的 `v_mov_b32` 只是在准备寄存器。
+- 第 1167 行的 `flat_load_dword` 从 `v[2:3]` 指定的 GPU 虚拟地址读取一个 32 位 dword，并把返回值放入 `v4`。本例要求该地址位于 global 地址范围，随后通过 GPUVM 访问；前面的 `v_mov_b32` 只是在准备寄存器。FLAT 还可以根据地址 aperture 选择 LDS 或 scratch，不能把所有 FLAT 地址都当成相同的全局页表访问。
 - 第 1168 行等待向量内存与相关本地/标量内存计数达到要求，防止后续指令在 load 结果尚未返回时继续使用 `v4`。它等待的是访存完成，不负责创建 PTE，也不负责 TLB invalidate。
 - 第 1169 行开始初始化后续测试使用的另一个向量寄存器；它不参与本节所解释的这次地址翻译。
+
+> **[SPEC]** [MI300 / CDNA 3 ISA](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf)（封面日期 2025-08-05） §4.4、§10.1～§10.3，原文第 19～20、79～82 页。FLAT 根据地址范围选择 global、LDS 或 scratch；本例取 global 地址。`S_WAITCNT` 等待已发出的操作达到计数条件，不创建映射，也不代替跨 Agent 同步。
 
 这段源码与驱动建表路径的联系是：驱动提前准备 `v[2:3]` 中地址对应的 GPU PTE，Shader 执行到第 1167 行时才由硬件使用该映射。每次执行 `flat_load_dword` 时，都不会再次调用 Linux C 函数。
 
@@ -1583,126 +1601,92 @@ VMID 6 → PASID 51    已占用
 
 ##### 1.5.5.4 源码第四步：给这个 VMID 写入根页表地址
 
-前文用抽象编号 VMID `5` 解释机制。本节引用 GFXHUB v2.0 的具体代码，因此改用该代际实际划给 KFD 的 VMID 范围。
+MI300 的页表根寄存器示例采用本地 GFXHUB v1.2 实现。先确定目标节点允许使用的 VMID 范围，再讨论寄存器写入：
 
-> **[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/gmc_v10_0.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gmc_v10_0.c) 第 869～875 行说明 GFX10 的划分：
+| 固定源码中的条件 | KFD 可用范围 | 边界 |
+| --- | --- | --- |
+| MI300 的公共初始范围 | VMID 3～15，共 13 个 | VMID 0 留给系统；后续分区逻辑可以进一步划分 |
+| CPX 且存在多个 KFD 节点 | 对应节点分别使用 4～9 或 10～15 | 此分支不使用 VMID 3；不能把 13 个槽位算到每个节点 |
 
-```c
-869: 	/*
-870: 	 * number of VMs
-871: 	 * VMID 0 is reserved for System
-872: 	 * amdgpu graphics/compute will use VMIDs 1-7
-873: 	 * amdkfd will use VMIDs 8-15
-874: 	 */
-875: 	adev->vm_manager.first_kfd_vmid = 8;
-```
+> **[SOURCE]** Linux `248951ddc14d`，[`gmc_v9_0.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gmc_v9_0.c) 第 2019～2034 行。`first_kfd_vmid` 在计算设备的 multi-AID 路径取 3；同一固定版本的 [`kfd_device.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device.c) 第 789～810、909～931 行按 CPX 条件划分节点范围；[`gmc_v9_0.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gmc_v9_0.c) 第 1489～1490 行为该路径选择 `gfxhub_v1_2_funcs`。
 
-源码英文注释的中文翻译：这里定义 VM 数量划分；VMID 0 留给系统，AMDGPU 图形/计算路径使用 VMID 1～7，AMDKFD 使用 VMID 8～15。
-
-第 875 行只保存 `first_kfd_vmid = 8`，KFD 上界仍由通用的 `AMDGPU_NUM_VMID = 16` 推得。因此，当前 GFX10 示例的 KFD 范围是 `[8, 15]`，共 8 个槽位。该范围不是所有 AMD GPU 和分区模式的固定规范。
-
-下面假设非 HWS 路径为当前进程分配 VMID `8`，传给 GFXHUB v2.0 的根页表基值为：
+下面是 No-HWS 配置示例，假设当前节点允许使用且已分配 VMID 8：
 
 ```text
 vmid = 8
-R = page_table_base = 0x0000_1234_5678_9000
+R = page_table_base = 0x0000_1234_5678_9000（仅示例值）
+
+[Host Driver 配置阶段]
+选中目标 XCC 的 GFXHUB
+  → 寄存器组位置 = CONTEXT0 基准 + ctx_addr_distance × 8
+  → PAGE_TABLE_BASE_ADDR_LO32 = 0x5678_9000
+  → PAGE_TABLE_BASE_ADDR_HI32 = 0x0000_1234
+
+[GPU 运行阶段]
+Queue 使用该实例中的 VMID 8
+  → GFXHUB 取得根页表基值 R
+  → TLB 未命中时，Page Walker 从 R 遍历 GPUVA 对应的页表
 ```
 
-`R` 是用于展示 64 位数值如何写入寄存器的示例值，不是源码中的固定地址。它供 GPU MMU 定位根页表，不是 CPU VA。驱动配置和 GPU 运行发生在两个不同阶段：
+`R` 是配置寄存器时使用的根页表基值，不是 CPU VA。`ctx_addr_distance` 是相邻上下文地址寄存器组的步长，乘 VMID 只是在定位寄存器，不是在翻译 GPUVA。
 
-```text
-[配置阶段：Host Driver]
-
-函数输入
-├─ vmid = 8
-└─ R = 0x0000_1234_5678_9000
-       │
-       ├─ vmid选择寄存器组
-       │    CONTEXT0基准 + ctx_addr_distance × 8
-       │
-       ├─ lower_32_bits(R) = 0x5678_9000
-       └─ upper_32_bits(R) = 0x0000_1234
-                         │
-                         ▼
-GFXHUB的VMID 8上下文寄存器组
-├─ PAGE_TABLE_BASE_ADDR_LO32 = 0x5678_9000
-└─ PAGE_TABLE_BASE_ADDR_HI32 = 0x0000_1234
-   两个寄存器共同表示根页表基值R
-
-
-[运行阶段：GPU]
-
-当前Queue使用VMID 8
-  → GFXHUB选择VMID 8上下文寄存器
-  → 取得根页表基值R
-
-访存请求给出GPUVA G
-  → GPU Page Walker从R开始遍历G对应的页表
-  → 最终PTE给出目标地址D2和访问属性
-```
-
-**[INFERENCE]** 配置阶段中，`gfxhub_v2_0_setup_vm_pt_regs()` 把根页表地址写入指定 VMID 的上下文寄存器。Queue 以后使用同一 VMID 运行时，Page Walker 才从该根地址开始翻译 GPUVA。这个函数只写寄存器，不执行 Page Walk。
-
-这张图分为配置和运行两个阶段：
-
-1. **配置时**，`vmid=8` 只负责选中 VMID 8 对应的寄存器组；`R` 被拆成低 32 位和高 32 位，分别写入这组寄存器。
-2. **运行时**，当前 Queue 使用 VMID 8，GFXHUB 因而取得这组寄存器共同表示的根页表基值 `R`；Page Walker 再用 `R` 和 GPUVA `G` 遍历页表。
-
-图中的 `ctx_addr_distance` 是相邻 VM 上下文寄存器组之间的寄存器偏移。
-
-> **[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_gmc.h`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_gmc.h) 第 130～135 行：
+> **[SOURCE]** Linux `248951ddc14d`，[`gfxhub_v1_2.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gfxhub_v1_2.c) 第 570～574 行。以 Context 1 和 Context 0 的寄存器编号之差计算上下文步长。
 
 ```c
-130: 	/*
-131: 	 * store the register distances between two continuous context domain
-132: 	 * and invalidation engine.
-133: 	 */
-134: 	uint32_t	ctx_distance;
-135: 	uint32_t	ctx_addr_distance; /* include LO32/HI32 */
+570: 		hub->ctx_distance = regVM_CONTEXT1_CNTL -
+571: 				regVM_CONTEXT0_CNTL;
+572: 		hub->ctx_addr_distance =
+573: 				regVM_CONTEXT1_PAGE_TABLE_BASE_ADDR_LO32 -
+574: 				regVM_CONTEXT0_PAGE_TABLE_BASE_ADDR_LO32;
 ```
 
-源码英文注释的中文翻译：这里保存相邻两个上下文域以及失效引擎之间的寄存器距离；`ctx_addr_distance` 覆盖低 32 位和高 32 位地址寄存器组。
+第 570～571 行计算控制寄存器的步长；第 572～574 行计算页表根低、高位寄存器组使用的步长。随后，配置函数按 XCC 逐个写入目标 VMID 的根页表基值：
 
-这两个字段保存的是“寄存器编号/偏移的步长”，不是页表地址本身：第 134 行的 `ctx_distance` 用于一般上下文寄存器组；第 135 行的 `ctx_addr_distance` 专门用于页表基地址寄存器组。驱动用 `基准寄存器 + 步长 × vmid` 定位第 `vmid` 组寄存器。
-
-> **[SOURCE]** GFXHUB v2.0 在 Linux [`drivers/gpu/drm/amd/amdgpu/gfxhub_v2_0.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gfxhub_v2_0.c) 第 456～458 行，用 Context 1 与 Context 0 的 LO32 寄存器编号之差初始化这个间距：
+> **[SOURCE]** Linux `248951ddc14d`，[`gfxhub_v1_2.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gfxhub_v1_2.c) 第 42～72 行。包装函数生成实例掩码，内部函数遍历所选 XCC，并分别写入低、高 32 位。
 
 ```c
-456: 	hub->ctx_distance = mmGCVM_CONTEXT1_CNTL - mmGCVM_CONTEXT0_CNTL;
-457: 	hub->ctx_addr_distance = mmGCVM_CONTEXT1_PAGE_TABLE_BASE_ADDR_LO32 -
-458: 		mmGCVM_CONTEXT0_PAGE_TABLE_BASE_ADDR_LO32;
+42: static void gfxhub_v1_2_xcc_setup_vm_pt_regs(struct amdgpu_device *adev,
+43: 					     uint32_t vmid,
+44: 					     uint64_t page_table_base,
+45: 					     uint32_t xcc_mask)
+46: {
+47: 	struct amdgpu_vmhub *hub;
+48: 	int i;
+49:
+50: 	for_each_inst(i, xcc_mask) {
+51: 		hub = &adev->vmhub[AMDGPU_GFXHUB(i)];
+52: 		WREG32_SOC15_OFFSET(GC, GET_INST(GC, i),
+53: 				    regVM_CONTEXT0_PAGE_TABLE_BASE_ADDR_LO32,
+54: 				    hub->ctx_addr_distance * vmid,
+55: 				    lower_32_bits(page_table_base));
+56:
+57: 		WREG32_SOC15_OFFSET(GC, GET_INST(GC, i),
+58: 				    regVM_CONTEXT0_PAGE_TABLE_BASE_ADDR_HI32,
+59: 				    hub->ctx_addr_distance * vmid,
+60: 				    upper_32_bits(page_table_base));
+61: 	}
+62: }
+63:
+64: static void gfxhub_v1_2_setup_vm_pt_regs(struct amdgpu_device *adev,
+65: 					 uint32_t vmid,
+66: 					 uint64_t page_table_base)
+67: {
+68: 	uint32_t xcc_mask;
+69:
+70: 	xcc_mask = GENMASK(NUM_XCC(adev->gfx.xcc_mask) - 1, 0);
+71: 	gfxhub_v1_2_xcc_setup_vm_pt_regs(adev, vmid, page_table_base, xcc_mask);
+72: }
 ```
 
-第 456 行用 Context 1 与 Context 0 的控制寄存器编号之差计算普通上下文步长；第 457～458 行用两组页表基址低 32 位寄存器的编号之差计算地址步长。这种算法以硬件寄存器组等距排列为前提，只计算定位规则，不读写页表内容。
+这两个函数处于页表根配置阶段，调用关系是 `gfxhub_v1_2_setup_vm_pt_regs()` → `gfxhub_v1_2_xcc_setup_vm_pt_regs()`：
 
-因此，对 VMID 8 使用 `ctx_addr_distance * 8`，是在等间距的上下文寄存器组中定位 VMID 8 对应的寄存器组，不是在翻译 GPUVA。
+- 第 64～71 行准备实例掩码，将 VMID 和同一个根页表基值交给内部函数。
+- 第 42～51 行接收输入并逐个选择 XCC 对应的 GFXHUB。MI300 的这个处理不能缩成固定写 GFXHUB 0。
+- 第 52～60 行在每个选中的实例中定位目标 VMID，分别写入根页表基值的低、高 32 位。
 
-> **[SOURCE]** 同一文件第 120～131 行随后把 `page_table_base` 的低、高 32 位写入选中的寄存器组。只保留图中对应的两次写寄存器操作：
+函数完成的是寄存器配置。GPU 后续使用该上下文访问内存时，才由硬件按 GPUVA 查 TLB 或遍历 PDE/PTE；驱动不会在每次 load/store 时重写根寄存器。
 
-```c
-120: static void gfxhub_v2_0_setup_vm_pt_regs(struct amdgpu_device *adev, uint32_t vmid,
-121: 				uint64_t page_table_base)
-122: {
-123: 	struct amdgpu_vmhub *hub = &adev->vmhub[AMDGPU_GFXHUB(0)];
-124:
-125: 	WREG32_SOC15_OFFSET(GC, 0, mmGCVM_CONTEXT0_PAGE_TABLE_BASE_ADDR_LO32,
-126: 			    hub->ctx_addr_distance * vmid,
-127: 			    lower_32_bits(page_table_base));
-128:
-129: 	WREG32_SOC15_OFFSET(GC, 0, mmGCVM_CONTEXT0_PAGE_TABLE_BASE_ADDR_HI32,
-130: 			    hub->ctx_addr_distance * vmid,
-131: 			    upper_32_bits(page_table_base));
-```
-
-这段函数把一个 64 位根页表基值写入指定 VMID 的 GFXHUB 上下文寄存器：
-
-- 第 120～123 行接收目标设备、VMID 和 `page_table_base`，并取得 GFXHUB 0 的寄存器布局描述。
-- 第 125～127 行以 Context 0 的低 32 位寄存器为基准，加上 `ctx_addr_distance × vmid`，定位目标 VMID 的低位寄存器，再写入根地址低 32 位。
-- 第 129～131 行使用完全相同的 VMID 步长定位高位寄存器，并写入根地址高 32 位。两次写入共同构成 `R`，不是两套页表。
-
-该函数只配置 Page Walker 的起点；它不遍历 PDE/PTE，也不把整套页表复制到寄存器。以后 Queue 使用这个 VMID 发起地址请求时，硬件才读取寄存器中的 `R` 并按 GPUVA 执行 Page Walk。
-
-> **[BOUNDARY]** 图只表示寄存器选择与地址翻译的逻辑关系，不展示芯片内部模块的物理布局，驱动也不会在 GPU 每次访存时重写寄存器。不同 GPU 代际的寄存器名称和布局可能不同；本图只对应这里引用的 GFXHUB v2.0 代码。
+**[BOUNDARY]** 此处用直接配置接口说明根页表与上下文的关系。HWS/CPSCH 会通过运行列表向固件交付进程状态；实际部署模式与分区须另外核对，不能仅凭 MI300 名称确定。
 
 ##### 1.5.5.5 源码第五步：最后一条 Queue 销毁后释放 VMID
 
@@ -1992,7 +1976,7 @@ Packet 中没有由 Host Driver 指定的 VMID 字段。结合前面的 `vmid_ma
   → 固件可能重新安排VMID
 ```
 
-> **[BOUNDARY]** HWS 固件内部怎样保存占用表、怎样选择换出对象，以及 MES 的具体调度协议留到 AQL Queue 调度阶段。当前边界是：`compute_vmid_bitmap` 表示分给 KFD 的 VMID 范围，HWS 的实时占用由固件维护。
+**[BOUNDARY]** `compute_vmid_bitmap` 表示分给 KFD 的 VMID 范围，HWS 的实时占用由固件维护。MI300 的 Queue 驻留和 HWS/CPSCH 交付流程见 [03_AMD GPU 队列与 AQL Dispatch](<./03_AMD GPU 队列与 AQL Dispatch.md>)；固件内部占用表和换出算法不由 Linux 接口源码公开。
 
 #### 1.5.6 VMID 0 不属于普通 AQL 进程地址空间
 
@@ -2246,22 +2230,32 @@ GART aperture地址A
   → system resource
 ```
 
-> **[SOURCE]** 以 GFXHUB v2.0 为例，Linux [`drivers/gpu/drm/amd/amdgpu/gfxhub_v2_0.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gfxhub_v2_0.c) 第 134～138 行明确把 GART 根页表配置给 VMID 0：
+> **[SOURCE]** Linux `248951ddc14d`，[`gfxhub_v1_2.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gfxhub_v1_2.c) 第 74～87 行。MI300 的系统上下文初始化根据是否存在 `pdb0_bo` 选择根页表，再配置 VMID 0。
 
 ```c
-134: static void gfxhub_v2_0_init_gart_aperture_regs(struct amdgpu_device *adev)
-135: {
-136: 	uint64_t pt_base = amdgpu_gmc_pd_addr(adev->gart.bo);
-137:
-138: 	gfxhub_v2_0_setup_vm_pt_regs(adev, 0, pt_base);
+74: static void gfxhub_v1_2_xcc_init_gart_aperture_regs(struct amdgpu_device *adev,
+75: 						    uint32_t xcc_mask)
+76: {
+77: 	uint64_t gart_start = amdgpu_virt_xgmi_migrate_enabled(adev) ?
+78: 			adev->gmc.vram_start : adev->gmc.fb_start;
+79: 	uint64_t pt_base;
+80: 	int i;
+81:
+82: 	if (adev->gmc.pdb0_bo)
+83: 		pt_base = amdgpu_gmc_pd_addr(adev->gmc.pdb0_bo);
+84: 	else
+85: 		pt_base = amdgpu_gmc_pd_addr(adev->gart.bo);
+86:
+87: 	gfxhub_v1_2_xcc_setup_vm_pt_regs(adev, 0, pt_base, xcc_mask);
 ```
 
-这五行把内核 GART 的根页表地址安装进 GFXHUB 的 VMID 0 上下文：
+这段代码位于系统 GPU 地址空间初始化阶段：
 
-- 第 134～136 行从 `adev->gart.bo` 找到 GART 根页表 BO，并通过 `amdgpu_gmc_pd_addr()` 取得 GPU 可使用的页目录根地址 `pt_base`；该地址不是 CPU VA。
-- 第 138 行复用前面分析过的 `gfxhub_v2_0_setup_vm_pt_regs()`；第二个参数固定为 0，因此低、高 32 位根地址被写入 VMID 0 的寄存器组。
+- 第 74～80 行接收目标 XCC 集合并准备系统 aperture 与页表根变量。
+- 第 82～85 行优先使用 `pdb0_bo`；未建立该对象时，才使用 `gart.bo`。因此 MI300 的 VMID 0 根不能一律写成 `gart.bo`。
+- 第 87 行把选定的根页表配置到所选实例的 VMID 0。后续还会设置 aperture 范围等寄存器。
 
-源文件第 139 行以后还会配置 GART aperture 起止范围等寄存器，但这些不会改变“根页表属于 VMID 0”的结论。这里发生在 GPU/GART 初始化阶段，不是某个 AQL Queue 创建时重新申请 VMID。
+前面的 GART 图只画出系统地址空间中的 GART 映射；存在 `pdb0_bo` 时，还应区分系统顶层页目录与它引用的 GART 页表。这里不创建用户 AQL 进程的 VMID。
 
 某个 GTT resource 绑定进内核 GART 后，`resource->start` 可以参与表示它在 GART aperture 中的资源偏移。该偏移只属于内核 GART alias，不是用户进程 GPUVA，也不会成为 AQL 进程 GPUVM 建表时的额外翻译层。
 
@@ -2747,7 +2741,7 @@ Runtime 此时只确定了三件事：
 
 进入 KFD ALLOC 前，HSAKMT 已经选定计划 GPUVA `G0`，并将它写入 ioctl 参数。此时 `G0` 只是地址计划，BO 和 GPU PTE 都还不存在。KFD ALLOC 随后创建 BO，GPU MAP 再建立 PTE；MAP 完成后，GPU 才能使用 `G0`。
 
-> **[SOURCE]** HSAKMT [`libhsakmt/src/fmm.c`](./2.源码/rocr-runtime/libhsakmt/src/fmm.c) 第 1150～1158 行在发出 KFD ALLOC 前填写 `va_addr`；当前离散 GPU 的 GTT 路径直接保留 `mem` 的地址数值：
+> **[SOURCE]** HSAKMT [`libhsakmt/src/fmm.c`](./2.源码/rocr-runtime/libhsakmt/src/fmm.c) 第 1150～1158 行在发出 KFD ALLOC 前填写 `va_addr`；这里选定的 GTT 路径直接保留 `mem` 的地址数值：
 
 ```c
 1150: 	/* Allocate memory from amdkfd */
@@ -2768,7 +2762,7 @@ Runtime 此时只确定了三件事：
 - 第 1151 行指定本次分配属于哪块 GPU。
 - 第 1153～1154 行保留调用者选择的 `ioc_flags`，并强制增加 `NO_SUBSTITUTE`，要求内核不要静默换成其他内存类型。
 - 第 1155 行把 HSAKMT 已选定或预留的 `mem` 地址数值写入 `va_addr`。此时 `mem` 只是计划地址；它采用指针类型，不代表 BO 或 PTE 已经存在。
-- 第 1156～1158 行只对非离散 GPU 的 VRAM aperture 路径把地址换算成相对 aperture base 的偏移；本文离散 GPU 的 GTT Ring 不进入该分支，因此直接保留第 1155 行的数值 `G0`。
+- 第 1156～1158 行只对非离散 GPU 的 VRAM aperture 路径把地址换算成相对 aperture base 的偏移；本文选定的 GTT Ring 不满足 VRAM aperture 条件，不进入该分支，因此直接保留第 1155 行的数值 `G0`。
 
 这段代码只准备 ALLOC 输入。ioctl 和 BO 创建发生在后续调用中，GPU MAP 则在 ALLOC 之后执行。
 
@@ -2853,6 +2847,10 @@ GPU发出地址G0
 - 第 523～528 行处理 device-memory Ring 的前置条件：CPU 仍要填写 Packet，因此没有可用 Large BAR 时直接拒绝创建，而不是悄悄改用不可直访 VRAM。
 - 第 529～531 行的 device-memory 分支使用 coarse-grained allocator，并同时请求 executable 与 uncached 属性。
 - 第 532～535 行是本文当前 system-memory 主线：调用 `system_allocator()`，传入总字节数、`0x1000` 对齐和 `AllocateExecutable`。这里没有传入 `AllocateDoubleMap`。
+
+**[BOUNDARY]** `LargeBarEnabled()` 是 ROCr 的能力判断名称，不能直接用于判断 MI300 型号或物理连接。
+
+> **[SOURCE]** ROCr `ba56a24c6132`，[`amd_gpu_agent.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_gpu_agent.cpp) 第 228～234 行读取 CPU—GPU link 信息，并在 `num_hop >= 1` 时设置该标志。判断实际内存路径还须核对平台配置。
 
 本例得到一份 16 KiB backing 和一段 GPUVA 映射。device-memory 与 system-memory 是同一函数中的两个分支，不会串联执行。
 
@@ -5633,7 +5631,7 @@ GPU下一次访问G0                                          │ 发生页表�
                          最终重新得到G0 → D0
 ```
 
-这里的 invalidate 使旧地址翻译缓存失效，不清空 Ring 数据，也不把 GPU 数据 Cache 写回 DDR。Linux 函数名仍是 `kfd_flush_tlb()`；概念图统一写作“invalidate 旧 TLB 翻译”，以区别于数据 Cache 的 write-back flush。
+这里的 invalidate 使旧地址翻译缓存失效，不清空 Ring 数据，也不把 GPU 数据 Cache 写回目标内存。Linux 函数名仍是 `kfd_flush_tlb()`；概念图统一写作“invalidate 旧 TLB 翻译”，以区别于数据 Cache 的 write-back flush。
 
 **源码：外层等待后再处理 TLB**
 
@@ -5782,7 +5780,7 @@ GPU 运行时不读取 `kgd_mem`、`amdgpu_bo_va` 或 software mapping 等 C 对
 
 `MAP_MEMORY_TO_GPU` 负责修改 GPUVM 页表。活动 VMID 的选择和根页表配置发生在 Queue 创建与驻留阶段。
 
-> **[SOURCE]** GFXHUB v2.0 把根页表低、高 32 位写入 VMID 上下文寄存器的代码位于 Linux [`drivers/gpu/drm/amd/amdgpu/gfxhub_v2_0.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gfxhub_v2_0.c) 第 120～131 行，最小摘录和解释见 1.5.5.4。
+> **[SOURCE]** Linux `248951ddc14d`，[`gfxhub_v1_2.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gfxhub_v1_2.c) 第 42～72 行。MI300 路径按 XCC 配置 VMID 的根页表低、高 32 位，摘录和解释见 1.5.5.4。
 
 MAP 建好 PTE、Queue 取得活动 VMID 并配置根页表后，GPU 才具备完整的地址翻译条件。
 
@@ -5838,7 +5836,8 @@ GPU使用D0发出设备内存访问
               ├─ Host IOMMU开启：D0作为IOVA继续翻译到Host PA
               └─ Host IOMMU关闭：D0作为直连DMA/总线地址
               ▼
-经PCIe到达system RAM中的Ring第0页
+经适用互连到达system RAM中的Ring第0页
+（外部Host的PCIe条件例见0.2；不据此推定MI300A路径）
               │
               ▼
 Packet数据返回CP/MEC
@@ -5850,7 +5849,7 @@ Packet数据返回CP/MEC
 - 本节源码证明活动 VMID 关联一套页表，并通过上下文寄存器取得根页表基值。
 - 1.4 说明 TLB 未命中后，硬件 Page Walker 从根页表开始读取 PDE/PTE。
 
-图只表示逻辑数据流，不展示 ASIC 内部缓存和互连模块的物理布局。
+图只表示逻辑数据流，不展示 ASIC 内部缓存和互连模块的物理布局。Host IOMMU 的两条分支用于外部 Host 的 DMA 路径；MI300A 共享 HBM 应按实际平台地址映射理解。
 
 如果 Ring 位于 VRAM，MAP、VMID、TLB 和 Page Walk 的处理不变。区别在叶子 PTE：它给出本地 VRAM 地址，访问随后直接进入 GPU 本地内存系统，不经过 Host IOMMU 和 PCIe。
 
@@ -6714,7 +6713,7 @@ FREE 先检查是否仍有 GPUVM attachment 处于 mapped 状态：
 
 > **[AQL主线]** 本章中的 Ring、Packet、Doorbell 和 Completion Signal 都属于 AQL Queue 路径。除非特别说明，Ring 图继续使用本文选定的 system RAM backing 案例；本章不讨论 AMDGPU 内核 Ring 或普通 DRM IB。
 
-3.1～3.4 分别说明共享语义、缓存属性和同步顺序，3.5～3.7 再连接 Packet、Doorbell 和 Completion Signal。3.3 的属性表只提供概览，不追踪具体 GPU 代际的转换源码；3.7 的 wait 返回值属于可选源码验证。
+3.1～3.4 分别说明共享语义、缓存属性和同步顺序，3.5～3.7 再连接 Packet、Doorbell 和 Completion Signal。3.3 区分用户接口属性、MI300 PTE 转换和指令控制位；3.7 的 wait 返回值属于可选源码验证。
 
 ### 3.1 地址可达后，还要处理缓存一致性和同步顺序
 
@@ -6826,7 +6825,7 @@ release/acquire：生产者与消费者怎样建立先后顺序
 
 ### 3.3 AMD GPU 的 MTYPE 内存属性
 
-GPU 页表项中的 `MTYPE` 用来选择 GPU 访问这段内存时的缓存与一致性行为。
+MI300 的缓存行为需要同时看驱动生成的 PTE 属性、访存指令控制位和访问目标。下面先区分用户接口中的 MTYPE 请求与最终硬件编码。
 
 > **[SOURCE]** Linux `248951ddc14de84de3910f9b13f51491a8cd91df` 的 [`include/uapi/drm/amdgpu_drm.h`](./2.源码/linux/include/uapi/drm/amdgpu_drm.h) 第 887～900 行定义了六种映射选择：
 
@@ -6849,46 +6848,42 @@ GPU 页表项中的 `MTYPE` 用来选择 GPU 访问这段内存时的缓存与�
 
 源码英文注释的中文翻译：
 
-- MTYPE 使用第 5～8 位。
+- 这里是 `AMDGPU_VM_MTYPE_*` 用户接口 flags 的第 5～8 位，不是硬件 PTE 的位号。
 - `DEFAULT` 是默认类型。AI 以前的 GPU 必须使用它，新 ASIC 也推荐使用。
 - 其余五项分别要求 Non-Coherent、Write-Combine、Cache-Coherent、Uncached 和 Read-Write MTYPE。
 
-这段定义主要证明两点：第 888 行用统一 mask 标出 MTYPE 位域；第 890～900 行给同一位域编码六种选择。宏只表达驱动传递的映射属性，具体缓存动作仍取决于 GPU 代际和内存位置。
+这段定义给用户接口的同一位域编码六种选择。生成 MI300 PTE 时，驱动先转换这些接口标志，再结合 BO 属性与实际位置确定最终编码。
 
-| MTYPE 选择  | 英文含义        | 含义                                                      |
-| ----------- | --------------- | --------------------------------------------------------- |
-| `DEFAULT` | Default         | 不主动指定，由当前 GPU 的驱动选择默认类型                 |
-| `NC`      | Non-Coherent    | GPU 会缓存，但硬件不自动保证它与其他 Agent 的缓存始终一致 |
-| `WC`      | Write Combining | 允许合并写请求，适合连续写入                              |
-| `CC`      | Cache Coherent  | GPU 可以缓存，并由硬件参与缓存一致性维护                  |
-| `UC`      | Uncached        | 当前 GPU 不缓存这段内存                                   |
-| `RW`      | Read Write      | 读写型 MTYPE；精确缓存行为取决于 GPU 代际和内存所在位置   |
+| MTYPE 名称 | 请求表达的含义 | MI300 阅读边界 |
+| --- | --- | --- |
+| `DEFAULT` | 采用驱动默认策略 | 继续核对目标位置与一致性分支 |
+| `NC` | Non-Coherent，可缓存但需要适当同步 | 不能理解为“不缓存” |
+| `WC` | Write Combining 类型请求 | 不直接等同于 CPU 页表的 WC 属性 |
+| `CC` | Cache Coherent 类型请求 | 不代替程序的 release/acquire |
+| `UC` | Uncached 类型请求 | 不能据此断言内存侧末级缓存也不参与 |
+| `RW` | Read Write 类型请求 | 是内存类型名称，不是 PTE 的读写权限位 |
 
-> **[SPEC]** AMD ROCm Compute Profiler 3.7.0 的 [Definitions—Memory type](https://rocm.docs.amd.com/projects/rocprofiler-compute/en/docs-7.14.0/conceptual/definitions.html) 进一步说明：`NC` 内存会被 GPU 缓存，但通常要到 kernel 边界或软件同步之后才能保证一致；`UC` 内存不会被当前 GPU 缓存。不同 GPU 代际和访问位置的具体实现可能不同。
+> **[SOURCE]** Linux `248951ddc14d`，[`gmc_v9_0.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gmc_v9_0.c) 第 1161～1199 行。`gmc_v9_0_get_vm_pte()` 将 UAPI 类型转换为 PTE 编码；对有效且有 BO 的映射，继续调用 `gmc_v9_0_get_coherence_flags()`。
 
-`NC` 和 `UC` 的区别是：
+MI300 对应的 GFX9.4.3 分支还会区分 APU、设备本地内存、外部 Host 内存、NUMA 归属以及显式 uncached/extended-coherent 属性。例如该版本的本地类型变量默认从 `MTYPE_RW` 开始；外部 Host 内存和 APU 内存走不同判断，不能给所有 Ring 指定一个固定 MTYPE。
 
-```text
-NC = Non-Coherent，不是 No Cache
-     可以缓存，但不会自动保持跨 Agent 一致
+> **[SOURCE]** Linux `248951ddc14d`，[`gmc_v9_0.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gmc_v9_0.c) 第 1101～1158 行。选择 GFX9.4.3 的一致性分支、判断本地性并填写 MTYPE/SNOOPED；第 1201～1256 行的 `gmc_v9_0_override_vm_pte_flags()` 还可能根据系统页面的 NUMA 归属作逐页调整。
 
-UC = Uncached
-     当前 GPU 不缓存
-```
+PTE 属性之外，CDNA 3 向量访存指令还有 `SC[1:0]` 和 `NT` 控制位。普通 load/store 的 `SC` 区分 wave、group、device 和 system 范围；这里的 SC 是 System Cache level，与同步 API 中的 Sequential Consistency 缩写不同。`NT` 表示是否预期近期复用。原子指令中这些位另有定义，不能照搬 load/store 的解释。
 
-`MTYPE` 只回答缓存策略，不回答其他问题：
+> **[SPEC]** [MI300 / CDNA 3 ISA](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf)（封面日期 2025-08-05） §9.1.10.2，原文第 73～75 页。明确列出不同作用域下 CU Cache、L2 和末级缓存的访问规则；原子指令的 SC0 表示是否返回操作前的值，SC1 区分 device/system scope。AQL Packet 的 fence scope 属于 HSA 同步协议，不与这些指令位一一对应。
 
-| 问题                     | 对应属性                                    |
-| ------------------------ | ------------------------------------------- |
-| 数据放在哪里             | GTT、VRAM、USERPTR                          |
-| GPU 能否读、写、执行     | `READABLE`、`WRITEABLE`、`EXECUTABLE` |
-| GPU 怎样缓存             | `MTYPE`                                   |
-| Agent 是共享还是交接使用 | fine-grained、coarse-grained                |
-| 写入和读取谁先发生       | release、acquire                            |
+> **[SPEC]** [AMD CDNA 3 架构白皮书](https://www.amd.com/content/dam/amd/en/documents/instinct-tech-docs/white-papers/amd-cdna-3-white-paper.pdf)，原文第 10 页“AMD CDNA 3 Architecture Memory”，说明内存侧 Infinity Cache 可以缓存名义上不可缓存的内存。UC 属性不能直接用来判断每一级缓存是否参与，也不表示执行了缓存失效操作。
 
-`MTYPE_NC` 表示“GPU 可缓存但非硬件一致”，`MTYPE_UC` 表示“当前 GPU 不缓存”。它们不会改变内存位于 GTT 还是 VRAM，也不能代替 release/acquire。
+| 要判断的问题 | 需要查看的条件 |
+| --- | --- |
+| 数据放在哪里 | 分配路径、资源位置、型号与分区 |
+| GPU 能否读、写、执行 | PTE 权限和有效性 |
+| GPU 如何访问缓存 | 最终 MTYPE、指令控制位、目标位置 |
+| 多 Agent 如何共享 | fine-grained/coarse-grained 与平台能力 |
+| 何时可以读取对方写入 | 适当范围的 release/acquire 和完成协议 |
 
-> **[BOUNDARY]** 本文基础阶段只介绍这些属性的名称和用途，不展开某一代 GPU 怎样把上层请求转换成最终 MTYPE，也不展开各级缓存的 flush、invalidate 和 snoop 规则。
+**[BOUNDARY]** 本节说明 MI300 的属性关系，不展开完整缓存微架构或每条指令的缓存表。具体 MTYPE 以该次映射最终生成的 PTE 为准；它不能替代应用同步。
 
 ### 3.4 AQL 同步：release/acquire 做什么，scope 覆盖谁
 

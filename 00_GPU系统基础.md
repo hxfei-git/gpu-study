@@ -2,90 +2,99 @@
 
 ## 缩写表
 
-| 缩写    | 英文全称                                        | 中文含义                                                 |
-| ------- | ----------------------------------------------- | -------------------------------------------------------- |
-| ABI     | Application Binary Interface                    | 应用二进制接口                                           |
-| AArch64 | Arm 64-bit Architecture                         | Arm 64 位指令集架构                                      |
-| AMD     | Advanced Micro Devices                          | AMD 公司                                                 |
-| AMDGPU  | AMD GPU Linux Kernel Driver                     | Linux 中的 AMD GPU 驱动                                  |
-| API     | Application Programming Interface               | 应用程序编程接口                                         |
-| APU     | Accelerated Processing Unit                     | CPU 与 GPU 等计算单元共享封装或内存系统的处理器形态      |
-| AQL     | Architected Queuing Language                    | HSA 定义的架构化队列语言；本文主要指命令包格式与队列协议 |
-| ASIC    | Application-Specific Integrated Circuit         | 专用集成电路；本文指具体 GPU 芯片或代际                  |
-| BO      | Buffer Object                                   | 驱动管理的一类缓冲对象                                   |
-| BSP     | Board Support Package                           | 板级支持包                                               |
-| CLR     | Common Language Runtime                         | ROCm 中承接 HIP/OpenCL 的公共用户态 Runtime 代码库       |
-| CP      | Command Processor                               | GPU 命令处理器                                           |
-| CPSCH   | Command Processor Scheduling                    | AMD GPU 的命令处理器固件调度路径                         |
-| CPU     | Central Processing Unit                         | 中央处理器                                               |
-| CS      | Command Submission                              | 命令提交                                                 |
-| CU      | Compute Unit                                    | AMD GPU 计算单元                                         |
-| CWSR    | Compute Wave Save/Restore                       | 计算 Wave 现场保存与恢复                                 |
-| DMA     | Direct Memory Access                            | 直接内存访问                                             |
-| DMUB    | Display Microcontroller Unit                    | AMD GPU 显示控制微控制器                                 |
-| DRM     | Direct Rendering Manager                        | Linux 直接渲染管理框架                                   |
-| DWORD   | Double Word                                     | AMDGPU 源码中常用的 32 位命令字单位                      |
-| ELF     | Executable and Linkable Format                  | 可执行与可链接文件格式                                   |
-| EXEC    | Execution Mask                                  | Wave 的执行掩码                                          |
-| GEM     | Graphics Execution Manager                      | DRM 的图形内存对象管理框架                               |
-| GFX     | Graphics                                        | AMDGPU 中图形与计算 IP 系列的代际前缀                    |
-| GFX11   | Graphics IP Version 11                          | AMD 第 11 代图形与计算 IP 标识                           |
-| GPU     | Graphics Processing Unit                        | 图形处理器                                               |
-| GPUVA   | GPU Virtual Address                             | GPU 虚拟地址                                             |
-| GPUVM   | GPU Virtual Memory                              | GPU 虚拟地址空间及其页表                                 |
-| HIP     | Heterogeneous-Compute Interface for Portability | AMD GPU 编程接口                                         |
-| HSA     | Heterogeneous System Architecture               | 异构系统架构；本文指规范与执行模型                       |
-| HSAKMT  | HSA Kernel Mode Thunk                           | ROCr 访问 KFD 的用户态接口层                             |
-| HQD     | Hardware Queue Descriptor                       | 硬件中一条活动 Queue 的描述状态                          |
-| HWS     | Hardware Scheduling                             | GPU 侧参与 Queue 驻留调度的路径                          |
-| IB      | Indirect Buffer                                 | Driver-managed 提交路径中的间接命令缓冲                  |
-| ID      | Identifier                                      | 标识符                                                   |
-| IH      | Interrupt Handler                               | AMDGPU 中断处理环及相关处理模块                          |
-| IOMMU   | Input/Output Memory Management Unit             | 输入/输出内存管理单元                                    |
-| ioctl   | Input/Output Control                            | 用户态向内核驱动发送控制请求的接口                       |
-| IP      | Intellectual Property                           | 芯片中的功能模块                                         |
-| IRQ     | Interrupt Request                               | 中断请求                                                 |
-| ISA     | Instruction Set Architecture                    | 指令集架构                                               |
-| KFD     | Kernel Fusion Driver                            | Linux AMD GPU 计算驱动接口                               |
-| KiB     | Kibibyte                                        | 1024 字节                                                |
-| KMS     | Kernel Mode Setting                             | Linux 内核显示模式设置                                   |
-| LDS     | Local Data Share                                | 同一 Work-group 内共享的片上存储                         |
-| MCU     | Microcontroller Unit                            | 微控制器                                                 |
-| MEC     | Micro Engine Compute                            | AMD GPU 中处理计算队列的命令引擎                         |
-| MES     | Micro-Engine Scheduler                          | 新一代 AMD GPU 的固件 Queue 调度机制                     |
-| MMIO    | Memory-Mapped Input/Output                      | 内存映射输入/输出                                        |
-| MMU     | Memory Management Unit                          | 内存管理单元                                             |
-| MQD     | Memory Queue Descriptor                         | 保存在内存中的 Queue 配置镜像                            |
-| PASID   | Process Address Space ID                        | 进程地址空间标识                                         |
-| PC      | Program Counter                                 | 程序计数器                                               |
-| PCIe    | Peripheral Component Interconnect Express       | 高速外设互连总线                                         |
-| POSIX   | Portable Operating System Interface             | 可移植操作系统接口                                       |
-| PSP     | Platform Security Processor                     | AMD 平台安全处理器                                       |
-| RDNA    | Radeon DNA                                      | AMD Radeon GPU 架构系列                                  |
-| RLC     | Run List Controller                             | AMD GPU 图形/计算控制模块                                |
-| RAM     | Random Access Memory                            | 随机存取存储器                                           |
-| ROCr    | ROCm Runtime                                    | AMD 的 HSA 用户态 Runtime 实现                           |
-| rptr    | Read Pointer                                    | Queue 读进度；在 HSA 文档中也常写作`read_index`        |
-| SDMA    | System Direct Memory Access                     | AMD GPU 的专用数据搬运引擎                               |
-| SCC     | Scalar Condition Code                           | Wave 的标量条件码                                        |
-| SGPR    | Scalar General-Purpose Register                 | 标量通用寄存器                                           |
-| SIMD    | Single Instruction, Multiple Data               | 单指令多数据执行组织                                     |
-| SMU     | System Management Unit                          | AMD GPU 系统与电源管理单元                               |
-| SPI     | Shader Processor Input                          | RDNA 中负责 Work-group 准入的前端模块                    |
-| TLB     | Translation Lookaside Buffer                    | 地址翻译缓存                                             |
-| TTMP    | Trap Temporary                                  | Trap Handler 使用的临时寄存器                            |
-| TTM     | Translation Table Maps                          | Linux DRM 的通用 GPU 内存管理子系统                      |
-| UAPI    | Userspace Application Programming Interface     | 内核向用户态公开的接口                                   |
-| UserQ   | User Mode Queue                                 | Linux AMDGPU 的 DRM 用户态队列接口                       |
-| VA      | Virtual Address                                 | 虚拟地址                                                 |
-| VALU    | Vector Arithmetic Logic Unit                    | 向量算术逻辑单元                                         |
-| VCC     | Vector Condition Code                           | Wave 的逐 Lane 向量条件状态                              |
-| VGPR    | Vector General-Purpose Register                 | 向量通用寄存器                                           |
-| VMID    | Virtual Memory ID                               | GPU 活动地址空间使用的硬件上下文编号                     |
-| VRAM    | Video Random-Access Memory                      | GPU 本地显存                                             |
-| WGP     | Workgroup Processor                             | RDNA 架构中的工作组处理器                                |
-| WSL     | Windows Subsystem for Linux                     | Windows Linux 子系统                                     |
-| wptr    | Write Pointer                                   | Queue 写进度；在 HSA 文档中也常写作`write_index`       |
+| 缩写    | 英文全称                                        | 中文含义                                                       |
+| ------- | ----------------------------------------------- | -------------------------------------------------------------- |
+| AArch64 | Arm 64-bit Architecture                         | Arm 64 位指令集架构                                            |
+| ABI     | Application Binary Interface                    | 应用二进制接口                                                 |
+| AccVGPR | Accumulation Vector General-Purpose Register    | 矩阵累加向量寄存器；ISA 记为 AV0～AV255                        |
+| ALU     | Arithmetic Logic Unit                           | 算术逻辑单元                                                   |
+| AMD     | Advanced Micro Devices                          | AMD 公司                                                       |
+| AMDGPU  | AMD GPU Linux Kernel Driver                     | Linux 中的 AMD GPU 驱动                                        |
+| API     | Application Programming Interface               | 应用程序编程接口                                               |
+| APU     | Accelerated Processing Unit                     | CPU 与 GPU 等计算单元共享封装或内存系统的处理器形态            |
+| AQL     | Architected Queuing Language                    | HSA 定义的架构化队列语言；本文主要指命令包格式与队列协议       |
+| ASIC    | Application-Specific Integrated Circuit         | 专用集成电路；本文指具体 GPU 芯片或代际                        |
+| BO      | Buffer Object                                   | 驱动管理的一类缓冲对象                                         |
+| BSP     | Board Support Package                           | 板级支持包                                                     |
+| CDNA    | Compute DNA                                     | AMD 面向数据中心计算的架构系列；本文使用 CDNA 3                |
+| CLR     | Common Language Runtime                         | ROCm 中承接 HIP/OpenCL 的公共用户态 Runtime 代码库             |
+| CP      | Command Processor                               | GPU 命令处理器                                                 |
+| CPSCH   | Command Processor Scheduling                    | AMD GPU 的命令处理器固件调度路径                               |
+| CPU     | Central Processing Unit                         | 中央处理器                                                     |
+| CS      | Command Submission                              | 命令提交                                                       |
+| CU      | Compute Unit                                    | AMD GPU 计算单元                                               |
+| CWSR    | Compute Wave Save/Restore                       | 计算 Wave 现场保存与恢复                                       |
+| DMA     | Direct Memory Access                            | 直接内存访问                                                   |
+| DMUB    | Display Microcontroller Unit                    | AMD GPU 显示控制微控制器                                       |
+| DRM     | Direct Rendering Manager                        | Linux 直接渲染管理框架                                         |
+| DWORD   | Double Word                                     | AMDGPU 源码中常用的 32 位命令字单位                            |
+| ELF     | Executable and Linkable Format                  | 可执行与可链接文件格式                                         |
+| EXEC    | Execution Mask                                  | Wave 的执行掩码                                                |
+| EXPCNT  | Export Count                                    | ISA 命名的 Export 计数；MI300 状态表用于跟踪 GDS 类未完成操作  |
+| GDS     | Global Data Share                               | ISA 中保留的全局数据共享类名称；MI300 相关指令可用于 GWS       |
+| GEM     | Graphics Execution Manager                      | DRM 的图形内存对象管理框架                                     |
+| GFX     | Graphics                                        | AMDGPU 中图形与计算 IP 系列的代际前缀                          |
+| GPU     | Graphics Processing Unit                        | 图形处理器                                                     |
+| GPUVA   | GPU Virtual Address                             | GPU 虚拟地址                                                   |
+| GPUVM   | GPU Virtual Memory                              | GPU 虚拟地址空间及其页表                                       |
+| GWS     | Global Wave Sync                                | 全局 Wave 同步                                                 |
+| HIP     | Heterogeneous-Compute Interface for Portability | AMD GPU 编程接口                                               |
+| HQD     | Hardware Queue Descriptor                       | 硬件中一条活动 Queue 的描述状态                                |
+| HSA     | Heterogeneous System Architecture               | 异构系统架构；本文指规范与执行模型                             |
+| HSAKMT  | HSA Kernel Mode Thunk                           | ROCr 访问 KFD 的用户态接口层                                   |
+| HWS     | Hardware Scheduling                             | GPU 侧参与 Queue 驻留调度的路径                                |
+| IB      | Indirect Buffer                                 | Driver-managed 提交路径中的间接命令缓冲                        |
+| ID      | Identifier                                      | 标识符                                                         |
+| IH      | Interrupt Handler                               | AMDGPU 中断处理环及相关处理模块                                |
+| ioctl   | Input/Output Control                            | 用户态向内核驱动发送控制请求的接口                             |
+| IOMMU   | Input/Output Memory Management Unit             | 输入/输出内存管理单元                                          |
+| IP      | Intellectual Property                           | 芯片中的功能模块                                               |
+| IRQ     | Interrupt Request                               | 中断请求                                                       |
+| ISA     | Instruction Set Architecture                    | 指令集架构                                                     |
+| KFD     | Kernel Fusion Driver                            | Linux AMD GPU 计算驱动接口                                     |
+| KiB     | Kibibyte                                        | 1024 字节                                                      |
+| KMS     | Kernel Mode Setting                             | Linux 内核显示模式设置                                         |
+| LDS     | Local Data Share                                | 同一 Work-group 内共享的片上存储                               |
+| LGKMCNT | LDS, GDS, Constant and Message Count            | LDS、GDS、常量读取与消息等操作的未完成计数                     |
+| MCU     | Microcontroller Unit                            | 微控制器                                                       |
+| MEC     | Micro Engine Compute                            | AMD GPU 中处理计算队列的命令引擎                               |
+| MES     | Micro-Engine Scheduler                          | 其他受支持架构的固件队列调度接口；本地 MI300 路径不启用        |
+| MMIO    | Memory-Mapped Input/Output                      | 内存映射输入/输出                                              |
+| MMU     | Memory Management Unit                          | 内存管理单元                                                   |
+| MQD     | Memory Queue Descriptor                         | 保存在内存中的 Queue 配置镜像                                  |
+| PASID   | Process Address Space ID                        | 进程地址空间标识                                               |
+| PC      | Program Counter                                 | 程序计数器                                                     |
+| PCIe    | Peripheral Component Interconnect Express       | 高速外设互连总线                                               |
+| POSIX   | Portable Operating System Interface             | 可移植操作系统接口                                             |
+| PSP     | Platform Security Processor                     | AMD 平台安全处理器                                             |
+| RAM     | Random Access Memory                            | 随机存取存储器                                                 |
+| RLC     | Run List Controller                             | AMD GPU 图形/计算控制模块                                      |
+| ROCr    | ROCm Runtime                                    | AMD 的 HSA 用户态 Runtime 实现                                 |
+| rptr    | Read Pointer                                    | Queue 读进度；在 HSA 文档中也常写作`read_index`              |
+| SCC     | Scalar Condition Code                           | Wave 的标量条件码                                              |
+| SDMA    | System Direct Memory Access                     | AMD GPU 的专用数据搬运引擎                                     |
+| SGPR    | Scalar General-Purpose Register                 | 标量通用寄存器                                                 |
+| SIMD    | Single Instruction, Multiple Data               | 单指令多数据执行组织                                           |
+| SMU     | System Management Unit                          | AMD GPU 系统与电源管理单元                                     |
+| SPI     | Shader Processor Input                          | Shader 工作分派与资源分配相关前端；MI300 ISA 用于说明 LDS 分配 |
+| TLB     | Translation Lookaside Buffer                    | 地址翻译缓存                                                   |
+| TTM     | Translation Table Maps                          | Linux DRM 的通用 GPU 内存管理子系统                            |
+| TTMP    | Trap Temporary                                  | Trap Handler 使用的临时寄存器                                  |
+| UAPI    | Userspace Application Programming Interface     | 内核向用户态公开的接口                                         |
+| UserQ   | User Mode Queue                                 | Linux AMDGPU 的 DRM 用户态队列接口                             |
+| VA      | Virtual Address                                 | 虚拟地址                                                       |
+| VALU    | Vector Arithmetic Logic Unit                    | 向量算术逻辑单元                                               |
+| VCC     | Vector Condition Code                           | Wave 的逐 Lane 向量条件状态                                    |
+| VGPR    | Vector General-Purpose Register                 | 向量通用寄存器                                                 |
+| VMCNT   | Vector Memory Instruction Count                 | 向量访存未完成计数                                             |
+| VMID    | Virtual Memory ID                               | GPU 活动地址空间使用的硬件上下文编号                           |
+| VRAM    | Video Random-Access Memory                      | GPU 本地显存                                                   |
+| wptr    | Write Pointer                                   | Queue 写进度；在 HSA 文档中也常写作`write_index`             |
+| WSL     | Windows Subsystem for Linux                     | Windows Linux 子系统                                           |
+| XCC     | Accelerator Core Complex                        | 驱动管理的一组计算资源；MI300 中一个 XCD 对应一个 XCC          |
+| XCD     | Accelerator Complex Die                         | MI300 中包含计算单元和部分缓存的计算芯粒                       |
+
+**[BOUNDARY]** 本文 GPU 硬件基线为 **AMD Instinct MI300 / CDNA 3**。Wave、寄存器和指令语义以本地 MI300 ISA 为准；Linux、ROCr、CLR 的实现以第 0.3 节固定提交为准。当前尚未确认 MI300A 或 MI300X，涉及主机连接、内存组织和整机资源数量时只说明适用条件，不预设型号。
 
 ## 0. 文档定位与阅读主线
 
@@ -165,7 +174,9 @@ Host 应用准备输入和输出
 
 原学习材料在 2026-07-19 还记录了 Linux `v7.1.4` 与 `ROCm/rocm-systems` 的 `therock-7.14` 作为公开资料阅读快照。本文的源码行号以本地固定 Commit 为准；这些 Tag 只用于理解原材料的阅读环境，不能替代上面的 Commit 身份。
 
-规范与架构资料主要使用 HSA Platform System Architecture 1.2、ROCr 公开 HSA API 头文件和 AMD RDNA 3 ISA Reference Guide。软件源码能证明公开对象和接口，不能补全闭源 Firmware 的内部状态机或硬件逐周期调度算法。
+规范与架构资料主要使用 HSA Platform System Architecture 1.2、ROCr 公开 HSA API 头文件和本地 MI300 ISA。HSA 规定 Queue/Packet 协议，MI300 ISA 规定 GPU 执行语义，软件源码证明当前版本的对象与接口实现。
+
+> **[SPEC]** [MI300 / CDNA 3 ISA](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf)（封面日期 2025-08-05） §1.1、§2、§3、§4.3，原文第 4～13、19 页。本文采用 64 个 Work-item 组成一条 Wave 的模型；Work-group 的常规执行位置、寄存器状态与 LDS 规则在这些章节中定义。软件源码不能补全闭源固件内部状态机或硬件逐周期调度算法。
 
 ### 0.4 学习路线与阅读方法
 
@@ -174,7 +185,7 @@ Host 应用准备输入和输出
 1. 用向量加法认识参与者，并通过总图确定各层位置；
 2. 建立 Host、Runtime、Driver、Firmware、Hardware 以及 AMD 计算软件栈的职责边界；
 3. 跟踪 Runtime 初始化、Agent 选择、代码和内存准备、Queue 创建与 Packet 发布；
-4. 沿 Dispatch 继续进入 Work-item、Wave、WGP、CU 和 SIMD；
+4. 沿 Dispatch 继续进入 Work-item、Wave、CU 和 SIMD；
 5. 用完整 `vector_add` 复盘执行链，再学习完成同步、调度、抢占、故障与恢复。
 
 每章先给结论或图，再用数值例子说明，随后补实现边界和检查点。第一次遇到 MQD、HQD、CWSR 或 Fence 序号时，先确定它位于哪一层；到对应章节再追源码，不需要提前递归阅读整个调用树。
@@ -287,7 +298,7 @@ flowchart TB
     F["GPU 命令前端<br/>读取 Packet，建立 Dispatch"]
     W["软件工作<br/>Grid → Work-group → Work-item"]
     E["执行编组<br/>Work-item → Wave / Lane"]
-    H["物理资源<br/>WGP → CU → SIMD 与其他管线"]
+    H["物理资源<br/>XCD → CU → SIMD 与其他管线"]
     M["内存系统<br/>读取 A/B，写入 C"]
     C["完成路径<br/>可见性 → Signal/Fence → 可选 Interrupt"]
 
@@ -304,7 +315,7 @@ flowchart TB
     C -->|"Runtime 重查，等待 API 返回"| A
 ```
 
-虚线表示长期控制面，实线表示一次任务的主要提交与执行路径。图中的 `WGP → CU → SIMD` 是硬件包含关系；`Grid → Work-group → Work-item` 是软件划分；两者通过 Wave 准入和驻留建立联系。
+虚线表示长期控制面，实线表示一次任务的主要提交与执行路径。图中的 `XCD → CU → SIMD` 是硬件包含关系；`Grid → Work-group → Work-item` 是软件划分；两者通过 Wave 准入和驻留建立联系。
 
 把这些对象沿时间方向展开，可以得到下面这张总图。它同时保留初始化控制面、提交数据面和执行层级；箭头表示动作顺序，不表示物理包含关系：
 
@@ -328,12 +339,12 @@ Command Processor / Packet Processor
 软件工作形状：Grid → 多个 Work-group → 每组多个 Work-item
   │  Hardware 把同组 Work-item 编成一个或多个 Wavefront
   ▼
-RDNA 3 硬件映射：SPI / Workgroup Manager → 一个 WGP
-  │                                      ├─ CU0：两个 SIMD32
-  │                                      └─ CU1：两个 SIMD32
-  │  按 CU mode 或 WGP mode 将 Work-group 的 Wave 放到一个或两个 CU
+MI300 / CDNA 3：工作分派前端 → 一个 CU
+  │                              ├─ SIMD 0、SIMD 1
+  │                              └─ SIMD 2、SIMD 3
+  │  常规 Work-group 的 Wave 在同一个 CU 内共享 LDS 并进行组内同步
   │  CU 调度/发射逻辑从就绪 Wave 中选择指令
-  │  SIMD32 执行向量算术；其他指令进入相应执行管线
+  │  向量、标量、矩阵与访存指令进入各自的执行管线
   │  load A/B → add → store C
   ▼
 Signal / Fence 状态更新，必要时产生 Interrupt
@@ -350,7 +361,7 @@ Signal / Fence 状态更新，必要时产生 Interrupt
 
 第二段是提交。应用发起 Kernel Launch 后，Runtime 准备参数和 Packet，把 Packet 发布到 GPU 可访问的 Queue，再写 Doorbell 通知 GPU。此时任务只是到达 GPU 命令前端，CU 还不一定已经开始执行。
 
-第三段是执行与完成。GPU 命令前端根据 Packet 建立 Dispatch，把 Grid 划分为 Work-group，再把 Work-item 编成 Wave，交给 WGP、CU 和 SIMD 执行。Kernel 写完结果后，设备更新完成状态。Host 重新检查完成条件；条件满足后，对应的等待 API 才返回。
+第三段是执行与完成。GPU 命令前端根据 Packet 建立 Dispatch，把 Grid 划分为 Work-group，再把 Work-item 编成 Wave，分派到 CU，并由相应执行管线执行。Kernel 写完结果后，设备更新完成状态。Host 重新检查完成条件；条件满足后，对应的等待 API 才返回。
 
 后文章节会分别展开这三个阶段。再次回到这张图时，先确定当前问题发生在初始化、提交还是执行与完成阶段，再沿对应箭头继续向下查找。
 
@@ -423,10 +434,10 @@ GPU 同时包含多个控制域、命令前端、计算阵列、地址与内存�
 GPU 设备侧
 ├─ PSP 等安全控制域       → 认证和受保护装载
 ├─ SMU 等电源控制域       → 时钟、电压、功耗和温度
-├─ MES 等 Queue 控制路径  → 按支持模式管理 Queue 驻留
+├─ HWS/CPSCH Queue 控制  → 按支持模式管理 Queue 驻留
 ├─ CP/MEC 命令前端        → 读取 Packet，建立 Dispatch
-├─ SPI/Workgroup Manager  → 检查资源，准入 Work-group
-├─ WGP/CU 执行阵列        → 承载 Wave，执行 GPU Kernel
+├─ 工作分派前端  → 检查资源，准入 Work-group
+├─ CU 执行阵列        → 承载 Wave，执行 GPU Kernel
 └─ MMU/Cache/内存接口     → 翻译地址，访问 VRAM 或系统内存
 ```
 
@@ -453,19 +464,21 @@ GPU 设备
 
 几个常见控制域的职责如下：
 
-| 控制域 | 公开职责边界                                             | 与 Compute Kernel 的关系                        |
-| ------ | -------------------------------------------------------- | ----------------------------------------------- |
-| PSP    | 安全启动、Firmware 认证和受保护装载                      | 为可信启动提供控制能力，不执行向量加法          |
-| SMU    | 功耗、时钟、电压和温度管理                               | 影响可用频率和电源状态，不推进 Work-item        |
-| MES    | 在支持并启用的路径中管理 Queue Mapping、优先级和超额订阅 | 管理 Queue 取得硬件入口，不逐周期发射 Wave 指令 |
-| RLC    | 主要参与 GFX/Compute 电源与相关控制路径                  | 不能仅凭名称把它当作现代 Queue 总调度器         |
-| DMUB   | 服务显示控制路径                                         | 不属于 Compute Kernel 的执行链                  |
+| 控制域    | 公开职责边界                                | 与 Compute Kernel 的关系                        |
+| --------- | ------------------------------------------- | ----------------------------------------------- |
+| PSP       | 安全启动、Firmware 认证和受保护装载         | 为可信启动提供控制能力，不执行向量加法          |
+| SMU       | 功耗、时钟、电压和温度管理                  | 影响可用频率和电源状态，不推进 Work-item        |
+| HWS/CPSCH | MI300 主线中按运行列表管理 Queue 驻留       | 安排 Queue 取得硬件入口；CU 自行调度已驻留 Wave |
+| RLC       | 主要参与 GFX/Compute 电源与相关控制路径     | 不能仅凭名称把它当作现代 Queue 总调度器         |
+| DMUB      | 其他带显示功能 GPU 的控制模块，仅作术语对照 | 不作为 MI300 计算路径的组成部分                 |
 
 CP/MEC 命令前端也位于 GPU，但它与这些 Firmware 控制域不同。命令前端读取 Packet 并建立 Dispatch；CU 执行应用 Kernel。具体前端可以由硬件状态机、微码和控制接口共同实现，不保证对应一颗独立 Firmware 处理器。
 
 ### 3.5 Firmware 怎样进入可工作状态
 
-整卡上电后，板级供电、复位和芯片固化的安全启动逻辑先让设备能够响应 PCIe 枚举。Linux 识别设备并绑定 AMDGPU Driver 后，Driver 再为各个目标 IP 选择、校验并装载匹配的 Firmware，执行该 IP 所需的软件和硬件初始化，最后确认对应控制域可以工作。
+**[BOUNDARY]** 下图只说明采用 PCIe 枚举的驱动初始化过程，不据此判断 MI300A/MI300X 的封装形态或 CPU 访问内存时的实际互连。
+
+在 PCIe 设备初始化示例中，供电、复位和芯片启动逻辑先让设备能够响应枚举。Linux 识别设备并绑定 AMDGPU Driver 后，Driver 再为各个目标 IP 选择、校验并装载匹配的 Firmware，执行该 IP 所需的软件和硬件初始化，最后确认对应控制域可以工作。
 
 ```text
 板级供电与复位
@@ -539,7 +552,7 @@ GPU 能执行已发布的任务，不是因为某一颗“总控核”完成了�
 | 发现任务       | Queue、Doorbell 和生产进度             | 找到新的有效 Packet               |
 | 解释任务       | Kernel 对象、Kernarg、Grid 和完成对象  | 建立 Dispatch                     |
 | 建立并行上下文 | Work-group、Wave、PC、寄存器和 EXEC    | 形成可执行状态                    |
-| 分层准入与调度 | Queue 槽位、WGP/CU 资源、就绪 Wave     | 有限硬件资源被安全复用            |
+| 分层准入与调度 | Queue 槽位、CU 资源、就绪 Wave         | 有限硬件资源被安全复用            |
 | 取指和访存     | GPU ISA、GPUVA、页表、Cache 和内存请求 | 执行 Kernel 并读写 A/B/C          |
 | 完成或异常收敛 | Signal/Fence、Fault、Trap 和错误状态   | Host 可以得到成功、失败或取消结果 |
 
@@ -566,35 +579,21 @@ Host 侧
 Linux Driver
     │ 控制请求、配置、恢复
     ▼
-┌────────────────────────────── GPU 设备侧 ──────────────────────────────┐
-│                                                                        │
-│  ① 专用控制处理器或微引擎                                               │
-│     ┌────────┐  ┌────────┐  ┌────────────────────┐                     │
-│     │  PSP   │  │  SMU   │  │ MES/其他控制微引擎 │                     │
-│     └────────┘  └────────┘  └────────────────────┘                     │
-│         运行各自的 Firmware：安全、功耗、Queue 控制、恢复等             │
-│                                                                        │
-│  ② 命令与派发前端                                                      │
-│     Queue 中的 Packet ──► CP/Compute 命令前端 ──► SPI/Workgroup Manager│
-│                            读取任务说明          检查资源并安排 Work-group│
-│                                                                        │
-│  ③ 计算执行阵列                                                        │
-│                         RDNA 3 的一个 WGP                              │
-│                    ┌─────────────────────────┐                         │
-│                    │   CU 0       CU 1      │                          │
-│                    │  Wave 状态   Wave 状态  │                         │
-│                    │  寄存器      寄存器     │                         │
-│                    │  Work-group 的 LDS/Barrier 资源                   │
-│                    │  执行管线    执行管线   │                         │
-│                    └─────────────────────────┘                         │
-│                         CU 执行 Kernel 指令                            │
-│                                                                        │
-│  ④ 地址与内存系统                                                      │
-│     MMU/页表遍历硬件 ── Cache ── VRAM 或映射的系统内存                  │
-│     为 Packet、Kernel 代码、参数和数据提供访问                          │
-│                                                                        │
-└────────────────────────────────────────────────────────────────────────┘
+MI300 / CDNA 3 GPU 设备侧（职责示意）
+├─ 专用控制处理器或微引擎
+│  └─ 安全、电源管理以及命令调度固件
+├─ 命令与工作分派前端
+│  └─ CP/MEC 读取 Packet → 建立 Dispatch → 检查资源、分派 Work-group
+├─ 计算执行阵列：XCD 中的多个 CU
+│  └─ 一个 CU
+│     ├─ SIMD 0～3 与各自承载的 Wave 状态
+│     ├─ 标量、向量、矩阵和访存执行资源
+│     └─ LDS 与 Work-group 同步资源
+└─ 地址与内存系统
+   └─ MMU / 页表遍历 → Cache / 互连 → 目标内存
 ```
+
+图中箭头表示职责和数据流，不表示芯片布线；CU 内部数量关系的证据见第 8.4 节。
 
 ### 3.8 DRM/KMS 与计算主线的边界
 
@@ -612,17 +611,17 @@ HSA 定义 Agent、Queue、AQL、Signal 和内存顺序等执行模型。HSA 本
 
 ### 4.2 从高级 API 到 GPU CU 的层级
 
-| 层级           | AMD/Linux 中的对象                | 这一层负责什么                                           | 交给下一层什么                       |
-| -------------- | --------------------------------- | -------------------------------------------------------- | ------------------------------------ |
-| 应用层         | HIP/OpenCL 或直接 HSA 程序        | 表达 Kernel、参数、执行范围、依赖和等待                  | 一项高层异步工作                     |
-| 高层 Runtime   | HIP/OpenCL Runtime、CLR           | 管理 Stream/Event，选择或复用底层 Queue                  | Kernel 信息、参数、Grid 和依赖       |
-| HSA Runtime    | ROCr                              | 管理 Agent、Memory、Executable、Signal 和`hsa_queue_t` | AQL Queue 资源或 Packet              |
-| 用户态内核接口 | HSAKMT/`libhsakmt`              | 把 ROCr 请求整理为 KFD UAPI                              | Queue、Memory、Event 等 ioctl        |
-| Linux Driver   | KFD 与 AMDGPU                     | 维护进程设备关系、GPUVM、Queue、Doorbell、调度和错误边界 | 可供硬件或 Firmware 使用的受保护状态 |
-| Queue 驻留控制 | KFD No-HWS、HWS/CPSCH 或 MES 路径 | 让逻辑 Queue 获得硬件取包入口                            | MQD/HQD 或等价活动配置               |
-| 命令前端       | CP/MEC/Packet Processor           | 读取 AQL Packet，建立 Dispatch                           | Work-group 与资源需求                |
-| 工作准入       | SPI/Workgroup Manager 等          | 检查寄存器、LDS 和 Wave Slot                             | 已准入的 Work-group/Wave             |
-| 计算执行       | WGP、CU、SIMD 和其他管线          | 取指、执行、访存和写回                                   | 结果与完成状态                       |
+| 层级           | AMD/Linux 中的对象           | 这一层负责什么                                           | 交给下一层什么                       |
+| -------------- | ---------------------------- | -------------------------------------------------------- | ------------------------------------ |
+| 应用层         | HIP/OpenCL 或直接 HSA 程序   | 表达 Kernel、参数、执行范围、依赖和等待                  | 一项高层异步工作                     |
+| 高层 Runtime   | HIP/OpenCL Runtime、CLR      | 管理 Stream/Event，选择或复用底层 Queue                  | Kernel 信息、参数、Grid 和依赖       |
+| HSA Runtime    | ROCr                         | 管理 Agent、Memory、Executable、Signal 和`hsa_queue_t` | AQL Queue 资源或 Packet              |
+| 用户态内核接口 | HSAKMT/`libhsakmt`         | 把 ROCr 请求整理为 KFD UAPI                              | Queue、Memory、Event 等 ioctl        |
+| Linux Driver   | KFD 与 AMDGPU                | 维护进程设备关系、GPUVM、Queue、Doorbell、调度和错误边界 | 可供硬件或 Firmware 使用的受保护状态 |
+| Queue 驻留控制 | KFD No-HWS 或 HWS/CPSCH 路径 | 让逻辑 Queue 获得硬件取包入口                            | MQD/HQD 或等价活动配置               |
+| 命令前端       | CP/MEC/Packet Processor      | 读取 AQL Packet，建立 Dispatch                           | Work-group 与资源需求                |
+| 工作准入       | 工作分派前端                 | 检查寄存器、LDS 和 Wave Slot                             | 已准入的 Work-group/Wave             |
+| 计算执行       | CU、SIMD 和其他管线          | 取指、执行、访存和写回                                   | 结果与完成状态                       |
 
 表中的层级是职责关系，不是每次 Kernel Launch 都执行一遍的函数调用栈。Queue、Doorbell 和 GPUVM 通常先建立；之后许多 Dispatch 可以复用这些资源。
 
@@ -654,7 +653,7 @@ HSA 定义 Agent、Queue、AQL、Signal 和内存顺序等执行模型。HSA 本
                               → Signal 状态变化 → Runtime/应用观察
 软件工作坐标：Dispatch / Grid → Work-group → Work-item
 执行编组坐标：同组 Work-item → Wavefront / Lane
-物理资源坐标：SPI / Workgroup Manager → WGP → CU → SIMD / 其他执行管线
+物理资源坐标：XCD → CU → SIMD / 其他执行管线
 ```
 
 同一关系放进一次 HIP Kernel 工作中，可以读成：
@@ -775,7 +774,7 @@ Driver 和 Runtime 需要保证这些分配在目标进程的 GPUVM 中具有有
 
 “已映射”只解决地址翻译和访问权限，不自动证明输入内容已经复制完成，也不自动保证 CPU/GPU Cache 可见性。判断一块内存能否用于当前 Dispatch 时，要分别核对后备存储、GPUVM 映射、数据准备和同步顺序，不能用其中一项代替其余三项。
 
-> **[BOUNDARY]** 数据搬运可能由 CPU Copy、SDMA、PCIe Copy Path 或统一内存迁移完成。SDMA 是独立拷贝引擎，不执行 `vector_add` Kernel。Pinned Memory 指保持驻留并允许设备访问的 Host 页面；Managed Memory 的位置与迁移由 Runtime/Driver 共同管理；APU 还可能直接使用共享系统内存。本文只固定“目标 Agent 能通过有效 GPUVA 访问数据”。
+> **[BOUNDARY]** 数据搬运可能由 CPU Copy、SDMA、PCIe Copy Path 或统一内存迁移完成。SDMA 是独立拷贝引擎，不执行 `vector_add` Kernel。Pinned Memory 指保持驻留并允许设备访问的 Host 页面；Managed Memory 的位置与迁移由 Runtime/Driver 共同管理；MI300A 与 MI300X 的主机内存关系不同，须先确认具体型号再判断是否需要跨内存复制。本文只固定“目标 Agent 能通过有效 GPUVA 访问数据”。
 
 ### 5.4 根据 Kernel ABI 准备 Kernarg
 
@@ -1117,34 +1116,34 @@ if (i < n)
 
 ### 7.3 Wave 把多个 Work-item 编成一组
 
-AMD GPU 把同一 Work-group 的 Work-item 编成一个或多个 Wave。以 wave32 为例，一条 Wave 有 32 个逻辑 Lane：
+MI300 / CDNA 3 将同一 Work-group 的 Work-item 编成 wave64。一条 Wave 有 64 个逻辑 Lane：
 
 ```text
 Wave 0
 ├─ Lane 0  → Work-item 0
 ├─ Lane 1  → Work-item 1
 ├─ ...
-└─ Lane 31 → Work-item 31
+└─ Lane 63 → Work-item 63
 ```
 
-Lane 共同推进同一条逻辑指令流，但各自保存不同的 `i` 和数据。Wave 共享 PC 与控制流状态，EXEC 决定当前向量指令中哪些 Lane 生效。
+各 Lane 共同推进同一条逻辑指令流，但各自保存不同的索引和数据。Wave 共享 PC；64 位 EXEC 决定当前向量指令中哪些 Lane 生效。某个组不足 64 个 Work-item 时，仍使用 wave64，其余 Lane 不参与该组的计算。
 
-Wave 不是 CU，也不是 SIMD。Wave 是执行上下文；CU 和 SIMD 是承载、调度和执行这些状态的物理资源。
+> **[SPEC]** [MI300 / CDNA 3 ISA](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf)（封面日期 2025-08-05） §1.1、§2、§3.3，原文第 4～5、9 页。Wavefront 包含 64 个 Work-item；EXEC 按 Lane 控制向量指令，标量执行和分支不受 EXEC 掩码直接屏蔽。
 
-### 7.4 用 256 ÷ 32 建立数量关系
+### 7.4 用 256 ÷ 64 建立数量关系
 
-假设一个 Work-group 有 256 个 Work-item，Kernel 使用 wave32：
+一个 Work-group 有 256 个 Work-item 时：
 
 ```text
-256 / 32 = 8 条 Wave
+256 / 64 = 4 条 Wave
 
-Wave 0：Work-item   0～31
-Wave 1：Work-item  32～63
-...
-Wave 7：Work-item 224～255
+Wave 0：Work-item   0～63
+Wave 1：Work-item  64～127
+Wave 2：Work-item 128～191
+Wave 3：Work-item 192～255
 ```
 
-这 8 条 Wave 不要求 8 个独立 SIMD，也不要求同时执行。一个 SIMD 可以保留并交错推进多条 Wave。某条 Wave 等待内存时，CU 可以选择另一条已经就绪的 Wave。
+这 4 条 Wave 的数量不规定同时执行的指令数。SIMD 可以保留并交错推进多条 Wave；某条 Wave 等待内存时，硬件可以选择另一条已驻留且就绪的 Wave。
 
 ### 7.5 Work-group、Wave 与 CU 的三套坐标
 
@@ -1152,30 +1151,28 @@ Wave 7：Work-item 224～255
 | --------------------------- | ------------ | -------------------------- |
 | Grid、Work-group、Work-item | 软件工作坐标 | 任务怎样划分               |
 | Wave、Lane                  | 执行编组坐标 | 哪些 Work-item 共同推进    |
-| WGP、CU、SIMD 和执行管线    | 物理资源坐标 | 状态放在哪里、指令由谁执行 |
+| XCD、CU、SIMD 和执行管线    | 物理资源坐标 | 状态放在哪里、指令由谁执行 |
 
-在本文的 RDNA 3 例子中，一个 WGP 组织两个 CU；CU 保存和调度 Wave 状态，SIMD32 执行 Wave 的向量指令。WGP、CU 和 SIMD 都是硬件资源，Wave 是这些资源承载的执行上下文。
-
-不要画成 `Grid → Work-group → Work-item → Wave → CU` 的简单包含链。准确关系是：
+MI300 的计算资源分布在多个 XCD 中；CU 承载 Wave，SIMD 执行相应的向量指令。Wave 是执行上下文，和 CU、SIMD 这些硬件资源分别计数。具体数量与资源边界见第 8.4 节。
 
 ```text
-软件先定义 Grid / Work-group / Work-item
-  → GPU 把同组 Work-item 编成 Wave
-  → Hardware 为 Work-group 和 Wave 分配 WGP/CU 资源
-  → CU 从已驻留 Wave 中选择就绪指令发射
+软件定义 Grid / Work-group / Work-item
+  → GPU 把同组 Work-item 编成 wave64
+  → 为 Work-group 和 Wave 分配 CU 内的资源
+  → 从已驻留且就绪的 Wave 中选择指令发射
 ```
 
 ### 7.6 本章检查点：执行层级
 
 1. Work-item 为什么不是物理核心？
 2. Work-group 为什么是 LDS 和 Barrier 的边界？
-3. 一个 256 Work-item 的 Work-group 在 wave32 下为什么产生 8 条 Wave？
+3. 一个 256 Work-item 的 Work-group 在 MI300 上为什么产生 4 条 Wave？
 4. Wave 与 SIMD 有什么区别？
 5. 一条 Wave 等待内存时，为什么还能说它驻留在 CU 上？
 
 第 5 题的完整状态变化见第 8.6～8.11 节。这里先确认：Wave 的执行状态仍保留在硬件资源中，只是暂时没有满足下一条指令的执行条件。
 
-## 8. Wave 执行状态与 RDNA 3 物理资源
+## 8. Wave 执行状态与 CDNA 3 物理资源
 
 ### 8.1 软件工作坐标：Grid、Work-group 与 Work-item
 
@@ -1231,14 +1228,14 @@ Work-item 是逻辑工作，不是一颗物理核心，也不是 Linux 线程。
 
 AMD GPU 把同一 Work-group 中的 Work-item 编成一个或多个 Wave。Wave 是共享逻辑指令流推进的一组执行上下文；Lane 是某个 Work-item 在当前 Wave 中的逻辑位置。
 
-以 wave32 为例：
+MI300 使用 wave64：
 
 ```text
 Wave 0
 ├─ Lane 0  → Work-item 0
 ├─ Lane 1  → Work-item 1
 ├─ ...
-└─ Lane 31 → Work-item 31
+└─ Lane 63 → Work-item 63
 ```
 
 整条 Wave 共享 PC 和指令流，但不同 Lane 保存各自的 `i`、`A[i]`、`B[i]` 和结果。`EXEC` 的每一位控制一个 Lane 是否参与当前向量指令。分支发散时，硬件使用不同的 EXEC 掩码分阶段推进路径，而不是把每个 Lane 变成独立 CPU 线程。
@@ -1259,13 +1256,13 @@ Wave 0
 ```text
 Wave（一个执行上下文，不是硬件块）
 ├─ 控制流状态：PC、EXEC、VCC、SCC
-├─ 操作数状态：VGPR、SGPR
+├─ 操作数状态：VGPR、AccVGPR、SGPR
 ├─ 其他 Wave 状态：STATUS、MODE、M0、FLAT_SCRATCH、TRAPSTS 等
-└─ 未完成操作状态：VMcnt、VScnt、LGKMcnt、EXPcnt 等
+└─ 未完成操作状态：VMCNT、LGKMCNT、EXPCNT
 
 不属于某一条 Wave：
 ├─ LDS 分配与 Barrier 协作状态 → 属于整个 Work-group
-├─ ALU / SIMD32 执行管线       → 属于硬件 SIMD32
+├─ ALU / SIMD 执行管线       → 属于硬件 SIMD
 └─ Wave Slot                    → SIMD 可分配 Wave 的容量名额
 ```
 
@@ -1278,119 +1275,104 @@ VGPR：
 Lane 0  的 i = 0
 Lane 1  的 i = 1
 ...
-Lane 31 的 i = 31
+Lane 63 的 i = 63
 ```
 
 实际寄存器分配由编译器和 ABI 决定。上图只说明“共享值与逐 Lane 值”的区别，不规定具体变量必须落在哪个寄存器编号。
 
-RDNA 3 ISA 还把以下内容归入 Wave 的软件可见状态：
+MI300 ISA 还把以下内容归入 Wave 的软件可见状态：
 
 | 类别       | 典型名称                                                                                                    | 用途                               |
 | ---------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------- |
 | 控制流     | PC、EXEC、`VCC`、`SCC`                                                                                  | 下一条指令、活跃 Lane 和条件结果   |
-| 操作数     | VGPR、SGPR                                                                                                  | 各 Lane 的值与整条 Wave 的共享值   |
+| 操作数     | VGPR、AccVGPR、SGPR                                                                                         | 各 Lane 的值与整条 Wave 的共享值   |
 | 模式与异常 | `STATUS`、`MODE`、`M0`、`FLAT_SCRATCH`、`TRAPSTS`，以及 Trap Handler 使用的 `TTMP0`～`TTMP15` | 执行模式、Scratch 与 Trap 相关状态 |
-| 未完成操作 | `VMcnt`、`VScnt`、`LGKMcnt`、`EXPcnt` 等；代码用 `s_wait_*cnt` 表达等待条件                       | 记录已经发起但尚未完成的操作       |
+| 未完成操作 | `VMCNT`、`LGKMCNT`、`EXPCNT`；代码用 `s_waitcnt` 表达等待条件                                       | 记录已经发起但尚未完成的操作       |
 
 这些名称描述架构语义上的归属：每条同时存在的 Wave 必须表现为拥有独立状态。公开 ISA 没有因此承诺 PC、寄存器或等待状态在芯片中采用某种固定 RAM 阵列布局。
 
-> **[SPEC]** [AMD RDNA 3 ISA Reference Guide](https://docs.amd.com/api/khub/documents/UkT_UPQL21KfKAMUBFnZTw/content) 第 3 章给出的软件可见范围包括：每条 Wave 一个 48 位 PC；64 位 EXEC，wave32 使用其低 32 位；`V0`～`V255` 形式的 VGPR，每个有效 Lane 各有自己的 32 位值；`S0`～`S105` 形式的 SGPR，整条 Wave 共享。Trap Handler 还可以使用 `TTMP0`～`TTMP15`。这里列的是架构状态，不是对寄存器文件物理 Bank 和布线的描述。
+> **[SPEC]** [MI300 / CDNA 3 ISA](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf)（封面日期 2025-08-05） §3.1～§3.3、§3.6.4、§4.4，原文第 8～9、12～13、19～20 页。每条 Wave 有一个 48 位 PC 和 64 位 EXEC。普通 VGPR 记为 `V0`～`V255`，矩阵累加寄存器记为 `AV0`～`AV255`；每个寄存器按 Lane 保存 32 位值，两类合计每 Wave 最多 512 个。SGPR 保存整条 Wave 共享的值，Trap Handler 还可使用 `TTMP0`～`TTMP15`。这些是程序可见状态；可分配数量及粒度仍须结合 §3.6 和 Kernel 资源声明。
 
 页表遍历、TLB、Cache Line 和在飞 Memory Transaction 属于地址与内存系统状态。它们会决定一条 Wave 何时重新就绪，但通常不属于 Wave Context Save Image；分析等待或抢占时，不能把内存系统状态全部塞进“Wave 现场”这一概念。
 
-### 8.4 物理资源坐标：WGP、CU 与 SIMD
+### 8.4 物理资源坐标：XCD、CU 与 SIMD
 
-`WGP → CU → SIMD32` 表示物理硬件包含关系，不表示 Work-group 里包含 CU。
+MI300 采用多个计算芯粒组织计算资源。这里需要区分三个名称：
 
-公开 RDNA 3 架构中：
+- **XCD（Accelerator Complex Die）**：封装中的一块物理计算芯粒。
+- **XCC（Accelerator Core Complex）**：驱动看到的一组计算资源，包括多个 CU、缓存和相关控制资源。
+- **CU（Compute Unit）**：这组资源中负责执行 Wave 的计算单元。
 
-```text
-一个 WGP
-├─ CU 0
-│  ├─ SIMD32-0
-│  └─ SIMD32-1
-└─ CU 1
-   ├─ SIMD32-2
-   └─ SIMD32-3
-```
+**在 MI300A 和 MI300X 中，一个 XCD 对应一个 XCC。** 因此，硬件架构图常用 XCD，驱动在选择计算资源或访问寄存器时常用 XCC；这里说的是同一块芯粒及其计算资源的两个观察角度。
 
-在向量指令这一层，可以进一步标出各 SIMD32 的执行职责：
+下面把这一关系接到 CU 和 SIMD 上：
 
 ```text
-一个 WGP
-├─ CU0
-│  ├─ SIMD32-0   ← 执行 Wave 的向量指令
-│  └─ SIMD32-1   ← 执行 Wave 的向量指令
-└─ CU1
-   ├─ SIMD32-2   ← 执行 Wave 的向量指令
-   └─ SIMD32-3   ← 执行 Wave 的向量指令
+一个 XCD（物理芯粒）/ 对应的一个 XCC（计算资源）
+├─ 队列控制资源，包括 HQD 寄存器
+└─ 多个 CU
+   └─ 一个 CU
+      ├─ SIMD 0
+      ├─ SIMD 1
+      ├─ SIMD 2
+      ├─ SIMD 3
+      ├─ 标量、矩阵与访存执行资源
+      └─ 64 KiB LDS：按 Work-group 分配使用区域
 ```
 
-同一 WGP 内的两种公开放置模式如下：
+这张图保留资源包含关系，不描绘物理布局。每个 SIMD 可以承载多条 Wave；wave64 的 64 个逻辑 Lane 也不直接给出某条指令的单周期处理宽度或延迟。
 
-```text
-一个 WGP
-┌─────────────────────────────┐
-│       CU 0       CU 1       │
-│    2×SIMD32    2×SIMD32     │
-│      寄存器      寄存器      │
-│    Work-group 的 LDS/Barrier │
-└─────────────────────────────┘
+每个 XCC 都有自己的队列配置寄存器。后面看到“按 XCC 装载 MQD”时，可以理解为：驱动分别把队列配置写入各个 XCC 的 HQD。同一条逻辑 Queue 可以在多个 XCC 上有对应的硬件状态，具体过程见 [03 第 3.0 节的硬件总图与多 XCC 分工](<./03_AMD GPU 队列与 AQL Dispatch.md#30-mi300-的硬件结构与队列分工>)。
 
-WGP mode：同一 Work-group 的 Wave 可以分布到两个 CU
-CU mode ：同一 Work-group 的 Wave 限制在一个 CU
-```
+> **[SOURCE]** Linux `248951ddc14d`，[`amdgpu-glossary.rst`](./2.源码/linux/Documentation/gpu/amdgpu/amdgpu-glossary.rst) 第 288～289 行将 XCC 展开为 `Accelerator Core Complex`，本文沿用该名称。[`kfd_mqd_manager_v9.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 905～930 行逐 XCC 装载队列；[`amdgpu_amdkfd_gc_9_4_3.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gc_9_4_3.c) 第 284～309 行选择目标 XCC 并写入该实例的 HQD 寄存器。
 
-CU 还提供寄存器、Wave 调度/发射资源、标量与向量执行管线、访存通路等。SPI/Workgroup Manager 检查寄存器、LDS、Wave Slot 等资源，把 Work-group 准入一个 WGP。随后各 Wave 驻留在该 WGP 所含的 CU/SIMD 资源上。
+> **[SPEC]** [AMD SMI 27.0.0：GPU partitioning](https://rocmdocs.amd.com/projects/amdsmi/en/latest/conceptual/partition.html#architecture-background) 的“Architecture background / Physical die types / Logical units”说明：XCD 是物理计算芯粒，XCC 是驱动看到的计算资源集合；MI300A、MI300X 均为每个 XCD 对应一个 XCC。该文使用 `Accelerated Compute Core` 这一展开方式，本文的英文名称采用上面的固定 Linux 术语表。
 
-> **[SPEC]** [AMD RDNA 3 ISA Reference Guide](https://docs.amd.com/api/khub/documents/UkT_UPQL21KfKAMUBFnZTw/content) §2.3 描述 WGP mode 与 CU mode：WGP mode 允许同一 Work-group 的 Wave 使用 WGP 内两个 CU，CU mode 将其限制在其中一个 CU。两种模式都不保证 Wave 平均分配或同时执行。
+> **[SOURCE]** Linux `248951ddc14d`，[`gfx_v9_4_3.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c) 第 30、5041 行使用 `vega10_enum.h` 中的 `NUM_SIMD_PER_CU` 填写 MI300 路径的 CU 信息；[`vega10_enum.h`](./2.源码/linux/drivers/gpu/drm/amd/include/vega10_enum.h) 第 1139～1141 行将该常量定义为 4。这里核对的是 MI300 实际使用的字段，不能因头文件名含 Vega10 就把整个旧架构套到 MI300。
 
-同一节还规定：一个 Work-group 的 Wave 位于同一个 WGP；单个 Work-group 最多包含 1024 个 Work-item，并可共享最多 64 KiB LDS。WGP 的 Work-group 数、Wave Slot、寄存器和 LDS 都会限制实际并发驻留量，因此这些架构上限不能直接当作某个 Kernel 的 Occupancy。
+> **[SPEC]** [MI300 / CDNA 3 ISA](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf)（封面日期 2025-08-05） §2.2.1、§3.6.5、§4.3，原文第 6、13、19 页。每 CU 有 64 KiB LDS，按 Work-group 分配。§4.3 的常规 Work-group 模型中，同组 Wave 在同一个 CU 上运行，最多 16 条 Wave，即 1024 个 Work-item；组内可通过 `S_BARRIER` 同步。
 
-> **[BOUNDARY]** 本节使用 RX 7800 XT 所属 RDNA 3 的公开层级帮助建立物理坐标。其他 AMD 架构的 CU 组织、Wave 宽度和发射规则可能不同。
+**[BOUNDARY]** 本文使用上述常规 Work-group 模型。MI300 ISA 也对 `TG_SPLIT` 等特殊模式单列条件，当前教学案例不采用这些模式。设备的 XCD/CU 总数、计算分区、Kernel 驻留量和指令吞吐须分别核实。
+
+> **[SPEC]** [MI300 / CDNA 3 ISA](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf)（封面日期 2025-08-05）§9.1.10.2，原文第 74～75 页，对 `TG_SPLIT` 条件下的缓存行为单独作出说明；这些条件不能混入默认案例。
+
+> **[SPEC]** [AMD CDNA 3 架构白皮书](https://www.amd.com/content/dam/amd/en/documents/instinct-tech-docs/white-papers/amd-cdna-3-white-paper.pdf)，原文第 5～6 页，图 3～4，说明 XCD、CU 以及 CU 内的标量、向量、矩阵、访存和 LDS 资源。本文只采用 MI300 系列共有的层级，不预设 MI300A/MI300X 的整机数量。
 
 ### 8.5 Work-group 怎样变成多个 Wave
 
-主例固定：
+主例固定为 MI300 / CDNA 3：
 
 ```text
 N = 1024
 Work-group size = 256
 Grid size = 1024
-Kernel 使用 wave32
-```
+Wave 宽度 = 64
 
-由此得到：
-
-```text
 1024 / 256 = 4 个 Work-group
-256 / 32   = 每组 8 个 Wave
-4 × 8      = 总计 32 个 Wave
+256 / 64   = 每组 4 条 Wave
+4 × 4      = 总计 16 条 Wave
 ```
 
-其中每个 Work-group 都会形成自己的一组 Wave：
+每个 Work-group 都独立形成以下四条 Wave：
 
 ```text
-一个 Work-group（软件协作组）
-├─ Wave 0：Work-item   0～31
-├─ Wave 1：Work-item  32～63
-├─ Wave 2：Work-item  64～95
-├─ ...
-└─ Wave 7：Work-item 224～255
+一个 Work-group
+├─ Wave 0：组内 Work-item   0～63
+├─ Wave 1：组内 Work-item  64～127
+├─ Wave 2：组内 Work-item 128～191
+└─ Wave 3：组内 Work-item 192～255
 ```
 
-这些是逻辑数量，不表示 GPU 必须同时容纳 32 条 Wave。如果 `N=1000` 仍使用 Grid size 1024，最后 24 个 Work-item 会因 `i >= N` 被 EXEC 掩码排除，不执行越界访存。
+这些是本次任务的 Wave 总数，实际驻留量受执行资源限制。若 `N=1000` 仍按 HIP Launch 覆盖 1024 个 Work-item，最后 24 个 Work-item 在 `i < N` 分支中不执行越界访存；Wave 宽度仍为 64。
 
-如果 Kernel 使用 wave64，每个 256 Work-item 的 Work-group 会形成 4 个 Wave。Wave 宽度由目标 ISA 和 Kernel 编译属性决定，不能只从 Grid 或 Work-group 大小推断。
-
-> **[SPEC]** [AMD RDNA 3 ISA Reference Guide](https://docs.amd.com/api/khub/documents/UkT_UPQL21KfKAMUBFnZTw/content) §2.1 说明该架构支持 wave32 和 wave64。wave32 的每条指令最多发射一次；wave64 的 VALU 和向量内存指令通常先处理低 32 Lane，再处理高 32 Lane，标量、分支和消息类指令只发射一次。Wave 宽度描述共享执行状态的 Work-item 数，不能直接等同于单周期吞吐宽度。
+> **[SPEC]** [MI300 / CDNA 3 ISA](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf)（封面日期 2025-08-05） §1.1、§2，原文第 4～5 页。CDNA 3 将 64 个 Work-item 编成一条 Wave。改变 Grid 或 Work-group 大小不会把 MI300 改成 wave32。
 
 ### 8.6 驻留与本次发射是两个状态
 
 Wave 驻留表示硬件已经为它预留 Wave Slot、寄存器等执行资源，它可以在被选中时继续从自己的 PC 推进。驻留的 Wave 可能正在等待内存、Barrier 或其他依赖，此时 SIMD 可以选择另一条已经驻留且就绪的 Wave。
 
 ```text
-同一个 SIMD32 上已有三条驻留 Wave
+同一个 SIMD 上已有三条驻留 Wave
 
 Wave 0：load 已发出，等待数据
 Wave 1：下一条指令已经就绪
@@ -1400,16 +1382,16 @@ Wave 2：下一条指令已经就绪
 后续数据返回：Wave 0 重新变为就绪
 ```
 
-一条 CU 内部可以同时保留来自不同 Work-group 的多条 Wave。下面的分布只是教学例子，不表示固定映射策略：
+一个 CU 内部可以同时保留来自不同 Work-group 的多条 Wave。下面只画其中两个 SIMD 的部分状态，不表示固定映射策略：
 
 ```text
 一个 CU
-├─ SIMD32-0 当前保留的 Wave 状态（并非同时执行）
+├─ SIMD-0 当前保留的 Wave 状态（并非同时执行）
 │  ├─ Work-group 0 / Wave 0
 │  ├─ Work-group 0 / Wave 2
 │  └─ Work-group 1 / Wave 0
 │
-└─ SIMD32-1 当前保留的 Wave 状态（并非同时执行）
+└─ SIMD-1 当前保留的 Wave 状态（并非同时执行）
    ├─ Work-group 0 / Wave 1
    ├─ Work-group 0 / Wave 3
    └─ Work-group 1 / Wave 1
@@ -1422,18 +1404,18 @@ Wave 2：下一条指令已经就绪
     ↓
 已驻留：Wave 已分配给 SIMD；每条 Wave 有自己的架构状态可供执行
     ↓
-本次发射：SIMD32 从其中选择一条可执行的 Wave，取其 PC 指向的下一条指令
+本次发射：SIMD 从其中选择一条可执行的 Wave，取其 PC 指向的下一条指令
     ↓
 等待：该 Wave 可能因尚未完成的内存操作或 Barrier 暂时不能继续；它仍保持驻留
     ↓
-改选：SIMD32 在后续发射机会选择另一条可执行的已驻留 Wave
+改选：SIMD 在后续发射机会选择另一条可执行的已驻留 Wave
     ↓
 整个 Work-group 的 Wave 都完成：释放该组的 LDS、Barrier 等组资源
 ```
 
 Wave 0 等待时仍保留自己的 PC、EXEC、SGPR、VGPR 和等待状态。切到 Wave 1 不需要像 CPU 进程切换那样先把 Wave 0 的全部现场写回普通系统内存。
 
-> **[SPEC]** AMD RDNA 3 ISA 第 3 章描述 Wave 架构状态；[AMD GPUOpen：Occupancy explained](https://gpuopen.com/learn/occupancy-explained/)说明多个 Wave 可以同时分配到 SIMD，并通过资源驻留隐藏等待延迟。
+> **[SPEC]** [MI300 / CDNA 3 ISA](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf)（封面日期 2025-08-05） §1、§3.1、§4.4，原文第 4、8～9、19～20 页。硬件通过保留多组工作状态并重叠计算与访存来隐藏延迟；部分依赖需要程序插入 `S_WAITCNT` 等待。上图是状态示意，不规定逐周期仲裁规则。
 
 占用率描述资源限制下能够同时驻留多少 Wave/Work-group。更高占用率增加“还有其他就绪 Wave”的机会，但不保证性能更高；带宽、指令吞吐和算法依赖仍可能成为瓶颈。
 
@@ -1487,9 +1469,9 @@ Host
 └──────────────────────┬───────────────────────┘
                        │ Runtime 提交
                        ▼
-GPU：8 个有效 Work-item 形成一条部分活跃的 wave32
+GPU：8 个有效 Work-item 形成一条部分活跃的 wave64
 ┌────────┬────────┬────────┬─────┬────────┬─────────────┐
-│ i = 0  │ i = 1  │ i = 2  │ ... │ i = 7  │ Lane 8～31  │
+│ i = 0  │ i = 1  │ i = 2  │ ... │ i = 7  │ Lane 8～63  │
 │ active │ active │ active │     │ active │ inactive    │
 └────────┴────────┴────────┴─────┴────────┴─────────────┘
 ```
@@ -1511,13 +1493,13 @@ CU 对这条 Wave 依次推进多条指令。即使只有 8 个有效 Lane，也
 
 ```text
 命令处理器（Command Processor，CP）/Packet Processor：读取 Packet，建立 Dispatch
-→ RDNA 3 着色器处理器输入模块（Shader Processor Input，SPI）/Workgroup Manager：检查资源，把 Work-group 准入 WGP
+→ MI300 工作分派前端：检查资源，把常规 Work-group 准入一个 CU
 → CU：承载 Wave，选择并发射就绪指令，由相应执行管线完成运算和访存
 ```
 
 ### 8.9 用四个 Lane 观察 SGPR 与 VGPR
 
-为了把每个值写出来，下面只画 wave32 的前四个 Lane。教学 Kernel 为：
+为了把每个值写出来，下面只画 wave64 的前四个 Lane。教学 Kernel 为：
 
 ```c
 out[i] = scale * (x[i] + y[i]) + bias;
@@ -1567,16 +1549,16 @@ V4 = S0 × V3 + S1
 
 ### 8.10 Wave Slot、PC 与资源预留
 
-先把一个 SIMD32 临时假设为只有两个 Wave Slot。这个数字只用于画图；[AMD GPUOpen 的 Occupancy 说明](https://gpuopen.com/learn/occupancy-explained/)给出的 RDNA 2/3 上限是每个 SIMD 16 个可分配 Wave Slot。
+**[DESIGN]** 下面只画一个 SIMD 的两个 Wave Slot，用于观察状态变化。这是容量缩小后的教学模型，不表示 MI300 每个 SIMD 的硬件上限。
 
 ```text
 初始
-SIMD32
+SIMD
 ├─ Slot 0：空
 └─ Slot 1：空
 
 准入两条 Wave 后
-SIMD32
+SIMD
 ├─ Slot 0：Wave A
 │  ├─ PC 指向 Kernel 第一条指令
 │  ├─ 已预留所需 SGPR/VGPR 容量
@@ -1659,11 +1641,11 @@ Work-group 0 的 LDS/Barrier：
 
 ```text
 Dispatch 中的全部 Work-group
-├─ 已准入：它们的 Wave 已占用 CU/WGP 资源
+├─ 已准入：它们的 Wave 已占用 CU 资源
 └─ 等待中：前一批完成并释放资源后再准入
 ```
 
-这解释了一个常见现象：某些 Wave Slot 已空，新 Work-group 仍可能因为 LDS 或 Work-group 级资源不足而无法准入。Occupancy 要同时考虑 Wave Slot、VGPR、SGPR、LDS 和每 CU/WGP 的 Work-group 上限。
+这解释了一个常见现象：某些 Wave Slot 已空，新 Work-group 仍可能因为 LDS 或 Work-group 级资源不足而无法准入。Occupancy 要同时考虑 Wave Slot、VGPR、SGPR、LDS 和每 CU 的 Work-group 上限。
 
 ### 8.13 本章检查点：执行状态
 
@@ -1879,7 +1861,7 @@ Linux Driver 不会在这时逐字段解释当前 Packet。KFD 早先已经建�
 
 ### 10.5 Work-group 和 Wave 在 CU 上执行
 
-当前 Dispatch 形成 4 个 Work-group。如果 Kernel 使用 wave32，每个 Work-group 形成 8 条 Wave。
+当前 Dispatch 在 MI300 上形成 4 个 Work-group，每组 4 条 wave64，共 16 条 Wave。
 
 只观察第一条 Wave 的前四个 Lane：
 
@@ -1915,7 +1897,7 @@ B = [3, 5, 2, 1]
 C = [4, 9, 8, 9]
 ```
 
-每个 Lane 使用自己的地址和数据。Wave 共享的是指令流推进，不是把 32 个元素合并成一个标量。
+每个 Lane 使用自己的地址和数据。Wave 共享的是指令流推进，64 个 Lane 各自的元素值仍分别保存。
 
 把前四个 Lane 的访存和运算拆开，可以看到地址与数据始终按 Lane 区分：
 
@@ -1988,7 +1970,7 @@ h_C（Host memory）
 | Dispatch 准备  | 高层 Runtime          | Kernel、参数、Grid、依赖 | 填 Kernarg 和 Packet          | 尚未发布的 Packet           |
 | Packet 发布    | AQL Producer          | 完整 Packet              | release Header、写 Doorbell   | GPU 可发现新工作            |
 | 取包           | CP/MEC                | Ring 与 Queue 上下文     | 读取并解码 Packet             | 一次 Dispatch               |
-| 准入           | SPI/Workgroup Manager | Work-group 与资源需求    | 分配 WGP/CU 资源              | 驻留 Wave                   |
+| 准入           | 工作分派前端          | Work-group 与资源需求    | 分配 CU 资源                  | 驻留 Wave                   |
 | 执行           | CU/SIMD/内存系统      | GPU ISA 与 A/B           | load、计算、store             | `d_C` 更新                |
 | 完成           | 设备完成路径          | 已结束的 Dispatch        | 建立可见性、更新 Signal       | 完成条件满足                |
 | 返回           | Runtime/应用          | 完成对象                 | 重新检查条件并返回            | 应用可以按 API 合同使用结果 |
@@ -2014,7 +1996,7 @@ vector_add<<<gridSize, blockSize>>>(d_A, d_B, d_C, N);
 hipDeviceSynchronize();
 ```
 
-这次 Launch 有 16 个 Work-group，每组 64 个 Work-item。若 Kernel 使用 wave32，每组形成 2 条 Wave，总计仍是 32 条 Wave。
+这次 Launch 有 16 个 Work-group，每组 64 个 Work-item；MI300 上每组形成 1 条 wave64，总计仍是 16 条 Wave。
 
 16 个 Work-group 覆盖的下标区间如下：
 
@@ -2026,8 +2008,8 @@ Work-group 15：blockIdx.x = 15，threadIdx.x = 0～63 → i = 960～1023
 ```
 
 ```text
-主例：4 个 Work-group × 每组 8 条 Wave = 32 条 Wave
-本例：16 个 Work-group × 每组 2 条 Wave = 32 条 Wave
+主例：4 个 Work-group × 每组 4 条 Wave = 16 条 Wave
+本例：16 个 Work-group × 每组 1 条 Wave = 16 条 Wave
 ```
 
 两种 Launch 的 Work-item 总数相同，Work-group 协作边界和资源分配粒度不同。不能只看 Wave 总数判断两种配置性能相同；LDS、寄存器、访存与调度开销都会影响结果。
@@ -2106,11 +2088,11 @@ T3：设备前端读取 slot 2，才开始建立这次 Dispatch
 
 > **[SOURCE]** CLR [`rocvirtual.cpp`](./2.源码/rocm-clr/rocclr/device/rocm/rocvirtual.cpp) 第 1186～1293 行的 `VirtualGPU::dispatchGenericAqlPacket()` 展示实际发布路径：第 1192～1194 行预留 index，第 1239～1242 行等待目标槽位可复用，第 1254～1260 行写入 Ring 并发布首 32 位，第 1275 行写 Doorbell。第 1074～1081 行定义了 32 位 release 写使用的 `packet_store_release()`。这比短样例多了 Queue 满处理和完成 Signal 管理，但共同顺序仍是“预留 → 等槽位 → 写内容 → release 发布 → Doorbell”。
 
-### 10.10 GFX11 Queue 配置能证明什么
+### 10.10 MI300 Queue 配置能证明什么
 
 Linux KFD/AMDGPU 源码可以证明 Driver 怎样把 Queue 的关键地址交给硬件，但看不到 Packet Processor 的全部内部解码逻辑。
 
-GFX11 的 `update_mqd()` 路径把软件 Queue 属性写入 MQD：
+MI300 的 GFX9.4.3 路径使用 `v9_mqd`。每个 XCC 的初始化先复用公共字段逻辑，再补充实例状态；公共字段把软件 Queue 属性写入 MQD：
 
 | Queue 属性        | MQD 中的作用                    |
 | ----------------- | ------------------------------- |
@@ -2129,11 +2111,11 @@ q->write_ptr      → CP_HQD_PQ_WPTR_POLL_ADDR：设备读取生产进度的位�
 q->doorbell_off   → CP_HQD_PQ_DOORBELL_CONTROL：这条 Queue 对应哪个 Doorbell
 ```
 
-> **[SOURCE]** 固定 Linux 基线的 [`kfd_mqd_manager_v11.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v11.c) 第 208～276 行中，第 216～231 行写 Queue 大小、Ring 基址、`rptr/wptr` 地址与 Doorbell，第 253～261 行写 VMID 和 AQL Queue 控制位。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_mqd_manager_v9.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 271～330 行填写 Ring、进度地址、Doorbell、VMID 与 AQL 控制位；第 727～795 行按 XCC 初始化并调整 MQD；第 1024～1033 行将 GFX9.4.3 的操作绑定到这些实例处理函数。公共字段不足以表示最终 MQD 的全部状态。
 
-No-HWS 的 `hqd_load_v11()` 直接装载路径随后把 MQD 的寄存器镜像写入 HQD，并按顺序启用 Doorbell、配置 `wptr` 内存轮询和激活 Queue：
+若选用 No-HWS 直接装载路径，`load_mqd_v9_4_3()` 遍历当前节点的 XCC，逐个调用 `kgd_gfx_v9_4_3_hqd_load()`，把配置装入对应实例的 HQD。HWS/CPSCH 路径由运行列表交付配置，再由固件管理驻留。
 
-> **[SOURCE]** [`amdgpu_amdkfd_gfx_v11.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gfx_v11.c) 第 164～258 行中，第 193～205 行装入 HQD 并启用 Doorbell，第 207～245 行建立 `wptr` 读取，第 253～254 行设置 `CP_HQD_ACTIVE`。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_mqd_manager_v9.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 905～930 行给出逐 XCC 装载；[`amdgpu_amdkfd_gc_9_4_3.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gc_9_4_3.c) 第 284～361 行依次选择实例和槽位、写入 HQD、启用 Doorbell、按条件恢复 wptr，最后激活 Queue。这里证明该版本的直接装载接口，不宣称当前机器运行 No-HWS。
 
 ```text
 较早的 Queue 控制面
@@ -2163,9 +2145,9 @@ T2：Runtime 写有效 slot 2，并写 Doorbell = 10
 设备侧 Dispatch 与执行阵列：建立 Dispatch，准入 Work-group/Wave，发射 Kernel 指令
 ```
 
-这段 Linux 源码证明“设备已经被配置为知道去哪里读 Queue”。它不能证明设备内部怎样逐字段解码 Packet、怎样选择某个 WGP，或怎样把 32 条 Wave 放入各个 SIMD。那些动作属于公开规范与硬件接口之后的设备实现。
+这段 Linux 源码证明“设备已经被配置为知道去哪里读 Queue”。它不能证明设备内部怎样逐字段解码 Packet、怎样选择某个 CU，或怎样把 16 条 Wave 放入各个 SIMD。那些动作属于公开规范与硬件接口之后的设备实现。
 
-因此，KFD 的 `map_queues`、MQD/HQD 配置和 `rptr` 更新都不能改名为“Packet 解码器”。它们分别证明 Queue 驻留、硬件入口配置或消费进度；本地 Linux/ROCr 源码没有一段 C/C++ 函数完整实现“读取 `HSA_PACKET_TYPE_KERNEL_DISPATCH` 后建立 Dispatch，再选择 WGP/CU 和 SIMD”的设备内部流程。
+因此，KFD 的 `map_queues`、MQD/HQD 配置和 `rptr` 更新都不能改名为“Packet 解码器”。它们分别证明 Queue 驻留、硬件入口配置或消费进度；本地 Linux/ROCr 源码没有一段 C/C++ 函数完整实现“读取 `HSA_PACKET_TYPE_KERNEL_DISPATCH` 后建立 Dispatch，再选择 CU 和 SIMD”的设备内部流程。
 
 ### 10.11 同时追踪控制流、数据流和完成流
 
@@ -2664,7 +2646,7 @@ Fence 表槽位数          = 2 × N
 | Queue 驻留 Scheduler | KFD、Firmware/Hardware 控制路径 | Queue/Process 与有限硬件槽位 | 哪条逻辑 Queue 获得硬件取包入口         |
 | CU Wave Scheduler    | GPU CU Hardware                 | 已驻留且就绪的 Wave 指令     | 当前发射机会推进哪条 Wave               |
 
-三层处理的粒度不同。HSA AQL 用户 Queue 的每个 Dispatch 不一定成为 DRM Scheduler Job；MES 也不替 CU 逐周期选择 Wave 指令。
+三层处理的粒度不同。HSA AQL 用户 Queue 的 Dispatch 由用户态 Producer 和设备前端处理；HWS/CPSCH 管理 Queue 驻留，CU 自行选择就绪 Wave 指令。
 
 三个问题按粒度向下排列时是：
 
@@ -2681,7 +2663,7 @@ Driver-managed 路径：
 Linux DRM Scheduler → Engine Ring → GPU Job
 
 HSA Queue 控制面：
-KFD / HWS / MES 或 No-HWS → Queue 获得活动硬件状态
+KFD / HWS/CPSCH 或 No-HWS → Queue 获得活动硬件状态
 
 GPU 执行面：
 CP/MEC 建立 Dispatch → Work-group 准入 → CU 选择就绪 Wave
@@ -2721,22 +2703,24 @@ MQD 保存能够重新建立 Queue 的配置，例如 Ring 基址、读写进度
 逻辑 Queue
   → KFD 创建并维护 Queue 对象
   → MQD 保存可恢复配置
-  → No-HWS、HWS/CPSCH 或 MES 路径决定怎样驻留
+  → No-HWS 或 HWS/CPSCH 路径决定怎样驻留
   → HQD/等价硬件状态变为活动
   → CP/MEC 按该状态读取 Ring
 ```
 
 MQD 位于内存，只能证明可恢复的 Queue 配置已经存在；硬件开始消费还要求 Queue 进入活动槽位。HQD 已活动只能证明 Queue 具备被硬件消费的条件，某个 Dispatch 是否完成仍要检查对应的 Signal、Fence 或错误状态。
 
-三类驻留路径只在 Queue 控制面不同：
+MI300 的两条驻留路径如下，MES 仅作为其他架构的术语对照：
 
-| 路径      | 谁主要决定硬件槽位                       | KFD 交付什么                           | 当前边界                                |
-| --------- | ---------------------------------------- | -------------------------------------- | --------------------------------------- |
-| No-HWS    | KFD/Driver                               | VMID、Pipe/Queue 槽位与 MQD            | Driver 直接装载 HQD                     |
-| HWS/CPSCH | KFD 建立逻辑状态，调度 Firmware 管理驻留 | Process/Queue Runlist 与 MQD 地址      | Firmware 何时映射、抢占取决于协议       |
-| MES       | KFD/AMDGPU 通过 MES 接口交付 Queue       | Queue、进程、Doorbell、Ring 等核心状态 | MES 内部调度算法不由 Linux 接口源码公开 |
+| 路径                | 谁主要决定硬件槽位                       | KFD 交付什么                      | 当前边界                          |
+| ------------------- | ---------------------------------------- | --------------------------------- | --------------------------------- |
+| No-HWS              | KFD/Driver                               | VMID、Pipe/Queue 槽位与 MQD       | Driver 直接装载 HQD               |
+| HWS/CPSCH           | KFD 建立逻辑状态，调度 Firmware 管理驻留 | Process/Queue Runlist 与 MQD 地址 | Firmware 何时映射、抢占取决于协议 |
+| MES（其他架构对照） | 使用 Add Queue 等固件接口                | 进程和 Queue 状态                 | 固定源码未为 MI300 启用此路径     |
 
-不论使用哪条路径，普通 AQL Dispatch 都不会重新创建 KFD Queue。驻留控制只决定命令前端能否取得这条 Queue；Packet 的 Kernel、Kernarg 和数据仍由当前进程 GPUVM 提供。
+> **[SOURCE]** Linux `248951ddc14d`，[`amdgpu_discovery.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_discovery.c) 第 2716～2755 行只为列出的 GFX11/GFX12 设备安装 MES 模块并设置 `enable_mes`；MI300 的 GFX9.4.3 不在其中。因此本文以 HWS/CPSCH 为主、No-HWS 为条件对照。实际调度策略仍须核对部署时的参数。
+
+普通 AQL Dispatch 复用已经创建的 KFD Queue。驻留控制只决定命令前端能否取得这条 Queue；Packet 的 Kernel、Kernarg 和数据仍由当前进程 GPUVM 提供。
 
 ### 13.5 Queue 抢占与 Wave 抢占
 
@@ -2746,7 +2730,7 @@ Wave 抢占的状态量更大，支持的停止边界也更依赖 ASIC。CWSR �
 
 > **[BOUNDARY]** `cwsr_enable=1` 只说明相应能力或路径已启用，不表示每次 Queue 调度都会保存全部 VGPR。某次 Queue unmap 是等待自然 drain、在安全边界停止，还是触发 Wave 保存，需要结合 Queue 类型、调度模式和具体 ASIC。
 
-> **[SOURCE]** 固定 Linux 基线的 [`kfd_device.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device.c) 第 512～573 行在能力和开关满足时选择对应 GFX 代际的 CWSR Trap Handler；[`kfd_chardev.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) 第 268～292 行校验并保存 Queue Context Save/Restore Area 的地址与大小；[`kfd_mqd_manager_v11.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v11.c) 第 170～177 行把该区域写入 GFX11 MQD。它们证明 Driver 管理保存区和代际相关 Trap Handler，不能据此把 CWSR 简化成 CPU 的 `switch_to()`，也不能补写未公开的逐指令保存时序。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_device.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device.c) 第 512～535 行检查 CWSR 能力和开关，并为 GFX9.4.3 选择 `cwsr_trap_gfx9_4_3_hex`；[`kfd_chardev.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) 第 268～292 行校验保存区；[`kfd_mqd_manager_v9.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 727～763 行在初始化各 XCC 的 MQD 时分别设置 CWSR 地址。这些代码证明保存介质的管理与实例划分，不公开完整抢占时序。
 
 ### 13.6 正常生命周期中的状态转移
 
@@ -2801,7 +2785,7 @@ Queue 销毁
 │  ├─ GPUVM：地址翻译、映射或权限错误
 │  └─ Wave / Kernel：非法指令、Trap、Barrier、越界或不终止
 ├─ Driver ↔ Firmware 控制面
-│  └─ MES / PSP / SMU 等消息未在期限内响应
+│  └─ CP/MEC、PSP 或 SMU 等控制请求未在期限内响应
 └─ Queue / Ring / Engine 前向进展
    └─ Timeout 只证明进度长期未推进，根因仍需继续定位
 ```
@@ -2864,7 +2848,7 @@ C[256..1023] 可能仍是旧值
 
 Driver 会根据首批证据、隔离能力和硬件支持选择恢复范围，不一定严格从“小到大”逐级尝试。Firmware 无响应、命令不可抢占或局部 Reset 不受支持时，Driver 可以直接扩大 Reset Domain。
 
-> **[BOUNDARY]** RDNA 3 架构名称本身不能证明某块具体 GPU 支持哪一级 Queue/Engine Reset，也不能证明页面 Fault 是否可重试。真实结论必须结合当前内核版本、模块配置、ASIC 对应源码和实验日志。
+> **[BOUNDARY]** MI300 / CDNA 3 架构名称本身不能证明某块具体 GPU 支持哪一级 Queue/Engine Reset，也不能证明页面 Fault 是否可重试。真实结论必须结合当前内核版本、模块配置、ASIC 对应源码和实验日志。
 
 ### 14.5 真实系统中的观察入口
 
@@ -2986,8 +2970,8 @@ Host 应用
   → MQD/HQD 或相应 Queue 驻留状态
   → AQL Producer 发布 Packet、写 Doorbell
   → CP/MEC 读取 Packet，建立 Dispatch
-  → SPI/Workgroup Manager 准入 Work-group
-  → WGP/CU 承载 Wave
+  → 工作分派前端准入 Work-group
+  → CU 承载 wave64
   → SIMD 与其他管线执行 GPU ISA
   → MMU/Cache/内存系统访问 A、B、C
   → Completion Signal 或当前路径的 Fence
@@ -2999,24 +2983,24 @@ Host 应用
 
 ### 15.3 源码与规范入口
 
-| 要确认的问题                                    | 入口                                                                                                                                                                                                                                                            |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| HIP 编程、Kernel Launch、Stream 与 Event 模型   | [HIP Programming Model](https://rocm.docs.amd.com/projects/HIP/en/latest/understand/programming_model.html)、[HIP Launch API](https://rocm.docs.amd.com/projects/HIP/en/latest/reference/hip_runtime_api/modules/launch_api.html)                                 |
-| HSA Runtime、Agent、Queue、Signal 和 Packet API | [ROCr `runtime/hsa-runtime/inc/hsa.h`](./2.源码/rocr-runtime/runtime/hsa-runtime/inc/hsa.h)                                                                                                                                                                    |
-| ROCr 的职责与 HSAKMT 边界                       | [ROCr Runtime 说明](./2.源码/rocr-runtime/runtime/docs/what-is-rocr-runtime.rst)、[HSAKMT README](./2.源码/rocr-runtime/libhsakmt/README.md)                                                                                                                      |
-| ROCr AQL Queue 创建、索引和 Doorbell            | [`amd_aql_queue.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp)                                                                                                                                                                |
-| ROCr → HSAKMT → KFD 的 Queue 创建链           | [`amd_kfd_driver.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/driver/kfd/amd_kfd_driver.cpp)、[`libhsakmt/src/queues.c`](./2.源码/rocr-runtime/libhsakmt/src/queues.c)、[`kfd_chardev.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c)   |
-| 高层 Runtime 构造和发布 AQL Packet              | [CLR `rocvirtual.cpp`](./2.源码/rocm-clr/rocclr/device/rocm/rocvirtual.cpp)                                                                                                                                                                                    |
-| KFD 进程、Queue、Memory 和 Event UAPI           | [`kfd_chardev.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c)                                                                                                                                                                                     |
-| KFD Queue 管理与调度路径                        | [`kfd_process_queue_manager.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_process_queue_manager.c)、[`kfd_device_queue_manager.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c)                                                  |
-| AQL Packet 的短发布样例                         | [`samples/common/hsa_test.cpp`](./2.源码/rocr-runtime/samples/common/hsa_test.cpp)                                                                                                                                                                             |
-| GFX11 MQD 与 HQD 装载                           | [`kfd_mqd_manager_v11.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v11.c)、[`amdgpu_amdkfd_gfx_v11.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gfx_v11.c)                                                                    |
-| CWSR 能力、Trap Handler 与 Context Save Area    | [`kfd_device.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device.c)、[`cwsr_trap_handler.h`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/cwsr_trap_handler.h)、[`kfd_mqd_manager_v11.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v11.c) |
-| Firmware 请求、IP 初始化与 PSP 装载             | [`amdgpu_ucode.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_ucode.c)、[`amdgpu_device.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_device.c)、[`amdgpu_psp.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_psp.c)                       |
-| Driver-managed Job、Ring 与 Fence               | [`amdgpu_job.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_job.c)、[`amdgpu_ring.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_ring.c)、[`amdgpu_fence.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_fence.c)                           |
-| Linux AMDGPU、Ring、DRM UserQ 与 MES 的公开边界 | [AMDGPU Driver](https://docs.kernel.org/gpu/amdgpu/index.html)、[Ring Buffer](https://docs.kernel.org/gpu/amdgpu/ring-buffer.html)、[User Mode Queues](https://docs.kernel.org/gpu/amdgpu/userq.html)、[MES](https://docs.kernel.org/gpu/amdgpu/gc/mes.html)        |
-| AQL Queue、Packet 与`read_index` 语义         | [HSA Platform System Architecture 1.2](https://hsafoundation.com/wp-content/uploads/2021/02/HSA-SysArch-1.2.pdf) §2.8～§2.9                                                                                                                                    |
-| RDNA 3 WGP、CU、Wave 与 ISA 状态                | [AMD RDNA 3 ISA Reference Guide](https://docs.amd.com/api/khub/documents/UkT_UPQL21KfKAMUBFnZTw/content) §2～§3                                                                                                                                                |
+| 要确认的问题                                    | 入口                                                                                                                                                                                                                                                          |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HIP 编程、Kernel Launch、Stream 与 Event 模型   | [HIP Programming Model](https://rocm.docs.amd.com/projects/HIP/en/latest/understand/programming_model.html)、[HIP Launch API](https://rocm.docs.amd.com/projects/HIP/en/latest/reference/hip_runtime_api/modules/launch_api.html)                               |
+| HSA Runtime、Agent、Queue、Signal 和 Packet API | [ROCr `runtime/hsa-runtime/inc/hsa.h`](./2.源码/rocr-runtime/runtime/hsa-runtime/inc/hsa.h)                                                                                                                                                                  |
+| ROCr 的职责与 HSAKMT 边界                       | [ROCr Runtime 说明](./2.源码/rocr-runtime/runtime/docs/what-is-rocr-runtime.rst)、[HSAKMT README](./2.源码/rocr-runtime/libhsakmt/README.md)                                                                                                                    |
+| ROCr AQL Queue 创建、索引和 Doorbell            | [`amd_aql_queue.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp)                                                                                                                                                              |
+| ROCr → HSAKMT → KFD 的 Queue 创建链           | [`amd_kfd_driver.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/driver/kfd/amd_kfd_driver.cpp)、[`libhsakmt/src/queues.c`](./2.源码/rocr-runtime/libhsakmt/src/queues.c)、[`kfd_chardev.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) |
+| 高层 Runtime 构造和发布 AQL Packet              | [CLR `rocvirtual.cpp`](./2.源码/rocm-clr/rocclr/device/rocm/rocvirtual.cpp)                                                                                                                                                                                  |
+| KFD 进程、Queue、Memory 和 Event UAPI           | [`kfd_chardev.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c)                                                                                                                                                                                   |
+| KFD Queue 管理与调度路径                        | [`kfd_process_queue_manager.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_process_queue_manager.c)、[`kfd_device_queue_manager.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c)                                                |
+| AQL Packet 的短发布样例                         | [`samples/common/hsa_test.cpp`](./2.源码/rocr-runtime/samples/common/hsa_test.cpp)                                                                                                                                                                           |
+| MI300 MQD 与 HQD 装载                           | [`kfd_mqd_manager_v9.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c)、[`amdgpu_amdkfd_gc_9_4_3.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gc_9_4_3.c)                                                                  |
+| CWSR 能力、Trap Handler 与 Context Save Area    | [`kfd_device.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device.c)、[`cwsr_trap_handler.h`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/cwsr_trap_handler.h)、[`kfd_mqd_manager_v9.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) |
+| Firmware 请求、IP 初始化与 PSP 装载             | [`amdgpu_ucode.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_ucode.c)、[`amdgpu_device.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_device.c)、[`amdgpu_psp.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_psp.c)                     |
+| Driver-managed Job、Ring 与 Fence               | [`amdgpu_job.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_job.c)、[`amdgpu_ring.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_ring.c)、[`amdgpu_fence.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_fence.c)                         |
+| Linux AMDGPU、Ring、DRM UserQ 与 MES 的公开边界 | [AMDGPU Driver](https://docs.kernel.org/gpu/amdgpu/index.html)、[Ring Buffer](https://docs.kernel.org/gpu/amdgpu/ring-buffer.html)、[User Mode Queues](https://docs.kernel.org/gpu/amdgpu/userq.html)、[MES](https://docs.kernel.org/gpu/amdgpu/gc/mes.html)      |
+| AQL Queue、Packet 与`read_index` 语义         | [HSA Platform System Architecture 1.2](https://hsafoundation.com/wp-content/uploads/2021/02/HSA-SysArch-1.2.pdf) §2.8～§2.9                                                                                                                                  |
+| MI300 / CDNA 3 Wave 与 ISA 状态                 | [MI300 / CDNA 3 ISA](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf)（封面日期 2025-08-05） §1～§4，原文第 3～23 页                                                                                                                             |
 
 ### 15.4 源码跟读顺序
 
@@ -3060,9 +3044,9 @@ CLR rocvirtual.cpp
 第四段只验证设备入口已经具备条件：
 
 ```text
-kfd_mqd_manager_v11.c
+kfd_mqd_manager_v9.c
   → Ring base、rptr、wptr、Doorbell、VMID
-amdgpu_amdkfd_gfx_v11.c
+amdgpu_amdkfd_gc_9_4_3.c
   → MQD 装入 HQD、wptr poll、Queue active
 ```
 
@@ -3101,7 +3085,7 @@ Driver-managed Job
 4. `kernel_object`、`kernarg_address` 和 A/B/C GPUVA 分别指向什么？
 5. 为什么 AQL Packet 必须最后发布有效 Header，再写 Doorbell？
 6. Queue、Packet、Dispatch、Work-group、Wave 和 CU 为什么不能画成一条简单的包含关系？
-7. 256 个 Work-item 在 wave32 下为什么形成 8 个 Wave？
+7. 256 个 Work-item 在 MI300 上为什么形成 4 条 wave64？
 8. Wave 等待内存时为什么仍称为驻留？CU 怎样利用其他 Wave 隐藏这段延迟？
 9. Queue Scheduler、DRM Scheduler 和 CU Wave Scheduler 各调度什么？
 10. 为什么 `read_index` 前进不能证明 Kernel 已经完成？

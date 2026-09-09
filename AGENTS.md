@@ -35,6 +35,13 @@ Follow the surrounding Chinese-language prose and retain established technical t
 
 When answering questions about this repository, keep the response concise, clear, and direct. Use a short concrete example when it helps explain an abstract concept.
 
+### 学习说明的展开方式
+
+- 补充知识点时，不能只在原段落中插入一句结论。应单独展开，用关系图、流程图或带具体数值的例子配合简短解释，让读者看清对象之间的联系。
+- 涉及字段保存位置、地址与编号、软硬件对象或执行顺序时，优先使用 `text` 图或 Mermaid 图，标出对象、保存的值，以及箭头表示的选择、访问或写入动作。图前说明例子条件，图后解释关键关系。
+- 用户选中或认可的图示应随讲解写入文档，不能在补充时只保留图中的结论。用户要求“简要”时，压缩重复文字，保留帮助理解的图示和必要步骤。
+- 以学习者能否沿图说明“谁保存什么、谁根据什么找到谁、下一步做什么”为检查标准。不要用加粗的一句话或职责罗列表代替这层解释。
+
 ### 中文文档自然化检查
 
 每次新建、补充、改写或审阅本仓库的中文文档时，包括只修改一个段落，都必须使用 `humanizer-zh-docs` 技能完成最终检查和润色。不得只在用户明确要求“去 AI 味”时才使用该技能。
