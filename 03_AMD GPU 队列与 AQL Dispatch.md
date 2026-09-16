@@ -5372,7 +5372,9 @@ MI300 的 HWS/CPSCH 路径中，KFD 把 Q0 的 Doorbell offset、MQD 地址和�
 
 #### 5.4.2 本次通知写入什么，其他信息保存在哪里
 
-**在本章直接写硬件 Doorbell 的路径中，CPU 向 Q0 的 Doorbell 映射地址 D 写入数值 `37`，完成一次 MMIO 写。** `doorbell_signal` 保存的是 Signal 句柄，ROCr 根据句柄找到内部记录的地址 D。沿用 Q0 已驻留的条件，提交与取包过程如下：
+**在本章直接写硬件 Doorbell 的路径中，CPU 向 Q0 的 Doorbell 映射地址 D 写入数值 `37`，完成一次 MMIO 写。** `doorbell_signal` 保存的是 Signal 句柄，ROCr 根据句柄找到内部记录的地址 D。
+
+从通知到任务描述，关联链路是：**Q0 的 Doorbell → Q0 当前使用的 HQD 配置 → Q0 的 Ring → 按队列顺序处理的 Packet。** 沿用 Q0 已驻留的条件，下面只展开一个 XCC。假设 Ring 的 GPUVA 为 `0x10000000`，容量为 256 槽，前序 Packet 已处理到可以启动 37 的阶段：
 
 ```text
 CPU 调用 Runtime：通知 Q0 的 doorbell_signal，值为 37
@@ -5380,20 +5382,30 @@ CPU 调用 Runtime：通知 Q0 的 doorbell_signal，值为 37
 ROCr 根据句柄找到 Q0 的 Doorbell 地址 D
     ↓
 CPU 向地址 D 写入 64 位数值 37（MMIO 写）
-    ↓
-硬件收到 Q0 的提交进度通知
-    ↓
-Packet Processor 使用 Q0 的 Queue 上下文访问 Ring
-    从 Q0 Ring 的 slot 37 取得已发布的 Packet
-    再根据 Packet 中的句柄、地址找到代码和参数
+    ↓ 该 Doorbell 已通过队列配置与 Q0 关联
+硬件使用 Q0 当前的 HQD 配置
+    保存 Ring 基址、容量、队列进度和地址空间等信息
+    ↓ CP/MEC 根据配置定位 Ring
+Q0 的 Ring：GPUVA = 0x10000000，容量 = 256 个 Packet
+    ↓ 按队列处理进度，本例下一份是 Packet 37
+slot = 37 % 256 = 37
+Packet GPUVA = 0x10000000 + 37 × 64 = 0x10000940
+    ↓ 通过 Q0 所用的 GPU 地址空间访问该槽位
+读取 Packet 37 的任务描述
+    kernel_object   → Kernel 执行对象
+    kernarg_address → 本次参数块
 ```
+
+这里“通过 Doorbell 找到 Q0”指硬件使用已经建立的 Doorbell 与队列上下文关联，随后依据 HQD 找 Ring；普通通知过程无需再让 CPU 上的 KFD 按 Queue ID 查找软件对象。上图的 Packet 地址是 GPUVA，实际读取仍使用对应的 GPU 地址翻译通路。
+
+**通知值 37 表示提交进度，不会让 GPU 跳过前面的 Packet。** 如果 Q0 还有 Packet 35、36 尚未处理，就先按队列规则推进，再轮到 37；前序槽位仍为 `INVALID` 时，后面的 37 也不能越过它启动。这里的队内启动顺序与“等待前序 Kernel 全部完成”分开判断，是否增加完成等待由 barrier 等依赖条件决定，见第 5.5 节。
+
+> **[SPEC]** HSA System Architecture 1.2 §2.8.3，原文第 19～21 页，规定 Doorbell 通知使用 Packet ID、槽位按容量取余定位，以及队内按序 Dispatch、前序 `INVALID` 阻挡后继 Packet 的规则。HQD 中 Ring 与 Doorbell 配置的固定源码依据见第 5.4.1 节。
 
 这次提交写了两个不同的位置：
 
 - **Q0 Ring 的 slot 37**：地址为 Ring CPU 基址加 `0x940` 字节，保存完整的 **64 字节 Packet**。
 - **Q0 的 Doorbell 地址 D**：接收 **8 字节的通知值 37**。写入哪个 Doorbell 地址确定 Queue，写入的 Packet ID 表示提交进度。
-
-同一条 Q0 后续仍使用地址 D。比如以后 Packet 293 复用 Ring 的 slot 37，待槽位可写并发布后，CPU 向 D 写入的通知值就是 **293**。Ring 槽号按容量回绕，Doorbell 通知使用逻辑 Packet ID。
 
 Doorbell 写入无需再附带 KFD Queue ID、Ring 地址或 Kernel 地址。执行所需信息已经分别保存在队列配置和 Packet 中：
 
@@ -5407,7 +5419,7 @@ Doorbell 写入无需再附带 KFD Queue ID、Ring 地址或 Kernel 地址。执
     Ring 中的 Packet 37 → Kernel 句柄、Kernarg 地址、Grid、完成 Signal 等
 ```
 
-例如，Q1 使用另一个 Doorbell 地址 D1。向 D 写 37 通知 Q0，向 D1 写 37 则通知 Q1；两条 Queue 可以各有自己的 Packet 37。GPU 根据队列配置找到相应 Ring，再读取 Packet 中的任务信息。
+例如，Q1 使用另一个 Doorbell 地址 D1。向 D 写 37 通知 Q0，向 D1 写 37 则通知 Q1；两条 Queue 可以各有自己的 Packet 37，并通过各自的 HQD 配置定位各自的 Ring。
 
 本节的 MMIO 示例使用当前固定 ROCr 的直接硬件写入路径。实际提交调用 Runtime 的 Doorbell Signal 接口，由 Runtime 完成相应的内存顺序和 MMIO 操作。
 
