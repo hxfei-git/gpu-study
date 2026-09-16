@@ -36,6 +36,7 @@
 | GPUVA   | GPU Virtual Address                             | GPU 虚拟地址                                                          |
 | GPUVM   | GPU Virtual Memory                              | GPU 虚拟地址空间及其页表                                              |
 | GTT     | Graphics Translation Table                      | AMDGPU 中主要表示 GPU 可访问的系统内存域                              |
+| HBM     | High Bandwidth Memory                           | 高带宽内存                                                            |
 | HIP     | Heterogeneous-Compute Interface for Portability | AMD GPU 编程接口                                                      |
 | hipamd  | HIP implementation on AMD platform              | AMD 平台上的 HIP API 实现组件；`hipamd` 是项目名，不是首字母缩写    |
 | HMM     | Heterogeneous Memory Management                 | 异构内存管理                                                          |
@@ -3583,6 +3584,19 @@ MI300 按所属节点的 XCC 保存和恢复相应状态。启用 CWSR 并提供
 
 ## 4. 一次 Kernel 调用怎样编码成 AQL Packet
 
+本章先把一次调用拆成 Packet 字段，再把这些字段放回 Runtime 的提交过程。阅读时可以沿下面的顺序看：
+
+```text
+4.0～4.2：用 vector_add 看任务规模、字段位置，以及代码和参数的引用
+    ↓
+4.3：换用 sum_products，看每线程 temp[4] 怎样形成 private 请求
+     另用组内共享数组对照 group 请求
+    ↓
+4.4：继续 sum_products，从 CPU/GPU 交接扩展到 prepare_A → sum_products
+    ↓
+4.5：回到 vector_add，核对 CLR 怎样填好并发布 Packet
+```
+
 ### 4.0 从 vector_add 的启动参数得到任务描述
 
 Queue 已经创建，Runtime 也已装载 `vector_add`，并准备好 GPU 可以访问的 A、B、C 数组。本章开始描述一次具体调用：让 1024 个 Work-item 分别计算 `C[i] = A[i] + B[i]`，每个 Work-group 放 256 个 Work-item。
@@ -3598,14 +3612,14 @@ vector_add<<<4, 256, 0, stream>>>(A, B, C, 1024);
 
 HIP 的 Block 对应这里的 Work-group，线程对应 Work-item。**HIP 的 `gridDim.x = 4` 表示组数，AQL 的 `grid_size_x = 1024` 表示 Work-item 总数。**
 
-| 调用信息              | 换成 Packet 字段后的值                           | 字段中的数按什么计数                           |
-| --------------------- | ------------------------------------------------ | ---------------------------------------------- |
-| 一维任务，共 4 组     | 维数为 1；`grid_size_x/y/z = 1024/1/1`         | 整个 Dispatch 各维的 Work-item 数              |
-| 每组 256 个线程       | `workgroup_size_x/y/z = 256/1/1`               | 每个 Work-group 各维的 Work-item 数            |
-| 调用`vector_add`    | `kernel_object`                                | 已装载 Kernel 的执行句柄                       |
-| 参数为 A、B、C、1024  | `kernarg_address`                              | 保存指针值和标量值的参数块地址                 |
-| 执行时的临时存储 | `private_segment_size`、`group_segment_size` | 每个线程的私有内存大小、每组的共享内存大小，均以字节计；用途见 [4.3 节](#43-private-segment-与-group-segment-的资源需求) |
-| 需要 CPU 观察本次完成 | `completion_signal`                            | 本例所用 Signal 的句柄；Signal 的初值设为 1    |
+| 调用信息              | 换成 Packet 字段后的值                           | 字段中的数按什么计数                                                                                                   |
+| --------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| 一维任务，共 4 组     | 维数为 1；`grid_size_x/y/z = 1024/1/1`         | 整个 Dispatch 各维的 Work-item 数                                                                                      |
+| 每组 256 个线程       | `workgroup_size_x/y/z = 256/1/1`               | 每个 Work-group 各维的 Work-item 数                                                                                    |
+| 调用`vector_add`    | `kernel_object`                                | 已装载 Kernel 的执行句柄                                                                                               |
+| 参数为 A、B、C、1024  | `kernarg_address`                              | 保存指针值和标量值的参数块地址                                                                                         |
+| 执行时的临时存储      | `private_segment_size`、`group_segment_size` | 每个线程的私有内存大小、每组的共享内存大小，均以字节计；用途见[4.3 节](#43-private-segment-与-group-segment-的资源需求) |
+| 需要 CPU 观察本次完成 | `completion_signal`                            | 本例所用 Signal 的句柄；Signal 的初值设为 1                                                                            |
 
 这张表的前两行共同决定四组工作怎样划分：
 
@@ -3725,20 +3739,24 @@ Packet 发布后：Packet Processor 将同一位置的 4 字节解释为 grid_si
 
 `header` 占前 2 字节，`setup` 紧接着占 2 字节。代码还把这四个字节整体命名为 `full_header`，方便一次读写整个 32 位值。
 
-下面沿用第 4.4 节的教学设置：`header = 0x1502` 表示 Kernel Dispatch、等待同 Queue 前序工作完成、acquire/release 都取 SYSTEM；`setup = 0x0001` 表示一维。暂时只看这两个值放在哪里：
+先用 `header = 0x1502`、`setup = 0x0001` 看存储位置，其中 setup 的 1 表示一维任务。Header 中各个位的含义及 `0x1502` 的计算过程留到第 4.4 节。下图按平时写十六进制数的习惯，**高位在左、低位在右**；字节偏移也从左到右按 3、2、1、0 排列：
 
 ```text
-字节偏移          0       1       2       3
-                 +-------+-------+-------+-------+
-存储的字节       |  02   |  15   |  01   |  00   |  ← 十六进制
-                 +-------+-------+-------+-------+
-按两个字段看     | header=0x1502 | setup=0x0001  |
-                 +---------------+---------------+
-按一个整体看     |    full_header=0x00011502     |
-                 +-------------------------------+
+高位在左，低位在右；下面的 3、2、1、0 是字节偏移。
+
+    3       2       1       0
++-------+-------+-------+-------+
+|  00   |  01   |  15   |  02   |  ← 每格一个字节，值用十六进制表示
++-------+-------+-------+-------+
+| setup=0x0001  | header=0x1502 |
++---------------+---------------+
+|    full_header=0x00011502     |
++-------------------------------+
 ```
 
-图中使用小端布局：一个整数的低位字节放在较低地址。例如 `0x1502` 拆成 `02`、`15`，按地址递增排列。把四个字节整体当成整数时，`header` 占低 16 位，`setup` 占高 16 位，因此整体值为 `0x00011502`。
+这样从左向右读，`00 01 15 02` 就对应整数 `0x00011502`：左边的 setup 占高 16 位，右边的 header 占低 16 位。
+
+实际仍按**小端**存储，即低位字节放在较低地址。图中最右侧的 `02` 位于偏移 0，也就是 Packet 起点 P；从 P 开始按地址递增读取，要在图中从右向左看，依次得到 `02、15、01、00`。
 
 `full_header` 是同一块存储的整体名称，Packet 的大小仍为 64 字节。使用两个字段名时，便于分别说明它们的含义；发布到 Ring 时，则把前四个字节作为一个整体原子写入：
 
@@ -3791,7 +3809,7 @@ Packet Processor 观察到有效类型后，可按队列规则处理该 Packet
 
 ### 4.2 Packet 怎样连接代码、参数块和数组
 
-第 4.1 节已经列出 Packet 字段。本节沿“编译 Kernel → 装载代码 → 填写 Packet”的顺序，说明 `kernel_object` 和 `kernarg_address` 分别引用什么。以下地址和参数偏移均为教学示意。
+第 4.1 节已经列出 Packet 字段。本节沿“编译 Kernel → 装载代码 → 填写 Packet”的顺序，说明 `kernel_object` 和 `kernarg_address` 分别引用什么。前面假设 `vector_add` 已经装载好，这里回看它的准备过程；装载好的代码可以供多次调用复用，每次调用另行准备参数块。以下地址和参数偏移均为教学示意。
 
 #### 4.2.1 从 HIP 函数生成 Code Object
 
@@ -3834,7 +3852,22 @@ kernels.hsaco
 
 #### 4.2.2 Descriptor 保存启动信息，机器码在结构体外
 
-Descriptor（内核描述符）告诉命令前端代码入口在哪里、需要哪些执行资源。固定 ROCr 中的完整结构如下：
+Descriptor（内核描述符）告诉命令前端代码入口在哪里、需要哪些执行资源。它与机器码分别存放，通过一个相对偏移关联：
+
+```text
+0x7000_0000：vector_add 的 Descriptor（64 字节）
+    保存资源需求、参数区大小、启动配置
+    代码入口偏移 = +0x100
+         │ Descriptor 地址 + 入口偏移
+         ▼
+0x7000_0100：vector_add 的机器码
+    执行读取 A/B、相加、写入 C 等指令
+```
+
+下面的装载图和 Packet 总图继续使用这组教学地址，均假设未启用 Kernarg 预加载。这个 Descriptor 和第 4.1 节的 Packet 恰好都是 64 字节，但分别占用存储：Packet 通过 `kernel_object` 引用 Descriptor。
+
+<details>
+<summary>可选源码核对：Descriptor 的完整字段</summary>
 
 > **[SOURCE]** ROCr `ba56a24c6132`，[`loader/AMDHSAKernelDescriptor.h`](./2.源码/rocr-runtime/runtime/hsa-runtime/loader/AMDHSAKernelDescriptor.h) 第 199～211 行。
 
@@ -3860,7 +3893,7 @@ Descriptor（内核描述符）告诉命令前端代码入口在哪里、需要�
 - 第 204 行保存从 Descriptor 基址到机器码入口的字节偏移。
 - 第 206～209 行保存执行资源与启动配置。
 
-例如 Descriptor 位于 `0x7000_0000`，入口偏移为 `+0x100`，则代码入口是 `0x7000_0100`。下面的装载图和 Packet 总图继续使用这组地址，均假设未启用 Kernarg 预加载。
+</details>
 
 #### 4.2.3 装载后取得 Descriptor 地址
 
@@ -4029,7 +4062,7 @@ Packet B.kernel_object = 0x7000_2000 → vector_mul Descriptor
 
 乘法若要使用加法的结果，还需建立执行与内存同步依赖，见 [第 7.2 节](#72-barrier-bit-怎样约束同一-queue-的前序工作)与 [第 7.3 节](#73-barrier-and-怎样表达跨-queue-依赖)。
 
-下面回到本章最初的 `vector_add` 调用：第 4.3 节继续为同一个 Packet 填写存储需求，第 4.4 节设置 Header，第 4.5 节把这些字段放回 CLR 的填写过程，再交给第五章的 Ring 发布流程。
+第 4.3 节先用私有、共享临时数组的例子说明 Packet 中的存储需求。第 4.4 节继续使用其中的 `sum_products` 调用，设置 Header；第 4.5 节再回到本章最初的 `vector_add`，核对 CLR 的字段填写过程，再交给第五章的 Ring 发布流程。
 
 #### 4.2.6 可选核对：编译工具与源码依据
 
@@ -4061,54 +4094,144 @@ Packet B.kernel_object = 0x7000_2000 → vector_mul Descriptor
 
 ### 4.3 Private Segment 与 Group Segment 的资源需求
 
-第 4.2 节已经说明 Kernel 怎样根据 Kernarg 找到 A/B/C 数组。接下来先沿代码看：计算过程中，变量和中间结果存在哪里，再说明 Packet 中的 private/group 大小。
+第 4.2 节已经说明 Kernel 怎样根据 Kernarg 找到 A/B/C 数组。接下来说明计算时的临时存储怎样对应到 `private_segment_size` 和 `group_segment_size`。本节用 `sum_products` 展示每线程自己的私有数组，再用一个单独的协作计算片段展示整组共用的数组，最后回到 `sum_products` 填写 Packet。
 
 #### 4.3.1 从线程自己的变量理解 Private Segment
 
-沿用 1024 个元素、每组 256 个 Work-item 的 `vector_add`。把 Kernel 函数体中的计算展开，得到下面的教学片段：
+先看一个用临时数组保存中间结果的计算：**每个线程取 4 对输入，算出 4 个乘积，再把它们相加。** 为此，在 Kernel 中声明一个 `temp[4]`，保存这 4 个乘积。每个线程各有一份数组，包含 4 个 float，大小为 `4 × 4 = 16` 字节。
+
+这个例子单独使用 `sum_products` Kernel，N = 1024。仍启动 1024 个线程、每组 256 个；每个线程处理 4 对输入，因此 A、B 各有 4096 个元素，C 有 1024 个元素。数组已具备 GPU 访问条件。**下面按编译后 temp 保存在私有内存中的情况讲解。**
+
+```cpp
+__global__ void sum_products(const float* A,
+                             const float* B,
+                             float* C,
+                             int N)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= N) return;
+
+    float temp[4];  // 每个线程自己的临时数组：4 个 float，共 16 字节
+    int base = 4 * i;
+
+    for (int k = 0; k < 4; ++k) {
+        temp[k] = A[base + k] * B[base + k];
+    }
+
+    C[i] = temp[0] + temp[1] + temp[2] + temp[3];
+}
+```
+
+`float temp[4]` 声明了每个线程自己的局部数组。编译器决定它的实际存放方式；需要私有内存时，由运行时与硬件安排相应存储。线程执行到这行时不会再发起一次系统内存申请。
+
+只展开前两个线程，假设输入如下。图中列出的是它们完成乘法后，各自 temp 中保存的数值：
+
+```text
+线程 0
+    读取 A[0..3] = [1, 2, 3, 4]
+         B[0..3] = [10, 10, 10, 10]
+                 │ 对应元素相乘，写入自己的 temp
+                 ▼
+    自己的 temp[4] = [10, 20, 30, 40]    ← 私有临时内存，16 字节
+                 │ 将 4 个乘积相加，写入 C[0]
+                 ▼
+    C[0] = 100
+
+线程 1
+    读取 A[4..7] = [5, 6, 7, 8]
+         B[4..7] = [10, 10, 10, 10]
+                 │ 对应元素相乘，写入自己的 temp
+                 ▼
+    自己的 temp[4] = [50, 60, 70, 80]    ← 另一份私有临时内存，16 字节
+                 │ 将 4 个乘积相加，写入 C[1]
+                 ▼
+    C[1] = 260
+```
+
+**本例中，每个线程用于保存 temp 的这份私有内存，属于 Private Segment。** AMD GPU 通常用 Scratch 存储承载它。线程 0 和线程 1 使用各自的 temp；A/B/C 数组仍留在原来的输入、输出存储中，不属于这些私有临时区域。
+
+如果编译结果报告每个线程的 private 需求恰好为 16 字节，且本次调用没有额外的栈需求，Packet 就填写：
+
+```text
+private_segment_size = 16
+    ├─ 线程 0：自己的一份 16 字节
+    ├─ 线程 1：自己的一份 16 字节
+    └─ 其他线程：各自的一份 16 字节
+```
+
+这个字段填写**每个线程需要多少私有内存**，不乘以一组或整个 Grid 的线程数，也不计寄存器占用。实际值要取编译结果及运行时调整后的需求，不能只看源代码中的数组长度。
+
+**编译时也可能把 temp 优化为寄存器中的值，甚至消除数组。** 因此，上面的 16 字节是明确设定的存储示例，不是这段代码的实测编译结果。原来的 `vector_add` 只做单次加法，读出的值和中间结果通常可以保存在寄存器中；若没有其他私有内存需求，`private_segment_size` 就为 0。
+
+> **[SPEC]** [HIP 编程模型的存储说明](https://rocm.docs.amd.com/projects/HIP/en/latest/understand/programming_model.html)介绍局部数据、寄存器分配和线程私有存储。ROCr `ba56a24c6132` 的 [`inc/hsa.h`](./2.源码/rocr-runtime/runtime/hsa-runtime/inc/hsa.h) 第 3020～3023 行规定，Packet 的 private 字段是每个 Work-item 的私有内存申请字节数。在线资料核对日期为 2026-09-14。
+
+<details>
+<summary>可选回看：A/B/C、x/y 与 GPU 寄存器的关系</summary>
+
+沿用 1024 个元素、每组 256 个 Work-item 的 `vector_add`。本章已假设 A/B/C 数组具备 GPU 访问所需的映射与权限，Kernarg 保存它们的地址。若原始输入起初位于 CPU 的普通内存中，可以采用下面这条准备路径：
+
+```text
+CPU 内存中的原始输入
+    │ 复制，例如 hipMemcpy
+    ▼
+已分配、GPU 可以访问的数组 A、B（输出数组 C 也已准备好）
+    │ 将 A/B/C 的地址写入 Kernarg
+    ▼
+启动 Kernel
+```
+
+通过受支持的映射方式，GPU 也可以访问主机内存。这里只需明确：传入的数组地址必须可供 GPU 使用，普通 CPU 指针本身不能保证这一点。地址映射的关系见 [02 的 2.5 节](<./02_GPU 内存管理基础.md#25-cpu-与-gpu-的两条访问通路>)。
+
+输入准备好后，GPU 才执行 Kernel 中的计算。把函数体展开，得到下面的教学片段：
 
 ```cpp
 int i = blockIdx.x * blockDim.x + threadIdx.x;
 
-float x = A[i];
-float y = B[i];
+float x = A[i];  // 读取 A[i] 的值，赋给当前线程的变量 x
+float y = B[i];  // 读取 B[i] 的值，赋给当前线程的变量 y
 float result = x + y;
 
 C[i] = result;
 ```
 
-Kernarg 保存 A/B/C 的地址，计算时数据则经过这些位置：
+**x、y 是 Kernel 内部的局部变量名。** 它们的值来自 A[i]、B[i]，并没有先在 CPU 进程中各自分配一个地址。这些读出的值通常由编译器安排在 GPU 的**寄存器**中，供计算指令使用。
+
+寄存器是 GPU 计算单元内部的硬件存储，指令通过寄存器编号选择其中的值。假设线程 0 读取 A[0] = 2、B[0] = 3，计算过程如下；R0、R1、R2 只是示意编号，不是实际反汇编结果：
 
 ```text
-A、B 数组中的数据
-    │ 读取
-    ▼
-当前线程的 x、y
-    │ 相加
-    ▼
-当前线程的 result
-    │ 写回
-    ▼
-C 数组
+GPU 可以访问的数组内存                  GPU 计算单元内部
+
+A[0] = 2 ──根据 A 的地址读取────────→  寄存器 R0：2（x 的值）
+B[0] = 3 ──根据 B 的地址读取────────→  寄存器 R1：3（y 的值）
+                                              │
+                                       使用 R0、R1 做加法
+                                              ▼
+                                      寄存器 R2：5（result）
+                                              │
+C[0] = 5 ←─根据 C 的地址写回───────────────────┘
 ```
 
-**中间的 x、y、result 也需要有地方保存。** 同一个 Kernel 的机器码由多个 Work-item 分别执行，每个 Work-item 就是这里的一个 GPU 线程，它们处理不同的元素：
+读取 A[0]、B[0] 时，GPU 使用数组地址和相应的地址映射；读出数值后，原始数据仍留在数组中。加法直接使用寄存器中的值，无需再按用户进程的内存地址查找 x、y。编译器也可以复用寄存器，不必为每个变量保留一个独立寄存器。
+
+同一个 Kernel 的机器码由多个 Work-item 分别执行，每个 Work-item 就是这里的一个 GPU 线程，各自处理对应元素：
 
 ```text
-线程 0：保存自己的 A[0]、B[0] 和计算结果
-线程 1：保存自己的 A[1]、B[1] 和计算结果
+线程 0：读取 A[0]、B[0]，暂存自己读出的值和计算结果
+线程 1：读取 A[1]、B[1]，暂存自己读出的值和计算结果
 ……
 ```
 
-这些临时值通常由编译器安排在**寄存器**里，也就是 GPU 执行指令时直接使用的存储位置。如果某些线程私有数据需要另外放进内存，例如编译器将部分值移出寄存器保存，就会使用 **Private Segment**，在 AMD GPU 上通常由 Scratch 存储承载。
+如果某些线程私有数据需要放进寄存器之外的私有内存，例如编译器将部分值移出寄存器保存，就会使用 **Private Segment**，在 AMD GPU 上通常由 Scratch 存储承载。它用于保存线程私有数据，不负责为输入数组建立 GPU 映射。
 
-`private_segment_size` 填的是**每个线程需要多少这样的私有内存**。例如编译结果要求每个线程使用 32 字节，就填 32，各线程有各自的一份。普通局部变量可以保存在寄存器中，因此有 x、y、result，并不意味着该字段一定非零。
+若 x、y、result 等临时值都保存在寄存器中，且没有其他私有内存需求，`private_segment_size` 就可以为 0。
 
-> **[SPEC]** [HIP 编程模型的存储说明](https://rocm.docs.amd.com/projects/HIP/en/latest/understand/programming_model.html)介绍寄存器，以及局部数据、寄存器溢出和调用栈所需的线程私有存储。核对日期为 2026-09-09；本节未将教学片段当成实际编译结果。
+> **[SPEC]** [MI300 / CDNA 3 ISA](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf#page=16)（封面日期 2025-08-05）§3.1，原文第 8 页，列出 Kernel 可用的通用寄存器。[HIP 编程模型的存储说明](https://rocm.docs.amd.com/projects/HIP/en/latest/understand/programming_model.html)介绍寄存器，以及局部数据、寄存器溢出和调用栈所需的线程私有存储；[HIP 7.0.2 内存管理接口](https://rocm.docs.amd.com/projects/HIP/en/docs-7.0.2/doxygen/html/group___memory.html)说明内存复制和主机内存映射。在线资料核对日期为 2026-09-14；本节未将教学片段当成实际编译结果。
+
+</details>
 
 #### 4.3.2 从线程合作理解 Group Segment
 
-原来的 `vector_add` 中，各线程独立计算自己的 `C[i]`，不需要交换中间结果。如果改成组内协作计算，可以在 Kernel 中增加一块共享数组：
+上面的 `sum_products` 中，每个线程只使用自己的 `temp[4]`。为了看清 Group Segment 的用途，这里暂时换成一个组内协作的示意片段：各线程先计算一对 A/B 的和，把结果放到整组共用的 `temp[256]`，供同组线程继续使用。
 
 ```cpp
 __shared__ float temp[256];  // 同一组线程共同使用的一份数组
@@ -4118,7 +4241,7 @@ __syncthreads();             // 等同组线程都写完
 // 后续同组线程可以读取 temp 中其他线程写入的结果
 ```
 
-这仍是 Kernel 函数体中的用途示意，i 沿用前面的下标计算，每组固定 256 个线程。`__shared__` 声明组内共享存储；假设后续协作计算实际使用这份数组，其访问关系是：
+这段代码只展示共享存储的用途，未给出后续协作算法；它不属于 `sum_products`。i 仍为线程的全局下标，每组固定 256 个线程。`__shared__` 声明组内共享存储；假设后续协作计算实际使用这份数组，其访问关系是：
 
 ```text
 同一个 Work-group
@@ -4134,83 +4257,410 @@ __syncthreads();             // 等同组线程都写完
 其他 Work-group 各有自己的一份 temp
 ```
 
-这份组内共享的临时数组使用 **Group Segment**，MI300 用 LDS 承载。若编译后保留这份 `float[256]` 数组，它占 `256 × 4 = 1024` 字节，且没有其他 group 请求，那么 `group_segment_size` 就填 **1024**。这是整组共用一份的大小，而非每个线程各有一份 1024 字节。
+这份组内共享的临时数组使用 **Group Segment**，MI300 用 LDS 承载。这里的 LDS 就是 [00 文档第 8.7 节中的 LDS](./00_GPU系统基础.md#87-lds-是-work-group-的共享资源)。**它位于 GPU 计算芯片内部，既不是显存（HBM），也不是 System RAM（系统内存）。** “片上存储”在这里指做在 GPU 计算芯片内部的存储。
 
-> **[SPEC]** [MI300 / CDNA 3 ISA](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf#page=14)（封面日期 2025-08-05）§2.2.1，原文第 6 页，说明 LDS 用于同一 Work-group 内的数据交换与复用。[HIP 7.0.1 语言扩展](https://rocm.docs.amd.com/projects/HIP/en/docs-7.0.1/how-to/hip_cpp_language_extensions.html)说明 `__shared__` 变量与 `__syncthreads()` 的组内同步语义。
+MI300 的每个 CU 都有 64 KiB LDS，按 Work-group 分配使用区域。假设编译后保留 `temp[256]`，它的存放位置如下：
+
+```text
+GPU 计算芯片内部
+└─ CU（计算单元）
+   ├─ 执行计算的硬件
+   ├─ 寄存器：保存线程计算时使用的值
+   └─ LDS：共 64 KiB
+      └─ 分给当前 Work-group 的区域
+         └─ temp[256]：占 256 × 4 = 1024 字节
+            ↑
+            同组的 256 个线程共同读写
+```
+
+若没有其他 group 请求，`group_segment_size` 就填 **1024**，表示这一组需要从所在 CU 的 LDS 中取得 1024 字节。这是整组共用一份的大小，而非每个线程各有一份 1024 字节。
+
+> **[SPEC]** [MI300 / CDNA 3 ISA](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf#page=14)（封面日期 2025-08-05）§2.2.1，原文第 6 页，说明每个 CU 的 64 KiB LDS 及其组内数据交换用途；§2.3 在同页另述片外内存访问。[§3.6.5，原文第 13 页](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf#page=21)规定 LDS 按 Work-group 分配及访问范围。[HIP 7.0.1 语言扩展](https://rocm.docs.amd.com/projects/HIP/en/docs-7.0.1/how-to/hip_cpp_language_extensions.html)说明 `__shared__` 变量与 `__syncthreads()` 的组内同步语义。
 
 #### 4.3.3 把存储需求填入本次 Packet
 
-理解了存储用途，第 4.0 节的计数单位就可以对应到具体对象：
+现在回到第 4.3.1 节的 `sum_products`：每个线程用自己的 `temp[4]` 保存 4 个乘积，再相加写入 C。本次仍有 **1024 个线程、每组 256 个线程，共 `1024 ÷ 256 = 4` 个 Work-group**。
+
+沿用前面的编译结果假设：每份 temp 保存在私有内存中，每线程 private 需求恰好为 16 字节，没有其他 private 需求或额外栈调整。先把这些数组的大小逐层算出来：
 
 ```text
-线程自己需要的私有内存 → private_segment_size：每个线程的一份有多大
-同组线程共用的临时内存 → group_segment_size：每个组的一份有多大
+每个线程：自己的一份 temp[4]
+    4 个 float × 每个 4 字节 = 16 字节
+
+每个 Work-group：256 个线程，各有一份 temp[4]
+    256 × 16 = 4096 字节 = 4 KiB
+
+整个 Grid：4 个 Work-group
+    Group 0：256 份 temp，共 4 KiB
+    Group 1：256 份 temp，共 4 KiB
+    Group 2：256 份 temp，共 4 KiB
+    Group 3：256 份 temp，共 4 KiB
+    合计：4 × 4096 = 16384 字节 = 16 KiB
+          也就是 1024 个线程 × 每线程 16 字节
 ```
 
-第 4.2.2 节的 Descriptor 和 Code Object 元数据提供编译得到的固定需求。CLR 取得 Kernel 资源信息后，结合本次调用填写 Packet：
+**一组的 4 KiB，是 256 份私有数组相加得到的总量。** 它们仍由各线程分别使用，没有变成一份组内共享数组。因此，Packet 的 private 字段取上图第一层的 **16 字节**，不填每组的 4096 或整个 Grid 的 16384。
+
+这个 `sum_products` 没有第 4.3.2 节的 `__shared__ temp[256]`。在编译结果没有其他 group 需求、本次动态共享内存请求也为 0 的条件下，group 请求为 `0 + 0 = 0`。本次 Packet 的相关字段就是：
+
+```text
+sum_products 的 Kernel Dispatch Packet
+├─ grid_size_x          = 1024    总线程数
+├─ workgroup_size_x     = 256     每组线程数
+├─ private_segment_size = 16    每个线程的一份 temp 所需的私有内存
+└─ group_segment_size   = 0     本例没有组内共享内存需求
+```
+
+上面的 16 KiB 是所有线程私有数组大小的逻辑合计；实际 Scratch 分配还要考虑并发执行规模、对齐和设备实现。A/B/C 数组和 Kernarg 另有存储，不计入这里的 private/group 请求。这两个字段保存字节数，也不同于第 2.1 节创建 Queue 时提供的资源提示。
+
+实际填写时，第 4.2.2 节的 Descriptor 和 Code Object 元数据提供编译得到的固定需求，CLR 再结合本次调用处理：
 
 ```text
 固定 private 需求，必要时按 Runtime 栈配置调整 → private_segment_size
 固定 group 需求 + 本次动态共享内存请求        → group_segment_size
+
+本例：private = 16，无额外栈调整 → 填 16
+      group  = 0 + 0           → 填 0
 ```
-
-回到本章原来的 `vector_add`：它没有上面的共享数组。沿用第 4.1.2 节的教学假设，编译结果也不需要额外的线程私有内存、动态共享内存或栈调整，因此本次仍填：
-
-```text
-private_segment_size = 0
-group_segment_size   = 0
-```
-
-A/B/C 数组和 Kernarg 仍有各自的存储。这两个字段只填写 private/group 请求的字节数，不保存它们的地址；也不同于第 2.1 节创建 Queue 时提供的资源提示。
 
 > **[SOURCE]** CLR `81277d69e3352`，[`device/devkernel.cpp`](./2.源码/rocm-clr/rocclr/device/devkernel.cpp) 第 526～530 行读取元数据中的固定 group/private 需求；[`rocm/rocvirtual.cpp`](./2.源码/rocm-clr/rocclr/device/rocm/rocvirtual.cpp) 第 3872～3874、4152～4167 行填写本次 group/private 字段，并在需要时调整 private 栈请求。完整赋值上下文见第 4.5 节的可选源码。
 
 > **[SPEC]** ROCr `ba56a24c6132`，[`inc/hsa.h`](./2.源码/rocr-runtime/runtime/hsa-runtime/inc/hsa.h) 第 3020～3031 行：private 按每个 Work-item 计数，group 按每个 Work-group 计数，group 请求需覆盖 Kernel 及其调用函数和动态分配部分。
 
 <details>
-<summary>可选对照：需求不为 0 时，为什么不能直接填写整个 Grid 的总量</summary>
+<summary>可选对照：第 4.3.2 节的共享数组怎样计算</summary>
 
-下面另设一组资源需求，只用于说明计数单位，不改变本章 `vector_add` 的假设：
+第 4.3.2 节是另一种使用 `__shared__ float temp[256]` 的计算。沿用该节“数组编译后保留、没有其他 group 请求”的条件，也取 4 个 Work-group，其共享存储需求为：
 
 ```text
-每组固定 LDS 4 KiB，本次再请求动态 LDS 2 KiB
-    → Packet.group_segment_size = 6 KiB = 6144 字节
-    → Group 0 的 256 个 Work-item 共享一份 6 KiB
-    → Group 1、2、3 各有自己的一份 6 KiB
+每个 Work-group：整组共用一份 temp[256]
+    256 个 float × 每个 4 字节 = 1024 字节 = 1 KiB
 
-每个 Work-item 需要 32 字节 private
-    → Packet.private_segment_size = 32
-    → 一组的逻辑需求：256 × 32 = 8192 字节 = 8 KiB
-    → 整个 Grid：   1024 × 32 = 32768 字节 = 32 KiB
+整个 Grid：4 组，各有自己的一份共享数组
+    4 × 1024 = 4096 字节 = 4 KiB
+
+该共享数组例子的 Packet.group_segment_size = 1024
 ```
 
-group 字段填每组的 **6144**，不会乘以组内的 256。四组的逻辑需求合计为 24 KiB；若某 CU 此时只驻留两组，这两组需要 12 KiB，其余组可在别处或稍后执行。
-
-这些逻辑总量不直接等于实际分配量。LDS 占用还受硬件分配粒度、寄存器和 Wave 数等限制；Scratch 分配还需考虑最大并发、对齐与设备实现。单个 Work-group 的请求若超过设备能力，需要报告失败，无法仅靠延后执行解决。
+group 字段取**每组的一份 1024 字节**，不再乘以组内的 256 个线程。四组的 4 KiB 是逻辑合计，各组使用所在 CU 分配的 LDS 区域；这不是给上面 `sum_products` 增加了一份共享数组。
 
 </details>
 
-到这里，本次 Packet 的代码、参数、执行范围和存储需求都已确定。下一节设置 Header，说明设备应按什么顺序执行，以及怎样处理输入和输出的可见性。
+第 4.4 节继续使用本节的 `sum_products` Packet，保留 `private_segment_size = 16`、`group_segment_size = 0`，再设置 Header，说明输入、计算和结果交接的执行条件。
 
 ### 4.4 Header 怎样约束类型、执行顺序和可见性
 
-同一个 `vector_add` Packet 还要说明：这是什么任务、是否等待前序工作、怎样接收 A/B 的输入并发布 C 的结果。这些设置写在第 4.1 节的 16 位 `header` 中。
+第 4.3.3 节已经为 `sum_products` 填好了执行规模和 private/group 请求。本节沿用这次调用：每个线程读取 4 对 A/B 元素，将乘积保存在自己的 `temp[4]` 中，再相加写入 C。接下来要确定：**GPU 什么时候可以开始读 A/B，CPU 又什么时候可以读取 C？**
 
-先看各位保存什么。这里的位编号从 Header 最低位开始，与 Packet 的字节偏移分开计数：
+这些执行条件由 Packet 的 Header 配合提交、完成协议表达。第 4.4.2 节先看 CPU 与 `sum_products` 怎样交接数据；第 4.4.3 节再在前面增加 `prepare_A`，看同一 GPU 上两个 Kernel 怎样交接。最后把 `sum_products` 的设置编码成第 4.1.3 节出现的 `0x1502`。
 
-| Header 位 | 字段                           | 含义及常用取值                                                  |
-| --------- | ------------------------------ | --------------------------------------------------------------- |
-| 0～7      | `format`，API 称 Packet type | `INVALID = 1`：尚未交付；`KERNEL_DISPATCH = 2`：Kernel 任务 |
-| 8         | `barrier`                    | 1：等待同一 Queue 的全部前序 Packet 完成；0：不添加这项完成等待 |
-| 9～10     | `acquire_fence_scope`        | 执行前，在哪些参与者范围内接收已发布的数据                      |
-| 11～12    | `release_fence_scope`        | 完成时，在哪些参与者范围内发布本次执行的写入                    |
-| 13～15    | 保留位                         | 填 0                                                            |
+#### 4.4.1 把 Header 放回前面已经填写的 Packet
 
-两个 scope 都用 `0 = NONE`、`1 = AGENT`、`2 = SYSTEM` 编码：NONE 省略这项 fence，需要其他同步补足；AGENT 覆盖对应 Agent；SYSTEM 扩展到系统中的相关参与者。本例涉及 CPU 与 GPU 的数据交换，教学设置取 SYSTEM，实际访问仍需有效映射和匹配的同步操作。
+下面就是第 4.3.3 节的 `sum_products` Packet：1024 个线程、每组 256 个；A/B 各有 4096 个元素，C 有 1024 个元素。沿用每线程 private 需求恰好为 16 字节、group 需求为 0 的编译结果假设。
 
-继续使用第 4.1.3 节的设置：Kernel Dispatch、`barrier = 1`、acquire/release 都为 SYSTEM。这样就能算出前面看到的 `0x1502`：
+代码和参数的引用方式与第 4.2 节相同。这次用 `K_sum` 表示装载 `sum_products` 后取得的执行句柄，用 `K_args` 表示为本次调用准备的 Kernarg 地址：
 
 ```text
+本次 sum_products Packet
+├─ header：占偏移 0～1，这一节继续填写
+│    类型：按 Kernel Dispatch 格式解释后面的字段
+│    barrier：是否等同一 Queue 的前序 Packet 完成
+│    acquire/release scope：输入、输出的同步覆盖谁
+│
+├─ setup                = 1          一维任务
+├─ grid_size_x          = 1024       总共 1024 个 Work-item
+├─ workgroup_size_x     = 256        每组 256 个 Work-item
+├─ kernel_object        = K_sum      引用 sum_products 的执行信息
+├─ kernarg_address      = K_args     指向保存 A/B/C 地址和 N 的参数块
+├─ private_segment_size = 16         每线程自己的 temp[4]，4 × 4 字节
+├─ group_segment_size   = 0          本例没有组内共享内存请求
+└─ completion_signal    = S          指向初值为 1 的完成 Signal
+```
+
+`private_segment_size = 16` 对应每个线程自己的一份 `temp[4]`，不乘以每组或整个 Grid 的线程数。`group_segment_size = 0` 沿用第 4.3.3 节的条件：当前 `sum_products` 没有组内共享数组，也没有其他 group 请求。第 4.3.2 节那份 `__shared__ temp[256]` 属于另一个用途示例。
+
+图按含义分组，字段的真实排列仍以第 4.1 节为准。提交者把执行设置写进 `header`，Packet Processor 读取后，按这些设置推进当前 Packet。
+
+这里也接上了第 4.1 节的发布过程：槽位还在准备时，类型保持 `INVALID`，Packet Processor 不能处理它；提交者准备好内容后，才按发布协议把类型改为 `KERNEL_DISPATCH`，同时交付 Header 的其他设置和 `setup`。具体发布动作见第 5.3 节。
+
+> **[SPEC]** [HSA Platform System Architecture 1.2](https://hsafoundation.com/wp-content/uploads/2021/02/HSA-SysArch-1.2.pdf)（2018-05-02）§2.8.3，原文第 20 页，规定 INVALID Packet 不得被处理，以及前 32 位的原子访问要求；§2.9.1、表 2–4，原文第 25 页，定义类型和 Header 各字段。
+
+#### 4.4.2 沿 A/B 的输入和 C 的输出理解 acquire/release
+
+继续看 `sum_products`。CPU 和 GPU 分别读写哪些数据，前面已经讲过：
+
+```text
+CPU 写 A/B → GPU 读 A/B，计算 → GPU 写 C → CPU 读 C
+```
+
+[02 文档第 3.4 节](<./02_GPU 内存管理基础.md#34-aql-同步releaseacquire-做什么scope-覆盖谁>) 介绍过 scope。这里先回看 **Agent**：可以把它理解为系统中的一个计算参与方。沿用前文的简化示意：
+
+```text
+系统
+├─ CPU Agent：一组 CPU 执行资源
+├─ GPU0 Agent：当前 GPU，内部有多个 CU、多条 Queue
+└─ GPU1 Agent：示例中的另一个 GPU
+```
+
+GPU0 内的相关工作属于同一个 Agent；CPU 与 GPU0 则属于不同 Agent。**scope 决定数据写入的可见范围**，对应到 Header 中有以下取值：
+
+| 数值  | 名称       | 含义                            |
+| ----- | ---------- | ------------------------------- |
+| `0` | `NONE`   | 不执行这道内存屏障              |
+| `1` | `AGENT`  | **同一个 Agent 内可见**   |
+| `2` | `SYSTEM` | **系统中所有 Agent 可见** |
+| `3` | 保留       | 不能使用                        |
+
+这里的“可见”以读取方具有合法访问权限，并完成相应的 release/acquire 同步为前提。选 `0` 时，需要的同步由其他操作保证。
+
+选 scope 时，再看“谁写数据，谁接着读”。比如，两个 Kernel 都在 GPU0 上，已经安排好前一个写数组、后一个读取，就可以用 AGENT 范围覆盖它们。
+
+**本例中，A/B 是 CPU 写、GPU 读，C 是 GPU 写、CPU 读；双方属于不同 Agent，所以选择 SYSTEM，填 2。**
+
+Header 里有两个可以分别设置的 scope 字段，各占 2 位：`acquire_fence_scope` 用在 Kernel 开始执行前，`release_fence_scope` 用在 Kernel 执行结束后。**它们都配置 GPU 这一侧的同步：前一个接收输入，后一个交出结果。** CPU 的 release 和 acquire 由提交、等待协议完成。
+
+下图假设 A/B/C 是双方都能访问的共享数组，已满足所用内存的访问要求。Q0 的前序工作也已完成，`barrier = 1` 的等待条件已满足。
+
+**（1）输入：CPU 写好 A/B，GPU 再读取。**
+
+线程 0 使用 `A[0..3] = [1, 2, 3, 4]` 和 `B[0..3] = [10, 10, 10, 10]`。为了让 GPU 读到这次准备的值，写入方 CPU 和读取方 GPU 要配合完成同步：
+
+```text
+CPU 写好 A/B，并准备 Kernarg、Packet
+    A[0..3] = [1, 2, 3, 4]
+    B[0..3] = [10, 10, 10, 10]
+    其余线程的输入也已准备好
+    ↓
+CPU 执行提交协议中的 release：发布已经写好的内容
+    ↓
+Packet Processor 读到有效 Packet，启动条件已满足
+    读出 acquire_fence_scope = 2，即 SYSTEM
+    在 Kernel 开始执行前，完成这个范围的 acquire 同步
+    ↓
+GPU 线程读取 A/B
+    线程 0 相乘，得到自己的 temp = [10, 20, 30, 40]
+```
+
+输入侧的配合是 **CPU release → GPU acquire**。release 放在 CPU 写好数据之后，acquire 放在 GPU 读取之前；两者按提交协议配合，使 GPU 能读到 CPU 已发布的输入。
+
+CPU 将范围值 2 写入 Header 的 bit 9～10。Packet Processor 读出这个值，才知道要按 SYSTEM 范围处理 acquire。CPU 怎样发布 Packet，见第 5.3 节。
+
+**（2）输出：GPU 写好 C，CPU 确认完成后再读取。**
+
+线程 0 把四个乘积相加，得到 `C[0] = 100`。本次使用独立的完成 Signal，初值为 1。GPU 写结果到 CPU 读结果的过程如下：
+
+```text
+GPU 执行 sum_products
+    线程 0：10 + 20 + 30 + 40 → 写 C[0] = 100
+    本次 1024 个线程都执行结束
+    ↓
+GPU 按 release_fence_scope = 2，即 SYSTEM，执行 release
+    发布包括 C 在内的执行写入
+    ↓
+更新完成 Signal：数值从 1 减为 0
+    ↓
+CPU 用带 acquire 的等待，确认这个 Signal 的数值为 0
+    ↓
+CPU 读取 C[0]，得到本次结果 100
+```
+
+输出侧的配合是 **GPU release → CPU acquire**。GPU 先发布结果，再更新 Signal；CPU 用带 acquire 的等待确认完成后，读取结果。等待接口已经包含 acquire，无需再额外补一次；具体接口见第 7.1 节。
+
+所以，本例 Header 中的两个字段都填 2：输入要从 CPU 给 GPU，输出要从 GPU 给 CPU，都需要 SYSTEM 范围。这次两个 scope 的取值相同；如果输入来自 CPU，输出只交给同一 GPU 上的另一个 Kernel，两个字段就可以选不同的值。下一节用 `prepare_A` 展开这个变化，完整位编码见第 4.4.4 节。
+
+<details>
+<summary>可选核对：范围、访问条件和规范依据</summary>
+
+- 同一个 GPU Agent 可以包含多条 Queue、多个 CU 和 Wave。scope 选择同步范围，任务依赖还需单独满足，下一节用 barrier 继续说明。
+- 第 4.3 节的 `temp[4]` 仍是每线程自己的临时存储，private 请求仍为 16 字节。线程把最终结果写入 C，CPU 读取 C。
+- 上图沿用双方可访问的共享数组。若 C 是设备专用数组，CPU 取得结果还需走适用的复制路径，见第 7.0 节。
+- 上面的 acquire 时机针对 Kernel Dispatch；Barrier Packet 的 acquire 时机见第 7.3 节。
+
+> **[SPEC]** [HSA System Architecture 1.2](https://hsafoundation.com/wp-content/uploads/2021/02/HSA-SysArch-1.2.pdf#page=26)（2018-05-02）§2.9.1.1～2.9.1.2、表 2–5 和表 2–6，原文第 26 页，定义 acquire/release scope 的 0、1、2 编码及保留值 3；§2.9.1.1～2.9.2，原文第 25～27 页，规定 Kernel Dispatch 的 acquire/release 时机及 release 后更新完成 Signal 的顺序。
+>
+> 同一规范 §3.3.6～3.3.8，原文第 52～54 页，说明 scope 的可见范围、作用域之间的包含关系及 Packet Processor 的内存屏障。
+>
+> ROCr `ba56a24c6132` 的 [`inc/hsa.h`](./2.源码/rocr-runtime/runtime/hsa-runtime/inc/hsa.h) 第 2845～2863 行定义有效枚举值，第 2885～2912 行说明 acquire/release 语义，第 2915～2931 行定义两个 scope 字段各占 2 位。
+
+</details>
+
+#### 4.4.3 barrier 等待前序任务完成，fence 交接任务之间的数据
+
+**barrier（屏障）在这里是一个“启动前是否等待”的标志位，保存在 Packet Header 的 bit 8。** CPU 填写 Packet 时把它设为 0 或 1，GPU 的 Packet Processor 处理这份 Packet 时读取它：
+
+```text
+Packet Processor 准备启动当前 Packet
+    ↓
+读取当前 Packet 的 barrier 位
+    ├─ 1：等同一 Queue 中前面的 Packet 全部完成，再启动当前 Packet
+    └─ 0：不增加这项完成等待，仍须满足其他启动条件
+```
+
+所以，`barrier = 1` 可以直接读成：**“排在我前面的任务都完成以后，再开始我这份任务。”** 当当前任务要使用前序任务的结果时，这个标志用来防止当前任务启动得太早。下面用两份 Packet 看它怎样起作用。
+
+先明确后面要执行什么计算：这里继续使用第 4.3.3 节的 `sum_products`。前面的 `vector_add` 是每个线程取一对元素，计算 `C[i] = A[i] + B[i]`；**本节的 `sum_products` 是每个线程取 4 对元素，先对应相乘，再把 4 个乘积相加，写入一个 C 元素。**
+
+```text
+sum_products 中各线程处理的数据：
+
+线程 0：读取 A[0..3] 和 B[0..3] → 4 个乘积 → 相加 → 写入 C[0]
+线程 1：读取 A[4..7] 和 B[4..7] → 4 个乘积 → 相加 → 写入 C[1]
+……
+```
+
+因此，本节 `C[0]` 保存的是线程 0 算出的四个乘积之和，计算式为 `A[0]×B[0] + A[1]×B[1] + A[2]×B[2] + A[3]×B[3]`。
+
+上一节由 CPU 准备原始 A/B。本节在 `sum_products` 之前增加一个 GPU Kernel `prepare_A`：**把 A 的全部 4096 个元素各乘以 10，并写回原来的 A 数组**，也就是对每个元素执行 `A[j] = A[j] * 10`。B 保持不变，后面的 `sum_products` 使用更新后的 A，按上面的规则计算 C。
+
+先看线程 0 使用的四对输入，明确两个 Kernel 分别改了什么：
+
+```text
+CPU 准备原始输入
+    A[0..3] = [1, 2, 3, 4]
+    B[0..3] = [10, 10, 10, 10]
+    ↓
+GPU 执行 prepare_A：A 的每个元素乘以 10，写回 A
+    A[0..3] = [10, 20, 30, 40]
+    B[0..3] = [10, 10, 10, 10]，保持不变
+    ↓
+GPU 执行 sum_products：线程 0 读取更新后的四对输入
+    temp[0] = A[0] × B[0] = 10 × 10 = 100
+    temp[1] = A[1] × B[1] = 20 × 10 = 200
+    temp[2] = A[2] × B[2] = 30 × 10 = 300
+    temp[3] = A[3] × B[3] = 40 × 10 = 400
+    ↓ 将线程 0 自己的四个乘积相加，写入 C[0]
+    C[0] = 100 + 200 + 300 + 400 = 1000
+```
+
+`prepare_A` 修改的是同一个 A 数组中的数值。上一节直接使用原始 A，线程 0 算出 100；本节先把 A 乘以 10，再做相同的乘积求和，所以得到 1000。`sum_products` 必须读到改写后的 A，两个任务由此产生数据依赖。
+
+**把这次计算接回上一节，先看每一份数据由谁写、接着由谁读。** CPU 仍准备原始 A/B，并提交两份 Packet；GPU 上的 `prepare_A` 改写 A，`sum_products` 再使用新 A 和原来的 B。CPU 最后等待 `sum_products` 的完成 Signal，读取 C：
+
+```text
+原始 A：CPU 写 → prepare_A 读              跨 Agent
+更新 A：prepare_A 写 → sum_products 读     同一 GPU Agent
+输入 B：CPU 写 → sum_products 读           跨 Agent
+结果 C：sum_products 写 → CPU 读           跨 Agent
+```
+
+**`prepare_A` 的 acquire 和 release 因此可以选不同的 scope。** 它先接收 CPU 写的原始 A，acquire 选 SYSTEM；改写后的 A 只交给同一个 GPU Agent 上的 `sum_products`，release 选 AGENT 就能覆盖这次交接：
+
+```text
+prepare_A 的 Packet Header
+├─ acquire_fence_scope = SYSTEM（2）  接收 CPU 写的原始 A
+└─ release_fence_scope = AGENT （1）  把新 A 交给同一 GPU 上的 sum_products
+
+sum_products 的 Packet Header
+├─ acquire_fence_scope = SYSTEM（2）  覆盖 GPU 写的新 A，以及 CPU 写的 B
+└─ release_fence_scope = SYSTEM（2）  把结果 C 交给 CPU
+```
+
+这里让 `sum_products` 的 acquire 继续使用 SYSTEM，直接覆盖两种输入。SYSTEM 也包含 AGENT 范围，因此能与 `prepare_A` 的 AGENT release 配合；同步范围匹配并不要求两个字段的数字相同。
+
+把 `prepare_A` 的 release 也设成 SYSTEM 仍然有效，只是比这次 GPU 内交接所需的范围更大。这里选择 AGENT，是因为新 A 的写入方和接着读取它的任务都属于同一个 GPU Agent。
+
+release/acquire 中的写入方和读取方可以是 CPU 与 GPU，也可以是同一 GPU 上的两个任务。上面 Header 配置的 GPU 同步，由 **Packet Processor 在相应任务的启动、完成阶段处理**。因此，“前一份 Packet 的 release”指按该 Packet 配置执行的 GPU 同步动作；Packet 本身保存的是配置。
+
+**先看 barrier 写在哪份 Packet 里。** CPU 按下面的顺序，把两份 Packet 发布到同一个 Q0：
+
+```text
+Q0 中的先后顺序
+
+前一份 Packet：运行 prepare_A
+    将 A 的每个元素乘以 10，例如 A[0..3] 从 [1, 2, 3, 4] 变为 [10, 20, 30, 40]
+    ↓
+当前 Packet：运行 sum_products
+    负责读取 A/B，计算并写入 C
+    Header 的 barrier = 1
+        └─ “等我前面的 Packet 全部完成，才允许我启动”
+```
+
+图中的 `barrier = 1` 设置在 **后面的 sum_products Packet** 中。CPU 可以先把两份 Packet 都发布到 Ring；等待发生在 GPU 的 Packet 处理过程中。
+
+**为什么已经按顺序提交，还需要等待？**
+
+底层 AQL 允许不同 Kernel 的执行重叠。如果后面 Packet 的 `barrier = 0`，又没有其他等待关系，`prepare_A` 还在写 A 时，`sum_products` 就可能开始读取。
+
+例如，`prepare_A` 才把 A[0]、A[1] 更新成 10、20，A[2]、A[3] 还没乘以 10，后面的线程就来读取。这时无法保证它取得完整的新输入 `[10, 20, 30, 40]`。因此，本例需要让 `sum_products` 等待前面的 Packet 完成。
+
+**把 scope 和 barrier 放回执行过程。** 下面沿用上一节双方可访问的共享数组条件，Q0 在 `prepare_A` 之前的工作已经完成，B[0..3] 始终为 [10, 10, 10, 10]：
+
+```text
+CPU 写好原始 A/B，按提交协议 release 发布
+    ↓
+Packet Processor 按 prepare_A 的 Header 执行 acquire
+    SYSTEM：为读取 CPU 写的原始 A 完成同步
+    ↓
+prepare_A 运行
+    把整个 A 的元素各乘以 10，并写回
+    A[0..3] 从 [1, 2, 3, 4] 更新为 [10, 20, 30, 40]
+    ↓
+GPU 的 Packet Processor 按前一份 Header 的 release scope 执行同步
+    AGENT：把 prepare_A 对 A 的更新交给同一 GPU 上的后续任务
+    ↓
+前一份 Packet 完成
+    ↓
+当前 Packet 的 barrier 等待条件满足
+    ↓
+GPU 的 Packet Processor 按当前 Header 的 acquire scope 执行同步
+    SYSTEM：覆盖已更新的 A 和 CPU 准备的 B
+    ↓
+sum_products 运行
+    线程 0 读更新后的 A[0..3] = [10, 20, 30, 40]
+    与 B[0..3] = [10, 10, 10, 10] 对应相乘
+    → temp = [100, 200, 300, 400]
+    → C[0] = 1000
+    ↓ 本次所有线程执行结束
+Packet Processor 按 sum_products 的 Header 执行 SYSTEM release
+    再把它的完成 Signal 从 1 减为 0
+    ↓
+CPU 用带 acquire 的等待确认完成，再读取 C[0] = 1000
+```
+
+沿这张图看，两种设置分别解决一个问题：
+
+- **barrier = 1：先等任务完成。** `prepare_A` 还没完成时，后面的 `sum_products` 不能启动。
+- **GPU 在前一个任务结束后 release，在后一个任务执行前 acquire：让 A 中乘以 10 后的新值对后面的读取可见。** 本例使用 `prepare_A` 的 AGENT release，与 `sum_products` 包含 AGENT 范围的 SYSTEM acquire 配合。
+
+只把 scope 选成 SYSTEM，并没有增加“等前一个任务完成”的条件；它规定的是数据可见的范围。这里用 barrier 安排先后，再用 release/acquire 保证数据可见性。
+
+图中只画了一份前序 Packet。如果 Q0 中还排着更早的 Packet，`barrier = 1` 也要等它们全部完成。即使取 0，各 Packet 的启动仍有队内顺序，但 Kernel 的执行可能重叠，具体阶段见第 6.3 节。
+
+> **[SPEC]** [HSA System Architecture 1.2](https://hsafoundation.com/wp-content/uploads/2021/02/HSA-SysArch-1.2.pdf#page=25)（2018-05-02）§2.9.1～2.9.2，原文第 25～27 页，规定 barrier、acquire/release 及 Packet 启动条件；前序 Packet 结束启动阶段和完成整个 Packet 是两个不同的条件。ROCr `ba56a24c6132` 的 [`inc/hsa.h`](./2.源码/rocr-runtime/runtime/hsa-runtime/inc/hsa.h) 第 2879～2884 行明确 barrier bit 等待同一 Queue 的全部前序 Packet 完成，第 2885～2912 行说明 acquire/release 语义。
+>
+> 同一规范 §2.9.1.1～2.9.1.2，表 2–5、表 2–6，原文第 26 页，分别定义两个 scope 字段，并规定 SYSTEM fence 同时覆盖 agent 和 system 范围；ROCr 同一版本 `inc/hsa.h` 第 2845～2863 行给出对应枚举及范围说明。
+
+<details>
+<summary>可选对照：与组内同步、跨 Queue 依赖的区别</summary>
+
+- 本节的 barrier bit 约束整个 Packet 的启动。第 4.3.2 节的 `__syncthreads()` 则在 Kernel 内部执行，让同一个 Work-group 的线程在指定位置同步。
+- 如果 `prepare_A` 在另一个 Queue，当前 Packet 的 barrier bit 不负责等待它，需要通过 Signal 等机制建立依赖，见第 7.3 节。
+- `barrier = 0` 允许 Kernel 重叠执行，实际能否重叠还取决于其他依赖和硬件资源。本节讲底层 AQL；HIP Stream 的命令顺序由 Runtime 通过相应 Packet 和同步机制保证，见第 6.3 节。
+
+</details>
+
+#### 4.4.4 把本次选择编码成前面见过的 0x1502
+
+这里编码的是后一个 **`sum_products` Packet**：barrier 为 1，acquire 和 release 都选 SYSTEM。`prepare_A` 刚才选择的 AGENT release 属于它自己的 Header，两份 Packet 各自保存设置。
+
+再看这些设置放在 16 位 Header 的哪里。位编号从 Header 的最低位开始；例如 bit 8 是 Header 内的一位，与第 4.1 节的 Packet 字节偏移 8 分开计数。
+
+| Header 位 | 字段                           | 本例填写的值                                        |
+| --------- | ------------------------------ | --------------------------------------------------- |
+| 0～7      | `format`，API 称 Packet type | `KERNEL_DISPATCH = 2`；准备期间用 `INVALID = 1` |
+| 8         | `barrier`                    | `1`，等待同一 Queue 的全部前序 Packet 完成        |
+| 9～10     | `acquire_fence_scope`        | `SYSTEM = 2`，用于输入交接                        |
+| 11～12    | `release_fence_scope`        | `SYSTEM = 2`，用于输出交接                        |
+| 13～15    | 保留位                         | `0`                                               |
+
+左移把每个值放到对应的起始位，按位或 `|` 把互不重叠的字段合并：
+
+```text
+类型       2 << 0   = 0x0002
+barrier    1 << 8   = 0x0100
+acquire    2 << 9   = 0x0400
+release    2 << 11  = 0x1000
+
 header = (2 << 0) | (1 << 8) | (2 << 9) | (2 << 11)
        = 0x1502
 
@@ -4218,32 +4668,165 @@ setup = 0x0001：低 2 位保存维数，本例为一维
 小端平台前 32 位 = header | (setup << 16) = 0x00011502
 ```
 
-Packet 发布后，设备按这些设置执行。下图把 Header 与第 4.2 节的数组、代码和 Signal 连在一起：
+这样就回到了第 4.1.3 节的字节图：前两个字节保存 `header = 0x1502`，后两个字节保存 `setup = 0x0001`，整体仍是 `full_header = 0x00011502`。
 
-```text
-识别 KERNEL_DISPATCH 类型
-    → barrier = 1：等待 Q0 的全部前序 Packet 完成
-    → acquire SYSTEM：为读取已发布的 A/B 和参数提供内存顺序约束
-    → 沿 kernel_object 找到 vector_add，使用 Kernarg 读取 A/B、写入 C
-    → release SYSTEM：发布本次 Kernel 的写入
-    → 更新完成 Signal：本例 S 所引用的对象数值从 1 变为 0
-```
+> **[SPEC]** ROCr `ba56a24c6132`，[`inc/hsa.h`](./2.源码/rocr-runtime/runtime/hsa-runtime/inc/hsa.h) 第 2807～2863、2865～2954 行给出类型值、scope 值、位偏移和宽度；API 的 `SCACQUIRE`、`SCRELEASE` 名称与旧别名指向相同字段位置。
 
-barrier 负责前序工作的完成等待，fence 负责数据可见性所需的内存顺序，两者需要配合。跨 Queue 的依赖还需通过 Signal 等机制表达，不能仅由这个 barrier bit 建立。
+本节的 `sum_products` 与第 4.1 节的 `vector_add` 选择了相同的类型、barrier 和 scope，因此 Header 都是 `0x1502`；运行哪个 Kernel、private 请求多少字节，由各自的其他字段保存。实际 CLR 会根据命令依赖和已有同步调整 Header，下一节继续核对临时 Packet 的构造过程。
 
-> **[SPEC]** HSA System Architecture 1.2 第 2.9.1～2.9.2 节定义 Header 和 Kernel Dispatch 的执行阶段；固定 API 的位偏移与宽度见 ROCr `ba56a24c6132` 的 [`inc/hsa.h`](./2.源码/rocr-runtime/runtime/hsa-runtime/inc/hsa.h) 第 2807～2954 行。API 的 `SCACQUIRE`、`SCRELEASE` 名称与旧别名指向相同字段位置。Barrier Packet 的 acquire 时机另见第 7.3 节。
+到第 5.3 节，CPU 还会用一次原子 release 写把 Header/setup 发布到 Ring。那次操作发生在提交时，交付当前 Packet；本节 `release_fence_scope` 指定的 fence 发生在 Kernel 执行结束后，发布包括 C 在内的执行写入。
 
-上面的数值是本章的教学选择。实际 CLR 会根据命令依赖和已有同步调整 Header，下一节会把这些字段放回具体填写过程。
-
-还要区分两个发生时间：**Header 中的 release scope 在 Kernel 完成阶段使用**，用于发布执行产生的写入；第 5.3 节的 **CPU 原子 release 写 Header**发生在提交时，用于交付完整 Packet。
-
-同 Queue 的等待时序见 [第 7.2 节](#72-barrier-bit-怎样约束同一-queue-的前序工作)，CPU 怎样观察完成并读取 C 见 [第 7.0 节](#70-从-gpu-写结果到-cpu-观察完成)。内存同步基础可回看 [02_GPU 内存管理基础](<./02_GPU 内存管理基础.md>) 第 3 章。
+同 Queue 的等待时序见 [第 7.2 节](#72-barrier-bit-怎样约束同一-queue-的前序工作)，CPU 怎样观察完成并读取 C 见 [第 7.0 节](#70-从-gpu-写结果到-cpu-观察完成)。
 
 ### 4.5 CLR 怎样构造临时 Packet 并交给发布函数
 
-前面已经确定同一个 Packet 的各项内容，现在看 CLR 怎样实际填写。第 4.2 节画的是最终引用关系；CLR 实现中先在 CPU 上构造局部变量 `dispatchPacket`，再通过发布函数写入当前 `gpu_queue_` 的 Ring。
+前面已经说明 Packet 应当填写什么，本节继续看 CLR 怎样把这些字段变成 Ring 中可供设备处理的任务。标题中的“临时 Packet”指 CPU 函数里的局部变量；正文按“准备局部变量 → 复制到已映射的 Ring → 发布并通知”的顺序展开。
 
-下面仍使用前面的 `vector_add`、Kernarg 地址和零 private/group 请求，示意一次普通提交。假设最终 Header 保留 `0x1502`，并使用有效完成句柄 S：
+#### 4.5.1 CLR 是什么，运行在哪里
+
+**CLR 是 Compute Language Runtime（计算语言运行时），这里指 AMD 的计算 Runtime 代码库。** Runtime 是程序运行时替应用管理设备、准备任务和提交任务的软件。本节涉及的 CLR 代码在 CPU 上、应用进程的用户态中执行；GPU 稍后执行的是 `vector_add` 的机器码。
+
+CLR 代码库中，`hipamd` 实现 AMD 平台的 HIP 接口，`opencl` 实现 OpenCL 接口，`rocclr` 提供两者共用的计算 Runtime。本文沿 HIP 路径往下看：应用发出 Kernel 调用，`hipamd` 接收调用，`rocclr` 再准备参数、处理依赖并构造 Packet。
+
+下面省略接口内部的中间函数，只看一次 `vector_add` 调用怎样变成 GPU 可读取的任务：
+
+```text
+CPU 上的应用进程
+    应用：vector_add<<<4, 256, 0, stream>>>(A, B, C, 1024)
+        │ 提供 Kernel、参数和执行规模
+        ▼
+    CLR 中的 hipamd
+        接收 HIP 调用，确定本次使用的 Kernel 和 Stream
+        │ 将任务交给共用的计算 Runtime
+        ▼
+    CLR 中的 rocclr
+        准备 Kernarg、Grid、资源大小和同步设置
+        构造 AQL Packet，写入已建立的 Ring，再通知 Doorbell
+        │
+        ▼
+GPU
+    Packet Processor 读取 Packet，处理启动条件
+        ↓
+    CU 执行 vector_add 的机器码，计算 C[i] = A[i] + B[i]
+```
+
+前面说“Runtime 填写 Packet”，在这条路径中具体就是 CLR 内的 `rocclr` 在做这件事。CLR 与 **ROCr** 也要分开看：ROCr 提供底层 HSA 服务，管理 Agent、HSA Queue、Signal 和内存；`rocclr` 使用这些服务取得的对象，把本次 Kernel 调用变成 Packet。第二章已经建立了 Queue、Ring 和 Doorbell，本节继续使用这条提交通路。
+
+> **[SOURCE]** CLR `81277d69e3352` 的 [`README.md`](./2.源码/rocm-clr/README.md) 第 1～3、21～23 行说明 CLR 的名称及 `hipamd`、`opencl`、`rocclr` 的分工。ROCr `ba56a24c6132` 的 [`what-is-rocr-runtime.rst`](./2.源码/rocr-runtime/runtime/docs/what-is-rocr-runtime.rst) 第 10～29 行说明其 HSA Runtime 定位及 Agent、Signal、Dispatch 和内存接口。
+>
+> CLR 同一版本的 [`rocclr/device/rocm/rocvirtual.cpp`](./2.源码/rocm-clr/rocclr/device/rocm/rocvirtual.cpp) 第 4138～4154 行填写 Kernel Packet，第 1256～1259、1275 行将 Packet 复制到 Ring、发布 Header 并写 Doorbell。后面的可选源码保留调用上下文。
+
+#### 4.5.2 从 CLR 的提交对象到临时 Packet
+
+这里的“临时 Packet”指 **CPU 函数中的局部变量 `dispatchPacket`**。它用来准备任务内容，生命周期随这次函数调用结束；“临时”不表示地址尚未映射，也不是一种特殊的 AQL Packet 格式。
+
+用 C 风格伪代码看，这与普通结构体复制相同。下面省略等待、容量检查和同步细节，函数名只表示动作：
+
+```cpp
+void submit()
+{
+    hsa_kernel_dispatch_packet_t dispatchPacket{};  // CPU 局部变量
+    prepare_fields(&dispatchPacket);              // 填写任务信息
+    ring[slot] = dispatchPacket;                   // 复制到另一处存储
+    publish_header_setup(&ring[slot]);             // 发布 Ring 中的 Packet
+    notify_doorbell();                             // 通知设备
+} // 函数返回后，dispatchPacket 的生命周期结束
+```
+
+**局部变量没有“变成”Ring 槽位，Ring 中保存的是另一个副本。** 局部变量结束生命周期后，Ring 中的副本仍可供设备处理；槽位按第五章的消费进度协议复用。
+
+沿用第 4.2 节 `vector_add` 的示意地址，只展开相关字段，可以看到复制前后的关系：
+
+```text
+CPU 函数中的局部变量 dispatchPacket
+    kernel_object   = 0x7000_0000
+    kernarg_address = 0x6000_0000
+    header = INVALID
+            │
+            │ CPU 将这份 64 字节任务描述复制到可写的 Ring 槽位
+            ▼
+Ring 中的 Packet（另一处存储）
+    kernel_object   = 0x7000_0000
+    kernarg_address = 0x6000_0000
+    header = INVALID，此时尚未发布
+            │ 原子写入最终 Header/setup
+            ▼
+Ring 中的有效 Packet
+    允许设备按 Kernel Dispatch 处理
+            │ CPU 再写 Doorbell
+            ▼
+通知设备；GPU 从 Ring 取包，按字段找到 Descriptor 和参数块
+```
+
+`0x7000_0000` 和 `0x6000_0000` 是**字段中保存的目标地址**，分别指向 Descriptor 和 Kernarg；Packet 自己存放在局部变量或 Ring 槽位的位置。复制 Packet 会复制这两个地址数值，不会把 Descriptor、机器码或参数块一起搬进 Ring。
+
+“局部变量”描述的是对象放在哪里、存在多久；“未发布／有效”描述的是 Ring 中任务的发布状态。让 Ring 中的 Packet 有效的是最后发布 Header/setup，而不是为局部变量补做 GPU 映射。
+
+> **[SOURCE]** CLR `81277d69e3352`，[`rocvirtual.cpp`](./2.源码/rocm-clr/rocclr/device/rocm/rocvirtual.cpp) 第 4138～4154 行在 `submitKernelInternal()` 中创建局部 Packet 并填写字段；第 1256～1259 行定位 Ring 槽位、复制 Packet 并发布 Header/setup，第 1275 行写 Doorbell。完整字段赋值及调用上下文保留在本节末尾的可选阅读中。
+
+#### 4.5.3 Ring 的地址映射在什么时候准备
+
+[02 的 2.0.1 节](<./02_GPU 内存管理基础.md#201-创建-queue为整条-ring-准备一次>)讲的是创建 Queue 时为整条 Ring 准备内存；[02 的 2.0.2 节](<./02_GPU 内存管理基础.md#202-提交-packet反复使用已有槽位>)讲的是提交时反复使用已有槽位。把这两步接到上面的结构体复制，时序如下。这里继续采用 system RAM Ring 的路径：
+
+```text
+创建 Queue 时
+    为整条 Ring 准备内存
+    → 建立 CPU 访问 Ring 的映射
+    → 建立 GPU 访问同一块 Ring 的映射
+    → Ring 已具备两端访问条件，随后可反复使用
+
+本次提交 Kernel 时
+    CPU 构造局部 dispatchPacket，填写本次任务
+    → 将内容复制到已经映射好的 Ring 槽位
+    → 发布 Header/setup，再写 Doorbell
+    → GPU 使用已有映射读取 Ring
+```
+
+局部 `dispatchPacket` 使用普通 CPU 局部变量的存储，通常位于进程栈上。CPU 按自己的页表访问它，必要时由 Linux 处理缺页；本次提交不需要把这个局部变量所在的栈内存映射给 GPU。
+
+对 Ring，[02 的 2.5 节](<./02_GPU 内存管理基础.md#25-cpu-与-gpu-的两条访问通路>)已经说明两条访问通路。下面的 X 表示 Ring 中同一位置的虚拟地址，P 表示它所在的 system RAM 物理页面：
+
+```text
+CPU 写 Ring：
+CPU VA：X → CPU 页表 → CPU PA → Ring 的 RAM 页面 P
+
+GPU 读 Ring：
+GPUVA：X → GPUVM 页表 → DMA 地址／IOVA
+                       → 必要时经 Host IOMMU → 同一个 RAM 页面 P
+```
+
+CPU 和 GPU 分别使用各自的地址翻译通路，最终访问**同一份 Ring 数据**。这里不是先把 X 变成 CPU PA，再把它变成“GPU PA”；GPU 侧的设备地址可能还要经过 IOMMU，不能笼统地把所有中间地址都叫作物理地址。
+
+映射在准备内存时建立，实际读写时再通过 MMU/TLB 使用这些映射。CPU VA 与 GPUVA 使用相同数值，是本文 Ring 的映射安排；不能据此认定任意 CPU 指针都能直接供 GPU 使用。
+
+Packet 引用的其他对象也各有准备时机：`kernel_object` 指向的 Descriptor 和代码在第 4.2.3 节装载时准备；`kernarg_address` 指向的参数区在本次参数准备时分配或复用；A/B/C 则按前文流程准备。它们都要具备所需的 GPU 访问条件。**把地址写进 Packet、复制 Packet 或发布 Header，都不会代替这些对象的映射准备，也不会把字段中的虚拟地址改写成物理地址。**
+
+> **[SOURCE]** ROCr `ba56a24c6132`，[`libhsakmt/src/fmm.c`](./2.源码/rocr-runtime/libhsakmt/src/fmm.c) 第 2083～2086 行在 GTT 分支调用 CPU 映射函数；Linux `248951ddc14d`，[`amdgpu_amdkfd_gpuvm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c) 第 1295～1314 行先准备设备侧 DMA 映射，再更新 GPUVM 页表并记录同步 Fence。完整分配、映射与完成条件见上面链接的 02 文档。
+
+#### 4.5.4 把准备、复制和发布对应到 CLR 函数
+
+这些动作由第 1.1.1 节介绍过的 `VirtualGPU` 用户态 C++ 对象执行。其成员 `gpu_queue_` 保存当前的 `hsa_queue_t*`，提供 Ring 和 Doorbell 的入口。普通提交时，三个成员函数依次承担以下工作：
+
+```text
+submitKernelInternal()
+    创建局部 dispatchPacket，准备字段及待发布的 Header/setup
+        ↓
+dispatchAqlPacket(capturing = false)
+    处理必要的前置等待，调用发布函数
+        ↓
+dispatchGenericAqlPacket()
+    预留编号并处理同步字段，等待槽位可写
+    → 复制 Packet 到 Ring → 发布 Header/setup → 写 Doorbell
+```
+
+这三个函数都由 CPU 执行。到最后一步，任务描述已放入具备 CPU/GPU 访问映射的 Ring，并完成发布与通知；GPU 随后从 Ring 取得这份描述。第五章从预留 Ring 编号开始展开协议细节。
+
+下面保留完整字段流程和源码作为可选阅读；Graph Capture 的另一条分支单独列在后面。
+
+<details>
+<summary>可选源码阅读：普通提交怎样填写临时 Packet</summary>
+
+本节源码示意回到第 4.2 节的 `vector_add`、Kernarg 地址和零 private/group 请求；第 4.4 节的 `sum_products` 使用相同的填写流程，但需传入它自己的执行句柄、参数块和 16 字节 private 请求。下面假设最终 Header 保留 `0x1502`，并使用有效完成句柄 S：
 
 ```text
 submitKernelInternal()：在 CPU 上准备
@@ -4275,11 +4858,6 @@ Q0 的 Ring 中，本次 Packet
 `rest` 是传给发布函数的参数名，保存的就是 setup。发布时将 `header | (rest << 16)` 写入 **Ring 槽位的前 32 位**，所以局部 `dispatchPacket.header` 可以一直保持 `INVALID`。
 
 图中局部对象的 setup 和 Signal 句柄最初为 0，是因为构造时先清零。本例在复制前填入有效句柄 S，再在 Ring 中写入最终 Header/setup；S 所引用的 Signal 初值为 1。这样才得到第 4.2 节展示的最终引用关系。是否给每次调用分配独立 Signal，留到第 7.4 节说明。
-
-下面两处可选阅读用于核对实现。普通提交的字段来源放在前面，Graph Capture 保存任务描述的分支放在后面；第五章继续解释 Ring 槽位、原子发布和 Doorbell 的协议。
-
-<details>
-<summary>可选源码阅读：普通提交怎样填写临时 Packet</summary>
 
 > **[SOURCE]** ROCm CLR `81277d69e3352`，[`rocclr/device/rocm/rocvirtual.cpp`](./2.源码/rocm-clr/rocclr/device/rocm/rocvirtual.cpp)：
 >
@@ -4424,123 +5002,111 @@ Graph Capture（图捕获）在这里先保存任务描述，供后续使用。�
 
 ### 5.0 一次提交包含哪些动作
 
-第二章已为 Q0 分配并映射整块 Ring，创建时所有槽位的 format 都被初始化为 `INVALID`。第 4 章又准备好了本次 Kernel 的代码句柄、参数、执行范围和临时 Packet。本章的 CPU Producer，就是执行提交代码的 CPU 线程；它接下来要把这份描述放进 Q0 的 Ring。
+第 4.5 节已经在 CPU 上准备了 `vector_add` 的临时 Packet：它描述的是 `C[i] = A[i] + B[i]`，共 1024 个 Work-item，每组 256 个，private/group 请求均为 0。本章继续把这份 Packet 放进第二章创建的 Q0 Ring。
 
-提交普通 Packet 会使用已有 Ring 和 Queue。每次都需要取得的是一个逻辑编号及其可写槽位，而不是重新分配 16 KiB Ring 或再次调用 `CREATE_QUEUE`。
+这里的 **Producer（提交者）就是执行 CLR 提交代码的 CPU 线程**。接下来进入的 `VirtualGPU::dispatchGenericAqlPacket()`，正是第 4.5 节最后介绍的发布函数；它通过 `gpu_queue_` 找到 Q0 的 Ring、索引和 Doorbell。
 
-一次提交可以按“这段内存现在归谁操作”来理解：
+先固定主例子的状态：Q0 有 256 个槽位，每槽 64 字节，共 16 KiB；提交前 `read_index = write_index = 37`，slot 37 已可用。CPU 已准备好输入和 Kernarg，本次最终采用 `header = 0x1502`、`setup = 0x0001`，并使用完成句柄 S。前序任务已完成，Header 中 `barrier = 1` 的条件已满足。
 
 ```text
-① Allocate：预留 Packet ID，并等到对应槽位可写
-             Producer 取得填写本次位置的资格
-    ↓
-② Populate：填写任务字段，format 保持 INVALID
-             Packet Processor 还不能处理这份任务描述
-    ↓
-③ Assign：原子发布有效 Header
-             Packet 所有权交给 Packet Processor；Producer 停止改写
-    ↓
-④ Notify：向 Q0 的 Doorbell 通知已提交的 Packet ID
-             让 Packet Processor 得知 Q0 有提交进度
+CPU 线程执行 CLR 提交函数
+    手里已有：第 4.5 节的临时 vector_add Packet
+    │
+    ├─ ① 领取编号：取走 Packet ID 37，write_index 变成 38
+    ├─ ② 等待槽位：确认 slot 37 已可写
+    ├─ ③ 复制字段：把临时 Packet 复制到 slot 37，类型仍为 INVALID
+    ├─ ④ 发布：原子写入 header + setup，slot 37 成为有效 Packet
+    └─ ⑤ 通知：向 Q0 的 Doorbell 提交 Packet ID 37
+        ↓
+GPU 的 Packet Processor 从 Q0 Ring 取得这份任务描述
 ```
 
-> **[SPEC]** HSA System Architecture 1.2 第 2.8.3 节定义 Allocate、Populate、Assign、Notify 和所有权约束，第 2.8.4 节给出不同预留实现。这里把 Allocate 展开为“取得编号”和“等到可写”，是为了说明多 Producer 下的中间状态。
+①②取得本次可写的位置，③准备内容，④把 Packet 交给设备，⑤告知设备提交进度。这些操作都使用已有的 Ring；每次提交只占用其中一个槽位，无需重新申请整块 Ring 或再次调用 `CREATE_QUEUE`。
 
-例如，某个线程原子取得 Packet ID 37 后，`write_index` 已推进到 38；如果它还在准备内容，slot 37 的 Header 仍为 `INVALID`。此时编号 37 已分配，但 Packet 37 尚未发布。等该线程写入有效 Header，Packet Processor 才有权处理任务。
-
-因此，后面分别追踪 `write_index`、slot 的 format 和 Doorbell 通知：它们记录的是预留、发布和通知三个动作。Packet Processor 何时开始处理还受 Queue 驻留、前序 Packet 和资源条件影响。
+> **[SPEC]** [HSA System Architecture 1.2](https://hsafoundation.com/wp-content/uploads/2021/02/HSA-SysArch-1.2.pdf#page=19)（2018-05-02）§2.8.3，原文第 19～21 页，将提交过程分为 Allocate、Populate、Assign、Notify。本图把 Allocate 展开为“领取编号”和“等待槽位”；第 5.1～5.4 节依次说明这些动作。
 
 ### 5.1 Packet ID、物理槽位与容量约束
 
-先解决一个位置问题：线程取得 Packet ID 293 时，怎样在只有 256 个槽位的 Ring 中找到自己的位置，以及怎样确认这个位置可以覆盖。
-
-**Packet ID 是本次使用的逻辑编号，slot 是一段会反复使用的物理存储。** `write_index` 给出下一个待预留的 Packet ID，`read_index` 给出最早尚未释放的 Packet ID。这里的“释放”指允许 Producer 重新使用 Packet 槽位，不表示对应 Kernel 已执行完。
-
-设 Queue 容量为 `size` 个 Packet，每个 Packet 为 64 字节：
+先看 Packet 37 应当写在哪里。**Packet ID 是一次提交的逻辑编号，slot 是 Ring 中存放 Packet 的 64 字节位置。** Q0 的 slot 编号只有 0～255；提交编号则继续增加，让同一个槽位可以在不同时间反复使用。
 
 ```text
-slot = packet_id % size
-     = packet_id & (size - 1)         // size 为 2 的幂
-Packet 的 CPU 地址 = Ring 的 CPU 基址 + slot × 64 字节
+本次 Packet ID = 37
+    │ 对 Ring 容量 256 取余
+    ▼
+slot = 37 % 256 = 37
+    │ 每槽 64 字节
+    ▼
+距 Ring 起点的字节偏移 = 37 × 64 = 2368 = 0x940
+    │ 加上 Q0 的 Ring CPU 基址
+    ▼
+CPU 写入地址 = gpu_queue_->base_address + 0x940 字节
 ```
 
-主案例的 `size = 256`，Packet 37 与 Packet 293 相差一整圈，因此都落在 slot 37：
+图中最后一行按字节计算地址。这里的 `0x940` 是**整个 Ring 内的偏移**；第 4.1 节的 `kernel_object` 偏移 32 则从**本 Packet 的起点**计算。所以 Packet 37 的 `kernel_object` 字段位于 Ring 基址后 `0x940 + 32` 字节处。
+
+一般写法是 `slot = packet_id % size`。HSA Queue 的 `size` 为 2 的幂，也可以写成 `packet_id & (size - 1)`；本例就是 `37 & 255 = 37`。
+
+找到位置之后，还要确认这一轮能否使用它。Q0 的两个索引分别记录：
+
+- `write_index`：下一个待领取的 Packet ID。本次领取 37 后，它变成 38。
+- `read_index`：槽位的释放进度。比它小的 Packet ID 所用槽位都已归还，可以在后续轮次复用；若仍有未释放的位置，它指出其中最早的编号。
+
+取得唯一编号后，Producer 只有满足下面两个条件，才能修改槽位。`format` 指的就是 Header 中的 Packet 类型字段：
 
 ```text
-逻辑编号：     37                    293 = 37 + 256
-               │                     │
-               └───── 不同时间使用 ────┘
-                            ↓
-物理位置： Ring 基址 + 37 × 64 = Ring 基址 + 0x940
-                            └── slot 37 的同一段 64 字节
+容量条件：packet_id < read_index + size
+槽位状态：format == INVALID
+
+本次：37 < 37 + 256，且 slot 37 为 INVALID
+      → slot 37 可以填写
 ```
 
-只算出地址还不能写。对已经唯一预留的 `packet_id`，修改条件是：
+`read_index` 记录的是 **64 字节槽位能否再用**。Packet Processor 可以先取走任务描述、释放槽位，再让 Kernel 继续执行。因此，即使 `read_index` 已越过 37，CPU 要读取 `vector_add` 的结果，仍须等待本次完成 Signal。第 6.5 节和第 7.0 节会继续区分槽位与任务资源的生命周期。
+
+> **[SPEC]** HSA System Architecture 1.2 §2.8、§2.8.3，原文第 18～21 页，定义索引、槽位地址和上述修改条件。Packet Processor 必须先使旧槽位的 `INVALID` 可见，再让 `read_index` 越过该 Packet。
+
+<details>
+<summary>可选例子：Packet 293 怎样复用 slot 37</summary>
+
+Packet 293 比 Packet 37 多一整圈，两者会使用同一段内存：
 
 ```text
-packet_id < read_index + size         // 这个编号已进入可用的容量范围
-并且目标槽位 format == INVALID       // 该槽位当前未交给 Packet Processor
+Packet 37  ── 37  % 256 = 37 ──┐
+                               ├─ slot 37：Ring 基址 + 0x940
+Packet 293 ── 293 % 256 = 37 ──┘
 ```
 
-> **[SPEC]** HSA System Architecture 1.2 第 2.8.3 节规定上述条件。Packet Processor 必须先把旧槽位的 format 设为 `INVALID` 并使其可见，再使 `read_index` 越过旧 Packet。索引和槽位含义也见第 2.8 节的 Queue 定义。
+假设线程已取得编号 293。按规范的容量条件，`read_index = 37` 时，`293 < 37 + 256` 不成立，必须等待；`read_index = 38` 时条件成立，说明旧 Packet 37 的槽位已归还。这里算的是规范允许的范围；第 5.2 节会说明固定 CLR 实现还多留了一槽余量，因此这个边界例子在 CLR 中要等到 `read_index = 39`。
 
-对 Packet 293，slot 37 上一轮放的是 Packet 37。`read_index = 37` 时，`293 < 37 + 256` 不成立，表示旧 Packet 37 仍未越过释放边界；当 `read_index = 38` 时，`293 < 38 + 256` 成立，Packet 37 已释放。配合 `INVALID` 状态，Producer 才能开始写 Packet 293。
+下一圈追上尚未释放的旧位置时，Producer 必须等待。这里持续增加的是 Packet ID，按容量回绕的是 slot；本章按 64 位逻辑编号未发生数值溢出来说明。槽位释放后的资源要求见[第 6.5 节](#65-槽位释放后哪些资源仍须保留)，完成判断见[第 7.0 节](#70-从-gpu-写结果到-cpu-观察完成)。
 
-把 Ring 单独缩小为 **4 槽教学例子**，可以直接看到满队列时发生什么：
-
-```text
-初始：size = 4，read_index = 0，write_index = 4
-
-物理槽位       slot 0     slot 1     slot 2     slot 3
-上一轮使用者   Packet 0   Packet 1   Packet 2   Packet 3
-释放状态       尚未释放   尚未释放   尚未释放   尚未释放
-
-新 Producer 原子预留 Packet ID 4：write_index 从 4 变成 5
-  目标是 slot 0
-  4 < 0 + 4 为假 → 等待，不能覆盖 Packet 0
-
-Packet Processor 释放 Packet 0：
-  先使 slot 0 的 INVALID 可见，再把 read_index 改为 1
-  4 < 1 + 4 为真 → Packet 4 可以开始填写 slot 0
-```
-
-为什么还要保留容量条件？假如同样是 `read_index = 0、write_index = 4`，只是 Packet 0～3 的 Producer 都已预留、尚未发布，四个物理槽位会全部显示 `INVALID`。Packet 4 如果只查 `INVALID` 就写 slot 0，会与正在准备 Packet 0 的线程争用同一段内存。format 没有记录“这是第几圈”，容量边界负责排除这种重复使用。
-
-下面这些观察值分别适合回答不同问题：
-
-| 观察值                        | 能说明什么                                           | 不能据此推断什么                       |
-| ----------------------------- | ---------------------------------------------------- | -------------------------------------- |
-| `write_index`               | 下一个可预留的逻辑编号                               | 之前的所有编号是否已发布               |
-| `read_index`                | 比它小的编号所用槽位已释放                           | 这些编号对应的 Kernel 是否完成         |
-| `write_index - read_index`  | 已预留、尚未越过释放边界的位置数，含正在等槽位的预留 | 已发布 Packet 数或正在执行的 Kernel 数 |
-| 某个槽位 Header 有效          | 该次 Packet 已交给 Packet Processor                  | 该任务是否已完成                       |
-| `write_index == read_index` | 当前无尚未释放的逻辑位置                             | 设备是否已执行完此前取出的所有任务     |
-
-在上述 atomic-add 例子里，等待期间差值为 `5 - 0 = 5`，物理容量仍只有 4。逻辑预留允许排在容量范围之外；越界编号必须等待，不能写入对应地址。
-
-本文按 HSA 的逻辑模型使用持续增加的 64 位索引，不把索引本身按 Ring 容量回绕；回绕的是 slot。公式按本次 Queue 生命周期不发生 64 位数值溢出来理解，不能把 `read_index + size` 在固定宽度整数中的溢出结果当成正常容量判断。第 5.6 节的教学伪代码会明确保留这一前提。Kernel 完成依据见[第 6.5 节](#65-槽位释放后哪些资源仍须保留)和[第 7.0 节](#70-从-gpu-写结果到-cpu-观察完成)。
+</details>
 
 ### 5.2 Producer 怎样预留编号并等待槽位
 
-容量规则已经明确，接下来需要让多个 CPU 线程各拿到不同的 Packet ID。若两个线程都把普通读取到的 `write_index = 40` 当成自己的编号，它们就会同时填写 slot 40。MULTI Queue 因此要求用原子读—改—写来分配编号。
+现在回到 Packet 37。CLR 用 **atomic-add（原子加法）** 领取编号：把 Q0 的 `write_index` 加 1，并把增加前的旧值返回给当前 CPU 线程。
 
-| Queue 类型                | 谁可以提交    | 索引更新要求                                            |
-| ------------------------- | ------------- | ------------------------------------------------------- |
-| `HSA_QUEUE_TYPE_SINGLE` | 唯一 Producer | 可以用原子 store 推进；仍须遵守容量、连续发布和通知顺序 |
-| `HSA_QUEUE_TYPE_MULTI`  | 多个 Producer | 用原子读—改—写保证编号唯一；各自等待槽位并正确发布    |
+```text
+Q0：write_index = 37
+    │ CPU 线程调用 Runtime 的原子加法接口，加 1
+    ├─ Q0 保存的新 write_index = 38，供下一次领取
+    └─ 当前线程取得返回值 index = 37，作为自己的 Packet ID
+        ↓
+CPU 读取 Q0 的 read_index，检查自己的槽位能否使用
+    本例 read_index = 37，槽位已可写 → 继续复制 Packet
+    若容量条件尚未满足                  → 等待释放进度，再检查
+```
 
-> **[SPEC]** ROCr `ba56a24c6132`，[`runtime/hsa-runtime/inc/hsa.h`](./2.源码/rocr-runtime/runtime/hsa-runtime/inc/hsa.h) 第 2250～2265 行定义两种 Queue 类型。HSA System Architecture 1.2 第 2.8.4 节说明单 Producer 可用原子 store、多 Producer 需要原子读—改—写。
+原子操作把“取旧值”和“加 1”作为一次不可分割的更新。如果另一个 CPU 线程也来领取，它会取得下一个编号 38。若只是各自普通读取 `write_index`，两个线程就可能都读到 37，并误以为 slot 37 归自己使用。
 
-预留并非只有一种顺序。下面比较两种实现，区别在于“满队列时是否已经领走编号”：
+领取完成时，**线程只取得了编号，Ring 中还没有本次有效 Packet**。即使 `write_index` 已变成 38，Packet Processor 仍须等 slot 37 的类型从 `INVALID` 变为有效类型，才能处理这次提交。
 
-| 方案       | 如何取得编号                                                        | 满队列或竞争时怎样处理                                   |
-| ---------- | ------------------------------------------------------------------- | -------------------------------------------------------- |
-| atomic-add | 原子增加`write_index`，返回旧值作为 Packet ID，再等待该编号的槽位 | 满时已经持有编号，需要继续处理这次预留                   |
-| CAS        | 先观察`write_index` 和容量，再尝试把观察到的值原子改成下一值      | 别人先改了索引则重新检查并重试；满时可在领号前等待或退出 |
+固定 CLR 实现还留出一槽余量：256 槽 Queue 要求 `index - read_index < 255` 才开始填写。主例子中差值为 `37 - 37 = 0`，可以直接继续；只有接近队列满的边界时，才需要区分规范容量与 CLR 的这个更保守条件。
 
-CAS 是 Compare-And-Swap，即“比较并交换”。例如两个线程都观察到 40，只有一个能成功把 40 改成 41；另一个发现实际值已变，会重新读索引与容量。CAS 成功后也已经承担提交该编号的责任，不能随意放弃。
+> **[SOURCE]** ROCm CLR `81277d69e3352`，[`rocclr/device/rocm/rocvirtual.cpp`](./2.源码/rocm-clr/rocclr/device/rocm/rocvirtual.cpp) 第 1185～1194 行预留编号，第 1239～1242 行等待容量。下面的可选源码保留两处之间的同步字段准备顺序。
 
-> **[SPEC]** HSA System Architecture 1.2 第 2.8.4 节列出上述方案。共同要求是唯一预留、容量保护与正确发布；“先预留，再等待”是本文接下来介绍的 atomic-add 路径的顺序。
+<details>
+<summary>可选源码阅读：CLR 的领取、等待与一槽余量</summary>
 
 当前 CLR 的 `dispatchGenericAqlPacket()` 采用 atomic-add。函数先取得容量，并把返回的旧索引保存为 `index`：
 
@@ -4587,27 +5153,115 @@ CLR 因而留出一槽余量；Ring 的真实容量仍是 256，区别只是这�
 
 **[INFERENCE]** 在 Queue 协议正常成立、编号唯一且没有越界写入的前提下，CLR 的容量等待结合上述释放顺序，能够确认旧内容已释放，因此无需再加一条显式 format 读取。第 5.1 节的容量与 `INVALID` 两项条件仍同时成立；省略额外读取不代表允许覆盖有效 Packet。
 
-第 1.1.1 节中的 VirtualGPU A、C 即使复用同一个 `hsa_queue_t Q0`，也从该 Queue 的原子索引领取不同编号。原子操作只解决底层 Ring 的冲突，高层 Stream 顺序和 Event 依赖仍由 Runtime 另行维持。
+</details>
+
+<details>
+<summary>可选比较：SINGLE、MULTI 与另一种 CAS 预留方式</summary>
+
+| Queue 类型                | 谁可以提交    | 索引更新要求                                            |
+| ------------------------- | ------------- | ------------------------------------------------------- |
+| `HSA_QUEUE_TYPE_SINGLE` | 唯一 Producer | 可以用原子 store 推进；仍须遵守容量、连续发布和通知顺序 |
+| `HSA_QUEUE_TYPE_MULTI`  | 多个 Producer | 用原子读—改—写保证编号唯一；各自等待槽位并正确发布    |
+
+> **[SPEC]** ROCr `ba56a24c6132`，[`runtime/hsa-runtime/inc/hsa.h`](./2.源码/rocr-runtime/runtime/hsa-runtime/inc/hsa.h) 第 2250～2265 行定义两种 Queue 类型。HSA System Architecture 1.2 第 2.8.4 节说明单 Producer 可用原子 store、多 Producer 需要原子读—改—写。
+
+预留并非只有一种顺序。下面比较两种实现，区别在于“满队列时是否已经领走编号”：
+
+| 方案       | 如何取得编号                                                        | 满队列或竞争时怎样处理                                   |
+| ---------- | ------------------------------------------------------------------- | -------------------------------------------------------- |
+| atomic-add | 原子增加`write_index`，返回旧值作为 Packet ID，再等待该编号的槽位 | 满时已经持有编号，需要继续处理这次预留                   |
+| CAS        | 先观察`write_index` 和容量，再尝试把观察到的值原子改成下一值      | 别人先改了索引则重新检查并重试；满时可在领号前等待或退出 |
+
+CAS 是 Compare-And-Swap，即“比较并交换”。例如两个线程都观察到 40，只有一个能成功把 40 改成 41；另一个发现实际值已变，会重新读索引与容量。CAS 成功后也已经承担提交该编号的责任，不能随意放弃。
+
+> **[SPEC]** HSA System Architecture 1.2 第 2.8.4 节列出上述方案。共同要求是唯一预留、容量保护与正确发布；“先预留，再等待”是本章采用的 atomic-add 路径的顺序。
+
+第 1.1.1 节中的 VirtualGPU A、C 即使复用同一个 `hsa_queue_t Q0`，也从该 Queue 的原子索引领取不同编号。原子操作解决底层槽位分配的冲突；高层 Stream 顺序和 Event 依赖仍由 Runtime 维持。
 
 > **[SOURCE]** ROCm CLR `81277d69e3352`，[`rocclr/device/rocm/rocdevice.cpp`](./2.源码/rocm-clr/rocclr/device/rocm/rocdevice.cpp) 第 3135～3174 行。Queue 池达到上限时可复用现有 Queue，普通底层 Queue 使用 `HSA_QUEUE_TYPE_MULTI` 创建。
 
+</details>
+
 ### 5.3 填写 Packet，并用 32 位原子写发布 Header
 
-Producer 已预留唯一编号，并确认对应槽位满足容量和 `INVALID` 条件。此时它可以写入本次任务描述；发布前，槽位的 format 必须保持 `INVALID`，让 Packet Processor 知道内容还没有交付。
+线程已取得 Packet ID 37，也确认 slot 37 可以写。接下来要把第 4.5 节的 **CPU 临时对象**复制到 **Ring 槽位**，再把这个槽位交给 Packet Processor。
 
-问题不只在于最终字段是否正确，还在于硬件可能与 CPU 同时观察这段内存。若 CPU 先写有效类型，随后才写 `kernarg_address`，Packet Processor 就可能用旧地址启动新 Kernel。
+#### 5.3.1 先复制内容，再让 Packet 生效
+
+临时 Packet 的 `header` 仍为 `INVALID`，`setup` 仍为 0；最终值由函数参数 `header = 0x1502`、`rest = 0x0001` 单独传入。沿用第 4.5 节的条件，CLR 在复制前已填入完成句柄 S，且本次最终 Header 保留 `0x1502`：
 
 ```text
-CPU Producer                       Packet Processor 对槽位的解释
-准备输入与 Kernarg
-写入 Packet body                   format 仍为 INVALID：不能处理
-用 32 位原子 release 发布 Header ──→ 可处理完整 Packet
-停止修改该槽位                     可以读取，并在适当时机释放槽位
+CPU 上的临时 Packet                  Q0 Ring：slot 37
+                                     起点 = Ring CPU 基址 + 0x940
+header = INVALID，setup = 0
+kernel_object   = 0x7000_0000
+kernarg_address = 0x6000_0000
+Grid = 1024/1/1，Work-group = 256/1/1
+private = 0，group = 0
+completion_signal = S
+            │
+            └──── ① 复制到槽位 ────→ 相同的任务字段已写入
+                                     类型仍为 INVALID，设备不能处理
+
+单独传入的最终值
+header = 0x1502，rest = 0x0001
+            │
+            └──── ② 32 位原子 release 写入槽位前 4 字节
+                                     full_header = 0x00011502
+                                     类型变为 KERNEL_DISPATCH
+                                     → Packet 37 已发布，设备可以处理
 ```
 
-这里的 32 位包含第 4.1 节的 `header + setup`。原子性保证这个组合以一个完整值被观察；release 发布则保证必要的先前写入按要求排在有效 Header 之前。若输入由另一 CPU 线程准备，提交线程还要先通过相应同步取得那些写入，不能仅靠自己最后的一条 release 补齐线程间缺失的同步。
+图中复制的是 64 字节任务描述。A/B/C 数组和 Kernarg 参数块仍在第 4.2 节所画的各自内存中，Packet 通过句柄和地址引用它们。
 
-> **[SPEC]** HSA System Architecture 1.2 第 2.8.3 节要求 Packet 前 32 位使用 32 位原子事务访问；其他 Packet 内容须在有效 format 发布前或同时达到所需可见性。Assign 完成所有权转移，此后提交者不能依赖该槽位内容保持不变。
+为什么有效 Header 必须最后写？假如先让类型变成 `KERNEL_DISPATCH`，再填写 `kernarg_address`，Packet Processor 可能在中途读到“新类型、旧参数地址”，据此处理一份尚未准备好的任务。
+
+第 4.1 节说过，`header + setup` 占同一块 4 字节区域。本次最终写入值为：
+
+```text
+高 16 位：setup  = 0x0001
+低 16 位：header = 0x1502
+合起来：full_header = 0x00011502
+```
+
+**原子性**保证设备一次看到完整的 Header/setup；**release 顺序**保证先前需要发布的写入排在有效 Header 之前。两者分别处理“这 4 字节会不会读到一半”和“其余内容是否已经准备好”。发布完成后，槽位交给 Packet Processor，CPU 就停止修改；Doorbell 尚未通知也不能继续补字段。
+
+> **[SPEC]** HSA System Architecture 1.2 §2.8.3，原文第 19～21 页，要求 Ring Packet 前 32 位使用 32 位原子事务访问，其余 Packet 内容须在有效 format 发布前或同时达到全局可见；发布时 Packet 所有权转移给 Packet Processor。
+
+#### 5.3.2 CPU 的 release 发布怎样配合 GPU 的 acquire
+
+第 4.4.2 节把输入交接写成“CPU release → GPU acquire”。现在可以把 CPU 那一步展开了：**CPU 写好输入、Kernarg 和 Packet，再以 release 顺序发布有效 Header；GPU 随后按 Header 的配置，在执行 Kernel 前完成 acquire。**
+
+下面仍假设 A/B/C 是双方可访问、满足所用内存要求的共享数组，输入由这个提交线程准备。为了看清本章的 `vector_add`，只取线程 0 的 `A[0] = 1`、`B[0] = 10`；其余输入也已准备好：
+
+```text
+CPU 写 A[0] = 1、B[0] = 10，准备 Kernarg 和 Ring Packet
+    ↓
+CPU 以 release 顺序原子写 full_header = 0x00011502
+    发布本次准备好的内容
+    ↓
+Packet Processor 观察到有效 Packet，且启动条件满足
+    按 acquire_fence_scope = SYSTEM（2）完成 GPU 侧 acquire
+    ↓
+GPU 执行 vector_add：读 A[0]、B[0]，写 C[0] = 1 + 10 = 11
+    ↓
+全部 Work-item 执行结束后
+    按 release_fence_scope = SYSTEM（2）完成 GPU 侧 release
+    再把 S 所指 Signal 从 1 减为 0
+    ↓
+CPU 用带 acquire 的等待确认完成，再读到 C[0] = 11
+```
+
+这里有两个发生在不同阶段的 release：CPU 发布输入时执行一次；GPU 写完输出后，根据 `release_fence_scope` 再执行一次。**CPU 的 release 是提交代码的内存操作，Header 中的 scope 值是交给 GPU 的同步配置。** 只是把数字 2 填进 Header，还没有执行 GPU 的 fence。
+
+输入和输出都在 CPU 与 GPU 之间传递，所以沿用第 4.4.2 节的 SYSTEM 范围。本例计算的是单个 `A[i] + B[i]`；第 4.4 节的 `sum_products` 则由每个线程累加四个乘积，两者提交协议相同，Kernel 算法不同。
+
+若输入由另一个 CPU 线程准备，提交线程要先通过相应同步取得那些写入，再发布 Packet。第 5.2 节领取索引时的 release 也不能代替本节发布，因为 Ring 内容是在领取编号之后才写入的。CPU 端所需的内存与平台顺序仍由 Runtime 及对应内存使用约定保证。
+
+> **[SPEC]** HSA System Architecture 1.2 §2.9.1.1～2.9.2、§3.3.8，原文第 25～27、54 页，规定 Kernel Dispatch 的 acquire、release 与完成 Signal 时机。输入和输出的同步关系见第 4.4.2 节；CPU 的完成等待在第 7 章展开。
+
+<details>
+<summary>可选源码阅读：复制临时 Packet 与发布前 32 位</summary>
 
 CLR 用下面的 helper 发布有效值。`rest` 是“Header 后面的 16 位”，在 Kernel Dispatch 路径中对应 `setup`：
 
@@ -4624,7 +5278,7 @@ CLR 用下面的 helper 发布有效值。`rest` 是“Header 后面的 16 位�
 1081: }
 ```
 
-第 1075～1077 行在 Windows 上使用 `std::atomic_ref`，第 1078～1079 行在另一分支中使用 `__atomic_store_n`。`rest << 16` 把 setup 放到高 16 位，低 16 位放 Header；以第 4.4 节的教学值为例，这次整体写入为 `0x00011502`。
+第 1075～1077 行在 Windows 上使用 `std::atomic_ref`，第 1078～1079 行在另一分支中使用 `__atomic_store_n`。`rest << 16` 把 setup 放到高 16 位，低 16 位放 Header；沿用第 4.5 节的最终 Header/setup，这次整体写入为 `0x00011502`。
 
 调用该 helper 的位置在 `dispatchGenericAqlPacket()` 中。第 1239～1242 行的容量等待之后，第 1243～1253 行为阻塞模式处理必要的完成 Signal，再复制临时 Packet：
 
@@ -4644,28 +5298,57 @@ CLR 用下面的 helper 发布有效值。`rest` 是“Header 后面的 16 位�
 
 第 1258～1260 行在 `header != 0` 时调用发布 helper。普通 Kernel Dispatch 传入的是非零有效 Header，因此会执行该分支。这里保留判断，是因为泛型函数的所有调用不能一律当成普通 Kernel Dispatch；本节证明的是当前这条普通路径。
 
-还要避免混淆两种 release。这里的 CPU 原子 release 把任务描述交给 Packet Processor；Packet 内的 `release_fence_scope` 要等 Kernel 执行后才用于发布执行期间的写入。第 1193 行预留索引使用的 release 同样不能代替最终 Header 发布，因为 Packet body 是在预留之后才写入的。
-
-有效 Header 发布完成后，输入、Kernarg 和 Packet 内容都必须已满足准备条件。Producer 接下来通知 Doorbell；即使通知尚未发生，也不能继续改写已发布的 Packet。
+</details>
 
 ### 5.4 Doorbell 通知哪条 Queue、哪次提交进度
 
-Packet 已经保存在 Ring 中，Producer 现在通过 Q0 的 `doorbell_signal` 通知提交进度。Doorbell 只传递通知：**写哪个 Doorbell 确定 Queue，交给 Runtime 的 Packet ID 表示本次通知了哪份已发布工作。** Packet body、Kernel 代码和数组仍留在各自的内存中。
+Packet 37 已经发布到 **Q0 Ring 的 slot 37**。CPU 接下来通过 `gpu_queue_->doorbell_signal` 调用 Runtime 的通知接口，传入 **37**。这个值是本次 Packet ID；此时 `write_index` 已是 38，表示下一次待领取的编号。
 
-沿用第 2.7 节进程 A 在 GPU0 上的 Q0。Q0 的 Doorbell 地址已在创建阶段取得；同一条 Queue 发布不同 Packet 时，会反复使用该 Doorbell：
+这里的“通知”具体会做什么？**在本章直接写硬件 Doorbell 的路径中，CPU 最终向 Q0 的 Doorbell 映射地址写入数值 `37`，完成一次 MMIO 写。**
+
+第二章已经为 Q0 建好了 Doorbell 映射。`doorbell_signal` 保存的是 Signal 句柄，ROCr 根据句柄找到内部记录的硬件 Doorbell 地址。下面用 D 表示这个 CPU 可写的映射地址：
 
 ```text
-Packet 40：写 Q0 Ring 的 slot 40，发布后通知 Q0 Doorbell，接口值为 40
-Packet 41：写 Q0 Ring 的 slot 41，发布后通知同一 Doorbell，接口值为 41
-
-Queue 选择靠 Doorbell 地址
-本次提交进度靠通知值
-任务内容由 Packet Processor 从 Q0 Ring 读取
+CPU 调用 Runtime：通知 Q0 的 doorbell_signal，值为 37
+    ↓
+ROCr 根据句柄找到 Q0 的 Doorbell 地址 D
+    ↓
+CPU 向地址 D 写入 64 位数值 37（MMIO 写）
+    ↓
+硬件收到 Q0 的提交进度通知
+    ↓
+Packet Processor 使用 Q0 的 Queue 上下文访问 Ring
+    从 Q0 Ring 的 slot 37 取得已发布的 Packet
+    再根据 Packet 中的句柄、地址找到代码和参数
 ```
 
-“通知到 Packet 41”也不表示硬件只处理 slot 41。若设备当前要处理的是 Packet 40，且尚未提前取出这些 Packet，它仍要先检查 40 是否已经发布，再按队列顺序推进到 41。Queue 上下文提供 Ring 基址、容量、地址空间和内部进度；Packet Header 提供有效性。第 5.5 节会说明通知 41 时，40 仍为 `INVALID` 的情况。
+这次提交写了两个不同的位置：
 
-`read_index` 用于告诉 Producer 哪些槽位已经释放。Packet Processor 可以提前取出并释放槽位，因此不能把任意时刻的 `read_index` 一概当成“正在运行的 Kernel 编号”或“下一次才开始读取的 Packet 编号”。这些进度的区别在第 6 章继续展开。
+- **Q0 Ring 的 slot 37**：地址为 Ring CPU 基址加 `0x940` 字节，保存完整的 **64 字节 Packet**。
+- **Q0 的 Doorbell 地址 D**：接收 **8 字节的通知值 37**。写入哪个 Doorbell 地址确定 Queue，写入的 Packet ID 表示提交进度。
+
+同一条 Q0 后续仍使用地址 D。比如以后 Packet 293 复用 Ring 的 slot 37，待槽位可写并发布后，CPU 向 D 写入的通知值就是 **293**。Ring 槽号按容量回绕，Doorbell 通知使用逻辑 Packet ID。
+
+上图说明的是当前固定 ROCr 的直接硬件写入路径。实际提交仍调用 Runtime 的 Doorbell Signal 接口，由 Runtime 完成相应的内存顺序和 MMIO 操作。
+
+Header 与 Doorbell 在时间上的关系如下：
+
+```text
+准备好输入、Kernarg 和 Packet body
+    ↓
+发布有效 Header ── 从这里开始，Packet Processor 就可以处理 Packet
+    ↓
+通知 Doorbell ──── 按协议告知设备已有提交进度
+```
+
+设备可以在 Doorbell 写入前发现有效 Packet，但规范不要求它在尚未通知时就处理。因此 CPU 必须先把内容准备完整，再发布 Header，随后按协议通知。Doorbell 不是等待 CPU 补完字段的最后一道开关，也不能用来判断 Kernel 是否完成。
+
+> **[SPEC]** HSA System Architecture 1.2 §2.8.3，原文第 19～21 页，允许在有效 format 发布后、Doorbell 通知前处理 Packet；Producer 仍须通知已经发布的工作。连续提交多份 Packet 时可以合并通知，接口值采用本次通知覆盖的最后一个 Packet ID。
+
+如果通知的是后面的 Packet 41，而前面 40 尚未发布，Packet Processor 仍须遵守 Queue 的启动顺序。下一节单独用两个 Producer 说明这种交错。
+
+<details>
+<summary>可选源码阅读：把 Packet ID 交给 Doorbell Signal 接口</summary>
 
 > **[SOURCE]** ROCm CLR `81277d69e3352`，[`rocclr/device/rocm/rocvirtual.cpp`](./2.源码/rocm-clr/rocclr/device/rocm/rocvirtual.cpp) 第 1254～1276 行。第 1256～1260 行用 `index & queueMask` 定位、填写并发布槽位，随后第 1275 行把同一个逻辑 `index` 交给 Q0 的 Doorbell Signal 接口。下面保留发布之后的通知代码。
 
@@ -4680,25 +5363,23 @@ Queue 选择靠 Doorbell 地址
 
 英文注释说，Windows 的某条优化曾因跳过 Doorbell 而无法唤醒 PM4 模拟线程。第 1273 行的条件现已被注释，紧接着的块会直接执行；第 1275 行调用 Runtime 接口通知当前 Packet ID。
 
-Doorbell 的作用还需要和 Header 的作用分开：发布有效 Header 后，Packet Processor **可以在 Doorbell 写入之前**开始处理。通知有助于设备发现新工作，但不能作为“等 CPU 完全准备好才开工”的最后开关。
+这里的 `index` 就是领取编号时返回的值，主例子中为 37。ROCr 随后根据 Signal 句柄找到对象，调用它的 `StoreRelease()`；在直接写硬件的分支中，将传入的值按 64 位写到 `hardware_doorbell_ptr` 指向的地址。
 
-```text
-必须先完成：输入、Kernarg、Packet body 的准备与可见性处理
-    ↓
-发布有效 Header ─── 从这里开始，设备就可能处理 Packet
-    ↓
-通知 Doorbell ───── 按协议告知设备已有提交进度
-```
+> **[SOURCE]** ROCr `ba56a24c6132`，从句柄到 MMIO 写入的源码索引：
+>
+> - [`runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp) 第 278～279 行，在创建 Queue 后保存驱动返回的 Doorbell 地址；
+> - [`runtime/hsa-runtime/core/runtime/hsa.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/hsa.cpp) 第 1230～1234 行，`hsa_signal_store_screlease()` 将句柄转换为 Signal 对象，再调用 `StoreRelease(value)`；
+> - [`amd_aql_queue.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp) 第 468～483 行，`StoreRelease()` 先执行 release fence，再进入 `StoreRelaxed()`。当 `enable_dtif()` 为 false 时，执行 `_mm_sfence()`，随后将 `uint64_t(value)` 写入 `hardware_doorbell_ptr`；另一分支通过驱动接口通知，本节不展开。
 
-> **[SPEC]** HSA System Architecture 1.2 第 2.8.3 节允许在有效 format 发布后、Doorbell 通知前处理 Packet；未通知时，规范不要求 Packet Processor 已经发现并处理这份工作。因此 Producer 仍须通知，且不能通知自己尚未发布的 Packet。连续准备多份 Packet 时可以合并通知，通知值使用本次覆盖的最后一个已发布 Packet ID。
+普通内存写与 Doorbell MMIO 的顺序可回看 [02_GPU 内存管理基础](<./02_GPU 内存管理基础.md>) 第 3.5～3.6 节。
 
-本例使用 Runtime 的 Doorbell Signal 接口，不由应用猜测某代硬件的 MMIO 宽度或进度编码，也不通过读取 Doorbell 判断任务是否完成。普通内存写和 Doorbell MMIO 的平台顺序可回看 [02_GPU 内存管理基础](<./02_GPU 内存管理基础.md>) 第 3.5～3.6 节。
+</details>
 
 ### 5.5 多 Producer 发布顺序不同时，Queue 怎样推进
 
-现在让同一个进程的两个 CPU 提交线程 **P0、P1** 共用 Q0。这里用 P0/P1 表示 Producer 线程，避免与第二章进程 A、B 的例子混淆；两个不同进程各自的 Queue 不属于本节这个共享 Ring 场景。
+前面已经走完 Packet 37 的一次提交。现在单独观察一个并发例子：同一进程的两个 CPU 提交线程 **P0、P1** 共用 Q0，Q0 是支持多个提交者的 MULTI Queue。P0/P1 表示 Producer 线程；第二章不同进程 A、B 各自使用 Queue 的情形不属于这里的共享 Ring 场景。
 
-假设 Q0 容量为 256，初始 `read_index = write_index = 40`，slot 40、41 都已释放且为 `INVALID`。P0 先领取 Packet ID 40，P1 再领取 41，但 P1 更早完成准备。为只观察发布顺序，本例两份 Packet 的 barrier bit 均取 0，其他执行依赖也已满足。
+假设 Q0 仍为 256 槽，初始 `read_index = write_index = 40`，slot 40、41 都已归还且为 `INVALID`。P0 先领取 40，P1 再领取 41，但 P1 写得更快。为观察发布顺序，本例两份 Packet 的 **barrier bit 均取 0**，其他执行依赖已满足；这里不再沿用前面含 `barrier = 1` 的 `0x1502`。
 
 ```mermaid
 sequenceDiagram
@@ -4715,36 +5396,60 @@ sequenceDiagram
     R-->>P: format 仍为 INVALID
     Note over R,P: 41 已发布，但不能越过 40 启动
     T0->>R: 容量与 INVALID 条件成立，发布 Packet 40
-    Note over R,P: 此后设备可以发现 40，不必等下一次 Doorbell
+    Note over R,P: 40 已有效<br/>设备可以发现它<br/>无需等下一次 Doorbell
     P->>R: 按 40、41 的顺序推进启动
     T0->>P: 通知 Q0 Doorbell，接口值 40
 ```
 
-图中故意画出一种允许的时间顺序：设备在 P0 的 Doorbell 通知前就发现有效 Packet 40。也可能由这次通知促使设备发现；提交者不依赖二者谁先发生。
+图中画出一种允许的顺序：设备在 P0 通知 Doorbell 之前就发现 Packet 40 已有效。也可能在这次通知之后才发现，Producer 仍按协议完成通知。
 
-P1 通知 41 的时刻，Queue 处于下面的状态：
+P1 通知 41 时，状态是：
 
 ```text
 write_index = 42
-Packet 40：已预留，尚未发布 → 阻止后继 Packet 启动
-Packet 41：已预留，而且已发布 → 等待前面的 40 被发布
+Packet 40：已领取编号，尚未发布 → slot 40 仍为 INVALID
+Packet 41：已领取编号，已经发布 → 不能越过 40 启动
 ```
 
-原子加法保证两个线程不会领取相同编号，不保证两个线程的写入速度一致。Queue 遇到前序 `INVALID` 时必须保留启动顺序，不能因为较大编号已经有效就跳过前面的任务。等 40 发布后，两个 Packet 可以按顺序进入启动阶段；本例未设置 barrier 完成等待，因此不能再从“先 40 后 41 启动”推断“40 必须完成后 41 才能执行”。
+原子加法保证线程拿到不同编号，但各线程何时填完内容，取决于它们的执行进度。Queue 遇到前序 `INVALID` 时会停在这里；等 40 发布并完成启动阶段，41 才能继续启动。
 
-> **[SPEC]** HSA System Architecture 1.2 第 2.8.3～2.8.4 节允许 MULTI Queue 的不同 Producer 乱序发布，但前序 `INVALID` 会阻止后继 Packet 被 Dispatch。只能在同一 Queue 所属进程地址空间内按该协议提交工作。
+这与第 4.4.3 节的 barrier 要分别理解：
 
-两次 Doorbell 接口值为 **41、40** 也属于多 Producer 下允许的交错。每个线程都通知自己已经发布的 Packet，并不会因为全局观察到的数字下降而把 Ring 中的 41“撤回”。Runtime 和硬件必须支持 MULTI Queue 的通知语义，应用不能自行把这条通知当成普通内存中的“唯一最新值”来推演。
+```text
+Packet 40 还没发布：
+    41 即使 barrier = 0，也要等 40 发布并完成启动阶段
 
-> **[SPEC]** ROCr `ba56a24c6132`，[`runtime/hsa-runtime/inc/hsa.h`](./2.源码/rocr-runtime/runtime/hsa-runtime/inc/hsa.h) 第 2337～2348 行：SINGLE Queue 要求 Doorbell 值单调增加，MULTI Queue 允许不同取值的更新。这里的允许乱序仍以前述“所通知 Packet 已由 Producer 发布”为前提；单个提交线程按自己的提交顺序通知通常更合适。
+Packet 40 已启动，Kernel 还在执行：
+    41 的 barrier = 0 → 不增加“等 40 完成”的要求，两者可能重叠执行
+    41 的 barrier = 1 → 还要等同一 Queue 中所有前序 Packet 完成
+```
 
-如果 P0 领取 40 后长期停止，Packet 41 及其后续工作就会被阻挡。Producer 必须把“已领号但尚未发布”纳入错误和退出处理；预留成功尚未完成提交。任意回退 `write_index` 也不能解决这个问题，因为其他线程可能已经取得 41、42 等后续编号。
+`INVALID` 阻止设备跳过一份尚未交付的任务；barrier 则在正常启动顺序之上增加完成等待。若 41 确实需要读取 40 写出的数据，还需像第 4.4.3 节那样安排执行依赖和相应的 release/acquire。
+
+> **[SPEC]** HSA System Architecture 1.2 §2.8.3～2.8.4，原文第 19～22 页，允许 MULTI Queue 的不同 Producer 乱序发布，但前序 `INVALID` 会阻止后继 Packet 被 Dispatch。§2.9.1～2.9.2，原文第 25～27 页，区分前序启动阶段与 barrier 所增加的前序完成条件。
+
+两次 Doorbell 接口值为 **41、40**，也是 MULTI Queue 允许的交错：每个线程通知自己已经发布的 Packet。后来的 40 不会把 Ring 中已发布的 41 撤回；Runtime 和硬件按多 Producer 的通知语义处理，不能把 Doorbell 当作普通内存中的“唯一最新值”来推演。
+
+> **[SPEC]** ROCr `ba56a24c6132`，[`runtime/hsa-runtime/inc/hsa.h`](./2.源码/rocr-runtime/runtime/hsa-runtime/inc/hsa.h) 第 2337～2348 行规定：SINGLE Queue 的 Doorbell 值须单调增加，MULTI Queue 允许不同取值的更新。每次通知仍须满足 Packet 已由相应 Producer 发布；单个线程按自己的提交顺序通知通常更合适。
+
+如果 P0 领取 40 后长期停止，后续工作就会被阻挡。已领取编号的提交需要继续完成，或通过协调机制停止 Queue；不能简单退出，也不能自行把 `write_index` 改回 40，因为其他线程可能已取得 41、42 等后续编号。
 
 ### 5.6 完整提交伪代码与常见错误
 
-下面用一个 Packet 的提交串起全部条件。伪代码采用 atomic-add，并直接展示容量与 `INVALID` 检查；它描述协议步骤，不是可直接编译的 Runtime 实现。`queue.write_index` 等表示抽象状态，真实 HSA 应用通过 Runtime 接口访问索引。
+回到主例子，CPU 已经完成了下面这条路径：
 
-前提是 Queue 仍有效，容量为 2 的幂，Ring 起点和原子访问满足对齐要求，64 位逻辑编号在这条 Queue 的使用期间不发生数值回绕。输入、参数区和所需 Signal 的分配等可能失败的准备应尽量在领取编号之前完成。
+```text
+第 4.5 节的临时 vector_add Packet
+    → 领取 37，write_index 变成 38
+    → 确认 slot 37 可写，地址为 Ring CPU 基址 + 0x940
+    → 复制任务字段，类型保持 INVALID
+    → release 发布 full_header = 0x00011502
+    → 通知 Q0 Doorbell，接口值为 37
+```
+
+下面把相同协议写成伪代码。它采用 atomic-add，并显式展示容量和 `INVALID` 检查，便于逐步对照；真实 HSA 应用通过 Runtime 接口访问索引。
+
+前提是 Queue 仍有效，容量为 2 的幂，Ring 和原子访问满足对齐要求，64 位逻辑编号在 Queue 生命周期内不发生数值溢出。输入、参数区和所需 Signal 的分配等可能失败的准备，应尽量放在领取编号之前。
 
 ```text
 prepare_inputs_and_kernarg();
@@ -4768,11 +5473,11 @@ atomic_store_32_release(slot.full_header, valid_header | (setup << 16));
 runtime_doorbell_store_release(queue, packet_id);
 ```
 
-`byte_pointer` 按字节做地址运算，所以必须乘以 64。若像 CLR 源码那样先转换为 Packet 指针，再写 `packet_array[slot_number]`，指针运算会自动按一个 Packet 跨步，此时不能再次乘 64。两种写法应算出同一地址。
+`byte_pointer` 按字节运算，所以槽号要乘以 64。CLR 源码则先把基址转换为 Packet 指针，使用 `packet_array[slot_number]`，数组下标已经按 64 字节跨步，不能再乘一次。
 
-容量检查确认当前编号可以使用这一圈的槽位，`INVALID` 确认该槽位已经归还给 Producer。第 5.2 节的 CLR 通过更保守的容量条件和释放顺序保证满足这些条件，源码不一定逐句对应本段伪代码。对固定宽度整数实现，还需处理容量算式的边界；这里没有把数值溢出算法隐藏在教学表达式中。
+这段伪代码展示规范条件。固定 CLR 实现使用第 5.2 节的 `distance < 255`，并依靠槽位释放顺序保证 `INVALID`，没有再单独轮询类型。临时 Packet 的实际复制方式见第 5.3 节源码；上面将 body 和前 32 位分开，明确展示“先准备内容、再发布”的顺序。
 
-前 32 位始终按 32 位原子操作处理；其余 body 先复制，最后一次写入合成的 Header/setup。发布后槽位归 Packet Processor，Producer 不再依赖该槽位保存自己的任务状态，也不再补写字段。平台内存与 MMIO 的顺序由 Runtime 和对应实现负责。
+有效 Header 一旦发布，CPU 就不再补写字段，也不依赖 Ring 槽位保留自己的任务状态。需要读取结果时，要等待本次完成 Signal，并让代码、Kernarg 和数组等资源存活到各自可以回收的时机。
 
 下面按提交时最常见的误用列出后果，方便之后定位问题：
 
@@ -4787,9 +5492,9 @@ runtime_doorbell_store_release(queue, packet_id);
 | 通知自己尚未发布的 Packet，或永远不通知     | 前者违背通知条件；后者无法保证设备发现这份工作                |
 | 用`read_index` 越过某编号判断 Kernel 完成 | 槽位可提前释放，任务完成必须看相应完成依据                    |
 
-领取编号后若发生错误，不能简单退出并遗留一个永久 `INVALID`，也不能无同步地回退 `write_index`。实现需要有能够继续完成该预留或停止整条 Queue 的协调机制；这段正常路径伪代码不假装用一个局部 `return` 就能取消已分配的编号。异常停止与清理的边界见第 8 章。
+领取编号后若发生错误，实现必须协调完成该预留或停止 Queue，不能用局部 `return` 遗留永久 `INVALID`，也不能无同步地回退 `write_index`。异常停止与清理的边界见第 8 章。
 
-正常发布后，CPU 可以继续提交别的 Packet，或者等待本次完成；下一章转到 GPU 一侧，说明 Packet Processor 怎样读取任务并启动 Kernel。
+正常发布后，CPU 可以继续提交其他 Packet，或者等待本次完成。第 6 章从 GPU 的 Packet Processor 继续：它怎样根据 Q0 的 Queue 上下文读取 Packet，再找到 `vector_add` 的代码和参数并启动执行。
 
 ## 6. CP/MEC 怎样取包并启动 Kernel
 
@@ -5592,7 +6297,7 @@ A 在 GPU0 上的 PDD、共享 Doorbell slice、Q0 的资源和已有 GPUVM 各�
 | Queue Hang      | Queue 在预期条件下长时间没有进展                        | 分析依赖、抢占、卸载或故障升级           |
 | GPU/Agent Reset | 恢复设备状态的一类动作                                  | 停止受影响工作并重建可恢复状态           |
 
-例如第 5.1 节的 4 槽 Ring 中，Packet 4 已预留而 Packet 0 尚未释放，Producer 等待 slot 0 就是 Queue Full。只要消费者继续释放槽位，这次等待可以正常结束。这里的“背压”指让提交方等待或降低提交速度，避免无限堆积待处理工作。
+例如第 5.1 节的 256 槽 Ring 中，Packet 293 已预留而 Packet 37 的槽位尚未释放，Producer 等待复用 slot 37 就是 Queue Full。只要消费者继续释放槽位，这次等待可以正常结束。这里的“背压”指让提交方等待或降低提交速度，避免无限堆积待处理工作。
 
 若同一时刻驱动报告了访问 Ring GPUVA 的 Fault，则还需要处理地址翻译问题；仅减少提交速度不能修复无效映射。Reset 能让设备尝试恢复工作能力，但旧任务是否完成、输出是否可用，仍须根据任务状态判断。
 
