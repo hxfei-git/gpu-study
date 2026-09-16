@@ -1,3 +1,5 @@
+ 
+
 # AMD GPU 队列与 AQL Dispatch
 
 ## 缩写表
@@ -5232,10 +5234,44 @@ header = 0x1502，rest = 0x0001
 
 第 4.4.2 节把输入交接写成“CPU release → GPU acquire”。现在可以把 CPU 那一步展开了：**CPU 写好输入、Kernarg 和 Packet，再以 release 顺序发布有效 Header；GPU 随后按 Header 的配置，在执行 Kernel 前完成 acquire。**
 
-下面仍假设 A/B/C 是双方可访问、满足所用内存要求的共享数组，输入由这个提交线程准备。为了看清本章的 `vector_add`，只取线程 0 的 `A[0] = 1`、`B[0] = 10`；其余输入也已准备好：
+**这里的 A/B 放在哪里，是否要先从 CPU 拷贝一次？** Kernel 使用的 A/B 必须位于 GPU 可以访问的内存中，地址、映射和权限都已准备好。输入可以先复制到设备内存，也可以直接写入 CPU/GPU 都能访问的共享内存。下面用两种方式区分原始数组与 Kernel 实际读取的数组。
+
+**方式一：CPU 准备原始数组，再复制到设备内存。** 用 `h_A/h_B` 表示 CPU 普通内存中的原始数组，用 `d_A/d_B` 表示通过 `hipMalloc()` 分配的设备数组：
 
 ```text
-CPU 写 A[0] = 1、B[0] = 10，准备 Kernarg 和 Ring Packet
+CPU 普通内存                         已分配的设备内存
+h_A：[1, 2, 3, ...]  ──复制数据──→  d_A：[1, 2, 3, ...]
+h_B：[10,10,10,...]  ──复制数据──→  d_B：[10,10,10,...]
+                                      ▲
+                                      │ GPU 根据地址读取
+                              Kernarg 保存 d_A、d_B 的地址
+```
+
+这就是“先把 CPU 提供的数组拷贝到 GPU 可以访问的位置”。例如调用 `hipMemcpy()` 完成输入复制；若采用异步复制，需要安排依赖，保证 Kernel 读取前复制已经完成。这条路径中，CPU 先填写 `h_A/h_B`，Kernel 读取的是另一份 `d_A/d_B`。
+
+**方式二：CPU 直接填写双方都能访问的同一份数组。** 例如，通过 Runtime 准备映射主机内存，使系统内存中的数组同时具备 CPU 和 GPU 的访问条件：
+
+```text
+CPU 使用 CPU 地址
+    │ 写 A[0] = 1、B[0] = 10
+    ▼
+系统内存中的同一份 A、B 数组
+    ▲
+    │ 按下面的 release/acquire 协议完成同步后读取
+GPU 使用 GPU 可访问地址
+    ▲
+    │ Kernarg 保存 A、B 的 GPU 可访问地址
+Ring Packet.kernarg_address → Kernarg
+```
+
+CPU 可以直接在这份共享存储中生成输入，无需再复制一份到设备内存。如果输入起初放在另一份普通 CPU 数组中，仍需把数据搬到这里，或通过受支持的登记与映射方式让原数组可供 GPU 使用。普通 CPU 指针本身不能保证 GPU 可访问；“GPU 可以访问”也不要求数组一定放在显存中。
+
+> **[SPEC]** HIP 7.2.0 文档 [Host memory（主机内存）](https://rocm.docs.amd.com/projects/HIP/en/docs-7.2.0/how-to/hip_runtime_api/memory_management/host_memory.html) 的“Pageable memory”示例展示 `hipMalloc()` 与 `hipMemcpy()` 的分配、复制过程；“Memory allocation flags for pinned memory”说明 `hipHostMallocMapped` 提供设备映射，`hipHostGetDevicePointer()` 可取得设备使用的指针。这里用接口说明两种准备方式，不限定当前机器的软件版本或 MI300 具体型号。
+
+**下面的同步图采用方式二。** A/B/C 已是双方可访问、满足所用内存要求的共享数组，输入由这个提交线程直接填写。Kernarg 保存数组地址，Ring Packet 保存 Kernarg 地址；数组内容仍留在各自的存储中。只展开线程 0 的 `A[0] = 1`、`B[0] = 10`，其余输入也已准备好：
+
+```text
+CPU 向已准备好的共享数组写 A[0] = 1、B[0] = 10，准备 Kernarg 和 Ring Packet
     ↓
 CPU 以 release 顺序原子写 full_header = 0x00011502
     发布本次准备好的内容
@@ -5304,9 +5340,39 @@ CLR 用下面的 helper 发布有效值。`rest` 是“Header 后面的 16 位�
 
 Packet 37 已经发布到 **Q0 Ring 的 slot 37**。CPU 接下来通过 `gpu_queue_->doorbell_signal` 调用 Runtime 的通知接口，传入 **37**。这个值是本次 Packet ID；此时 `write_index` 已是 38，表示下一次待领取的编号。
 
-这里的“通知”具体会做什么？**在本章直接写硬件 Doorbell 的路径中，CPU 最终向 Q0 的 Doorbell 映射地址写入数值 `37`，完成一次 MMIO 写。**
+#### 5.4.1 创建与驻留时，怎样关联 Queue 和 Doorbell
 
-第二章已经为 Q0 建好了 Doorbell 映射。`doorbell_signal` 保存的是 Signal 句柄，ROCr 根据句柄找到内部记录的硬件 Doorbell 地址。下面用 D 表示这个 CPU 可写的映射地址：
+第 2.7 节为每条底层 Queue 分配一个 Doorbell 槽位，第 3.1～3.2 节把对应配置写入 MQD，并在 Queue 驻留时装入 HQD。CPU 与 GPU 两端由此使用同一个 Doorbell：CPU 知道往哪里写，GPU 的队列配置记录了所关联的通知入口。
+
+假设 Q0 分到当前进程 Doorbell slice 中的 slot 3，映射到 CPU 后的地址记为 D。下面只展开一个 XCC，并假设 Q0 已获得驻留：
+
+```text
+KFD 为 Q0 分配 Doorbell slot 3
+    │
+    ├─ 用户态这一端
+    │    HSAKMT 映射 Doorbell 区域，算出 slot 3 的 CPU 地址 D
+    │        ↓
+    │    ROCr 的 Doorbell Signal 对象保存 D
+    │        ↑ hsa_queue_t.doorbell_signal 保存句柄，引用这个对象
+    │    Q0 的 hsa_queue_t
+    │
+    └─ GPU 这一端
+         Q0 的 MQD 保存对应的 Doorbell offset
+             ↓ Queue 驻留时装载
+         Q0 占用的 HQD
+             ├─ DOORBELL_CONTROL：关联该 Doorbell，并启用通知
+             └─ Ring 基址等配置：用于访问 Q0 的 Ring
+```
+
+HQD 的 `CP_HQD_PQ_DOORBELL_CONTROL` 保存硬件使用的 Doorbell offset 和控制位。CPU 地址 D 则用于访问映射后的 MMIO 窗口，两端通过各自的地址表示关联到同一个 Doorbell 槽位；不能把 CPU 虚拟地址 D 直接填进 HQD 的 offset 字段。
+
+MI300 的 HWS/CPSCH 路径中，KFD 把 Q0 的 Doorbell offset、MQD 地址和写索引地址一起交给固件，由固件安排驻留与 HQD 装载。Q0 正常换出后仍保留自己的 Doorbell，再次驻留时可以使用别的 HQD 槽位。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_mqd_manager_v9.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 279～293 行将同一条 Queue 的 Ring、索引地址和 Doorbell offset 写入 MQD；[`kfd_packet_manager_v9.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager_v9.c) 第 281～294 行将 Doorbell offset、MQD 地址和写索引地址编码进 HWS 的 `MAP_QUEUES` 控制包。用户态保存 Doorbell 地址的源码见本节末尾索引。
+
+#### 5.4.2 本次通知写入什么，其他信息保存在哪里
+
+**在本章直接写硬件 Doorbell 的路径中，CPU 向 Q0 的 Doorbell 映射地址 D 写入数值 `37`，完成一次 MMIO 写。** `doorbell_signal` 保存的是 Signal 句柄，ROCr 根据句柄找到内部记录的地址 D。沿用 Q0 已驻留的条件，提交与取包过程如下：
 
 ```text
 CPU 调用 Runtime：通知 Q0 的 doorbell_signal，值为 37
@@ -5329,7 +5395,50 @@ Packet Processor 使用 Q0 的 Queue 上下文访问 Ring
 
 同一条 Q0 后续仍使用地址 D。比如以后 Packet 293 复用 Ring 的 slot 37，待槽位可写并发布后，CPU 向 D 写入的通知值就是 **293**。Ring 槽号按容量回绕，Doorbell 通知使用逻辑 Packet ID。
 
-上图说明的是当前固定 ROCr 的直接硬件写入路径。实际提交仍调用 Runtime 的 Doorbell Signal 接口，由 Runtime 完成相应的内存顺序和 MMIO 操作。
+Doorbell 写入无需再附带 KFD Queue ID、Ring 地址或 Kernel 地址。执行所需信息已经分别保存在队列配置和 Packet 中：
+
+```text
+本次 Doorbell 写入
+    地址 D  → 选择 Q0 的通知入口
+    数值 37 → 通知 Packet ID 37 已发布
+
+此前准备好的信息
+    Queue 配置 → Ring 地址、容量、地址空间等
+    Ring 中的 Packet 37 → Kernel 句柄、Kernarg 地址、Grid、完成 Signal 等
+```
+
+例如，Q1 使用另一个 Doorbell 地址 D1。向 D 写 37 通知 Q0，向 D1 写 37 则通知 Q1；两条 Queue 可以各有自己的 Packet 37。GPU 根据队列配置找到相应 Ring，再读取 Packet 中的任务信息。
+
+本节的 MMIO 示例使用当前固定 ROCr 的直接硬件写入路径。实际提交调用 Runtime 的 Doorbell Signal 接口，由 Runtime 完成相应的内存顺序和 MMIO 操作。
+
+#### 5.4.3 暂未驻留的 Queue 也可以接收提交和通知
+
+**CPU 提交时无需先等待 Queue 驻留。** 假设 Q0 已创建成功、资源有效，只是当前没有 HQD 名额；Ring 中还有可用槽位，Producer 就可以按前面介绍的协议填写、发布 Packet 并通知 Doorbell：
+
+```text
+Q0 暂未驻留
+    Ring、MQD、Doorbell 等资源仍然保留
+    ↓
+CPU 填写 Packet → 发布有效 Header → 通知 Q0 的 Doorbell
+    ↓
+Q0 等待调度，已发布的 Packet 留在 Ring 中
+    ↓
+固件安排 Q0 驻留，装载对应 HQD
+    ↓
+GPU 处理 Q0 中待执行的 Packet
+```
+
+应用无需因正常换出而重新提交同一份 Packet。驻留决定 GPU 何时能继续处理这条 Queue；写 Doorbell 只完成提交通知，不保证固件立即安排 Q0 驻留。若 Ring 已满，Producer 仍须等待第 5.2 节的槽位释放条件。
+
+> **[SPEC]** AMD ROCm 6.3.0 文档 [Oversubscription of hardware resources in AMD Instinct accelerators](https://rocm.docs.amd.com/en/docs-6.3.0/conceptual/oversubscription.html)（2024-11-08）说明，Queue 等资源发生超额订阅时，硬件调度器轮流安排可用资源。本文的驻留和换出恢复过程见第 3.2.2、3.3 节。
+
+**[BOUNDARY]** 上图说明应用提交与 Queue 驻留的关系，不规定未驻留期间 Doorbell 通知的内部保存位置、消息格式或唤醒时序。恢复时怎样重新观察提交进度，仍取决于具体硬件和固件路径。
+
+#### 5.4.4 Doorbell 通知与其他进度观察机制
+
+本章普通 AQL 提交的通知步骤是更新 Queue 的 Doorbell Signal。在直接 MMIO 快速路径中，Producer 完成这次写入即可，无需再额外发送中断或逐 Packet 提交 ioctl。
+
+GPU 还可以通过配置好的 wptr 地址观察写进度，或在通知前发现有效 Packet。但 Producer 仍须完成 Doorbell 通知，不能只更新 `write_index` 就省略发布和通知步骤。
 
 Header 与 Doorbell 在时间上的关系如下：
 
@@ -5344,6 +5453,8 @@ Header 与 Doorbell 在时间上的关系如下：
 设备可以在 Doorbell 写入前发现有效 Packet，但规范不要求它在尚未通知时就处理。因此 CPU 必须先把内容准备完整，再发布 Header，随后按协议通知。Doorbell 不是等待 CPU 补完字段的最后一道开关，也不能用来判断 Kernel 是否完成。
 
 > **[SPEC]** HSA System Architecture 1.2 §2.8.3，原文第 19～21 页，允许在有效 format 发布后、Doorbell 通知前处理 Packet；Producer 仍须通知已经发布的工作。连续提交多份 Packet 时可以合并通知，接口值采用本次通知覆盖的最后一个 Packet ID。
+
+实现上，更新 Doorbell Signal 不一定始终由用户态直接写 MMIO。固定 ROCr 的 `AqlQueue::StoreRelaxed()` 还包含通过驱动接口通知 Doorbell 的条件分支。仅凭该分支存在，不能认定当前 MI300 部署启用了它，具体条件与源码位置见下面的索引。
 
 如果通知的是后面的 Packet 41，而前面 40 尚未发布，Packet Processor 仍须遵守 Queue 的启动顺序。下一节单独用两个 Producer 说明这种交错。
 
