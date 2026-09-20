@@ -1322,7 +1322,7 @@ MI300 采用多个计算芯粒组织计算资源。这里需要区分三个名�
 
 这张图保留资源包含关系，不描绘物理布局。每个 SIMD 可以承载多条 Wave；wave64 的 64 个逻辑 Lane 也不直接给出某条指令的单周期处理宽度或延迟。
 
-每个 XCC 都有自己的队列配置寄存器。后面看到“按 XCC 装载 MQD”时，可以理解为：驱动分别把队列配置写入各个 XCC 的 HQD。同一条逻辑 Queue 可以在多个 XCC 上有对应的硬件状态，具体过程见 [03 第 3.0 节的硬件总图与多 XCC 分工](<./03_AMD GPU 队列与 AQL Dispatch.md#30-mi300-的硬件结构与队列分工>)。
+每个 XCC 都有自己的队列配置寄存器。后面看到“按 XCC 装载 MQD”时，可以理解为：驱动分别把队列配置写入各个 XCC 的 HQD。同一条逻辑 Queue 可以在多个 XCC 上有对应的硬件状态，具体过程见 [03 上篇第 3.0 节的硬件总图与多 XCC 分工](<./03_AMD GPU 队列与 AQL Dispatch（上）.md#30-mi300-的硬件结构与队列分工>)。
 
 > **[SOURCE]** Linux `248951ddc14d`，[`amdgpu-glossary.rst`](./2.源码/linux/Documentation/gpu/amdgpu/amdgpu-glossary.rst) 第 288～289 行将 XCC 展开为 `Accelerator Core Complex`，本文沿用该名称。[`kfd_mqd_manager_v9.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 905～930 行逐 XCC 装载队列；[`amdgpu_amdkfd_gc_9_4_3.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gc_9_4_3.c) 第 284～309 行选择目标 XCC 并写入该实例的 HQD 寄存器。
 

@@ -1976,7 +1976,7 @@ Packet 中没有由 Host Driver 指定的 VMID 字段。结合前面的 `vmid_ma
   → 固件可能重新安排VMID
 ```
 
-**[BOUNDARY]** `compute_vmid_bitmap` 表示分给 KFD 的 VMID 范围，HWS 的实时占用由固件维护。MI300 的 Queue 驻留和 HWS/CPSCH 交付流程见 [03_AMD GPU 队列与 AQL Dispatch](<./03_AMD GPU 队列与 AQL Dispatch.md>)；固件内部占用表和换出算法不由 Linux 接口源码公开。
+**[BOUNDARY]** `compute_vmid_bitmap` 表示分给 KFD 的 VMID 范围，HWS 的实时占用由固件维护。MI300 的 Queue 驻留和 HWS/CPSCH 交付流程见 [03_AMD GPU 队列与 AQL Dispatch（上）](<./03_AMD GPU 队列与 AQL Dispatch（上）.md>)；固件内部占用表和换出算法不由 Linux 接口源码公开。
 
 #### 1.5.6 VMID 0 不属于普通 AQL 进程地址空间
 
@@ -6081,7 +6081,7 @@ USERPTR Ring
 
 GTT 路径中的 `fmm_map_to_cpu()` 明确使用 `MAP_FIXED`，将已经取得的 `mem` 作为 CPU 映射起点。USERPTR 路径则把 `mem` 同时用于计划 GPUVA 和 CPU 页面来源地址。它们使用同一个数值的动作发生在用户态参数准备和内核建表过程中；CPU 的 `mmap()` 本身只负责 CPU 地址空间。
 
-> **[SOURCE]** ROCr `ba56a24c6132`，[`libhsakmt/src/fmm.c`](./2.源码/rocr-runtime/libhsakmt/src/fmm.c) 第 785～805 行检查地址范围，第 1150～1177 行填写 `va_addr` 和 USERPTR CPU 地址，第 1527～1584 行取得地址、创建内存对象，并定义指定 CPU 地址的 BO 映射函数；第 2070～2092 行并列展示 USERPTR 与 GTT 分支。相关赋值的就近摘录见 [03 的 2.3.1“Ring 的地址准备：CPU 映射与 GPU 同值映射”](<./03_AMD GPU 队列与 AQL Dispatch.md#231-ring-的地址准备cpu-映射与-gpu-同值映射>)。
+> **[SOURCE]** ROCr `ba56a24c6132`，[`libhsakmt/src/fmm.c`](./2.源码/rocr-runtime/libhsakmt/src/fmm.c) 第 785～805 行检查地址范围，第 1150～1177 行填写 `va_addr` 和 USERPTR CPU 地址，第 1527～1584 行取得地址、创建内存对象，并定义指定 CPU 地址的 BO 映射函数；第 2070～2092 行并列展示 USERPTR 与 GTT 分支。相关赋值的就近摘录见 [03 上篇的 2.3.1“Ring 的地址准备：CPU 映射与 GPU 同值映射”](<./03_AMD GPU 队列与 AQL Dispatch（上）.md#231-ring-的地址准备cpu-映射与-gpu-同值映射>)。
 
 KFD MAP 根据内存 handle 找回分配对象，使用已经保存的 `kgd_mem.va` 建立 GPUVM 映射；它不需要重新选择另一个 GPU 地址。ALLOC 记录地址计划，MAP 完成后这个计划才成为 GPU 可以使用的映射。
 
