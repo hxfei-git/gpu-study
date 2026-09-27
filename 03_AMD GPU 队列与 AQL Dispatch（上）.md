@@ -69,7 +69,7 @@
 | PCIe    | Peripheral Component Interconnect Express       | 高速外设互连总线                                                      |
 | PDD     | Process Device Data                             | KFD 中某个进程在某个 GPU 上的状态                                     |
 | PFN     | Page Frame Number                               | 物理页帧号                                                            |
-| PM4     | AMD PM4                                         | AMD GPU 的一类底层命令包协议；本文只在 HWS 控制面中使用               |
+| PM4     | AMD PM4                                         | AMD GPU 的一类底层命令包协议；本篇重点看 HWS 控制包                    |
 | PQM     | Process Queue Manager                           | KFD 进程队列管理器，管理该进程的 Queue ID 和 Queue 列表               |
 | PTE     | Page Table Entry                                | 页表项                                                                |
 | QPD     | Queue Process Device Data                       | PDD 内嵌的 Queue 与调度状态；源码类型为`qcm_process_device`         |
@@ -131,12 +131,12 @@
 | [第 2 章](#2-queue-创建从-rocr-到-kfd) | AQL Queue 的创建与资源准备         | 内存准备、对象管理、资源保护与 Doorbell     |
 | [第 3 章](#3-mi300-硬件结构queue-驻留与-mqd-装载) | MI300 硬件、Queue 驻留与 MQD 装载  | 硬件结构、多 XCC 分工、活动条件、驻留与恢复 |
 
-**[BOUNDARY]** 本文硬件基线为 **AMD Instinct MI300 / CDNA 3**，Wave 使用 wave64，Queue 寄存器和回调按本地 GFX9.4.3 路径核对。MI300A/MI300X 尚未确认，内存组织、主机连接及分区只按条件说明。硬件型号不能推定部署的软件版本或调度参数。
+**[BOUNDARY]** 本文固定采用外部 Host CPU + **AMD Instinct MI300X / CDNA 3** 的学习模型，通过 PCIe 连接。Wave 使用 wave64，Queue 寄存器和回调按本地 GFX9.4.3 路径核对。多 XCC 案例固定整卡 8 个 XCC 组成一个逻辑 GPU；实际实验另行核对设备分区和软件配置。
 
 本文采用以下固定证据基线：
 
 - [MI300 / CDNA 3 ISA](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf)（封面日期 2025-08-05），执行模型重点见 §1.1、§2、§3、§4.3，原文第 4～13、19 页；
-- AMD 作者论文 [Realizing the AMD Exascale Heterogeneous Processor Vision](./isca2024_exascale.pdf)（ISCA 2024，作者版本），上篇第 3 章重点使用 §IV-B 的 XCD 结构和 §VI-A 的多 XCD 协作机制；[本地中文译文](./isca2024_exascale_中文全译.pdf)用于辅助阅读，非官方译本，页码与英文版分别标注；
+- AMD 作者论文 [Realizing the AMD Exascale Heterogeneous Processor Vision](./isca2024_exascale.pdf)（ISCA 2024，作者版本），上篇第 3 章结合 §VII 的 MI300X 组件复用说明，使用 §IV-B 的 XCD 结构和 §VI-A 的多 XCD 协作机制；[本地中文译文](./isca2024_exascale_中文全译.pdf)用于辅助阅读，非官方译本，页码与英文版分别标注；
 - HSA Platform System Architecture Specification 1.2，重点是 §2.8“User mode queuing”和 §2.9“Architected Queuing Language”；
 - Linux `248951ddc14de84de3910f9b13f51491a8cd91df`；
 - ROCr `ba56a24c6132c5d195686ae4adf969ca1222fbba`；
@@ -2606,18 +2606,15 @@ Queue 创建必须满足以下资源约束：
 
 #### 3.0.1 从整颗 MI300 到 XCC、MEC、Pipe、HQD 和 CU
 
-MI300 把多块计算芯粒封装在一起。**XCD 是物理计算芯粒，XCC 是驱动管理的这块芯粒上的计算资源。** 在 MI300A 和 MI300X 中，一个 XCD 对应一个 XCC。
+MI300 把多块计算芯粒封装在一起。**XCD 是物理计算芯粒，XCC 是驱动管理的这块芯粒上的计算资源。** 在 MI300X 中，一个 XCD 对应一个 XCC。
 
-| 整颗设备 | XCD / XCC 数量 | 每个 XCC 的 CU         | 全设备启用的 CU      |
-| -------- | -------------- | ---------------------- | -------------------- |
-| MI300A   | 6 个           | 物理 40 个，启用 38 个 | `6 × 38 = 228` 个 |
-| MI300X   | 8 个           | 物理 40 个，启用 38 个 | `8 × 38 = 304` 个 |
+MI300X 一共包含 8 个 XCD。每个 XCD 物理实现 40 个 CU，产品启用 38 个，因此全设备启用 `8 × 38 = 304` 个 CU。
 
-每个 XCC 中既有处理队列的控制资源，也有执行计算的 CU。计算一侧按 MI300A/MI300X 的公开硬件规格展开，队列一侧按本仓库固定驱动的资源配置展开。图中标出资源的数量和所属范围：
+每个 XCC 中既有处理队列的控制资源，也有执行计算的 CU。计算一侧按 MI300X 的公开硬件规格展开，队列一侧按本仓库固定驱动的资源配置展开。图中标出资源的数量和所属范围：
 
 ```text
-一颗 MI300 的 GPU 计算部分
-└─ XCC：MI300A 有 6 个，MI300X 有 8 个
+一颗 MI300X 的 GPU 计算部分
+└─ XCC：共 8 个
    └─ 展开其中一个 XCC
       ├─ 队列控制资源（按固定驱动配置）
       │  ├─ MEC 1
@@ -2677,13 +2674,11 @@ Pipe 读取并处理这个 Kernel Dispatch Packet，命令前端再把分到当�
 
 同一条 Pipe 下的另一个 HQD 还可以保存 Q1 的配置。Pipe 选择 Q1 时，就改用 Q1 的配置去读取 Q1 的 Ring。因此，一条 Pipe 下的 8 个 HQD 用于保留多条队列的配置，Pipe 每次选择一条队列处理命令。各队列产生的 Wave 能否在 CU 上同时驻留，还要看寄存器、LDS 等执行资源是否足够。
 
-> **[SPEC]** [AMD GPU specifications](https://rocm.docs.amd.com/en/latest/reference/gpu-specs.html)（核对日期 2026-09-08）“AMD Instinct GPUs”表的 MI300A、MI300X 两行给出启用 CU 数、wave64、每 CU 的 64 KiB LDS、512 KiB 向量寄存器、12.5 KiB 标量寄存器，以及上述各级缓存的容量和共享范围。[ROCm Compute Profiler 3.8.0：Pipeline descriptions](https://rocm.docs.amd.com/projects/rocprofiler-compute/en/latest/conceptual/cdna/pipeline-descriptions.html) 的 VALU、SALU 小节说明 4 个 16 路 SIMD、按 SIMD 划分的寄存器文件和 Wave 槽位；这里采用 MI300 的 128 KiB / SIMD、8 Wave / SIMD 配置，其他代际的数值不用于这张图。
+> **[SPEC]** [AMD GPU specifications](https://rocm.docs.amd.com/en/latest/reference/gpu-specs.html)（核对日期 2026-09-08）“AMD Instinct GPUs”表的 MI300X 行给出启用 CU 数、wave64、每 CU 的 64 KiB LDS、512 KiB 向量寄存器、12.5 KiB 标量寄存器，以及上述各级缓存的容量和共享范围。[ROCm Compute Profiler 3.8.0：Pipeline descriptions](https://rocm.docs.amd.com/projects/rocprofiler-compute/en/latest/conceptual/cdna/pipeline-descriptions.html) 的 VALU、SALU 小节说明 4 个 16 路 SIMD、按 SIMD 划分的寄存器文件和 Wave 槽位；这里采用 MI300 的 128 KiB / SIMD、8 Wave / SIMD 配置，其他代际的数值不用于这张图。
 
-> **[SPEC]** AMD 作者论文 *Realizing the AMD Exascale Heterogeneous Processor Vision*（ISCA 2024）§IV-A/B：[本地英文版第 4 页](./isca2024_exascale.pdf#page=4)、[中文译文第 9 页](./isca2024_exascale_中文全译.pdf#page=9)。该处给出 MI300A 的 6 个 XCD、每 XCD 40 个物理 CU 中启用 38 个，以及共享的 4 MiB L2。§VII 的 [英文版第 11 页](./isca2024_exascale.pdf#page=11)、[译文第 20 页](./isca2024_exascale_中文全译.pdf#page=20)给出 MI300X 的 8 个 XCD 和 304 个 CU。
->
-> 每 CU 的矩阵核心数量另见 [AMD MI300 发布说明](https://www.amd.com/en/newsroom/press-releases/2023-12-6-amd-delivers-leadership-portfolio-of-data-center-a.html)（2023-12-06）注释 MI300-15：MI300X 有 304 个 CU 和 1216 个矩阵核心，对应每 CU 4 个矩阵核心。
+> **[SPEC]** AMD 作者论文 *Realizing the AMD Exascale Heterogeneous Processor Vision*（ISCA 2024）§VII 的 [本地英文版第 11 页](./isca2024_exascale.pdf#page=11)、[译文第 20 页](./isca2024_exascale_中文全译.pdf#page=20)给出 MI300X 的 8 个 XCD、304 个 CU，并说明复用 XCD 组件。每个 XCD 的 40 个物理 CU、38 个启用 CU 和 4 MiB L2，结合 §IV-B 的 [英文版第 4 页](./isca2024_exascale.pdf#page=4)、[译文第 9 页](./isca2024_exascale_中文全译.pdf#page=9)核对。
 
-> **[SPEC]** [AMD Instinct MI300 Series microarchitecture](https://rocm.docs.amd.com/en/latest/reference/gpu-arch/mi300.html) 的 XCD 结构图和封装结构图分别给出芯粒内的计算资源、MI300A 的 6 个 XCD 与 MI300X 的 8 个 XCD。[AMD SMI 27.0.0：GPU partitioning](https://rocmdocs.amd.com/projects/amdsmi/en/latest/conceptual/partition.html#architecture-background) 的“Architecture background / Physical die types / Logical units”说明 MI300A、MI300X 均为一个 XCD 对应一个 XCC。该文称 XCC 为 `Accelerated Compute Core`；本文沿用固定 Linux 术语表的 `Accelerator Core Complex`。
+> **[SPEC]** [AMD Instinct MI300 Series microarchitecture](https://rocm.docs.amd.com/en/latest/reference/gpu-arch/mi300.html) 的 XCD 结构图和封装结构图分别给出芯粒内的计算资源、MI300X 的 8 个 XCD。[AMD SMI 27.0.0：GPU partitioning](https://rocmdocs.amd.com/projects/amdsmi/en/latest/conceptual/partition.html#architecture-background) 的“Architecture background / Physical die types / Logical units”说明 MI300X 中一个 XCD 对应一个 XCC。该文称 XCC 为 `Accelerated Compute Core`；本文沿用固定 Linux 术语表的 `Accelerator Core Complex`。
 
 > **[SOURCE]** Linux `248951ddc14d`，结构与数量的源码依据：
 >
@@ -2696,19 +2691,21 @@ Pipe 读取并处理这个 Kernel Dispatch Packet，命令前端再把分到当�
 
 #### 3.0.2 为什么一条 Queue 要在多个 XCC 上占用 HQD
 
-应用选择的是一个逻辑 GPU。KFD 把属于这个设备的一组 XCC 作为一个节点来管理，Q0 就属于这个节点。**本节举例假设 MI300A 的 6 个 XCC 组成一个节点，应用通过 Q0 提交一次 Kernel，就能让这 6 个 XCC 分担工作。** 这是教学配置，当前机器的具体型号和分区尚未确认。
+应用选择的是一个逻辑 GPU。KFD 把属于这个设备的一组 XCC 作为一个节点来管理，Q0 就属于这个节点。**本节固定 MI300X 的 8 个 XCC 组成一个节点，应用通过 Q0 提交一次 Kernel，由这 8 个 XCC 分担工作。** 这是后续多 XCC 示例共同使用的教学配置。
 
-Queue 是提交任务的入口。一条 Queue 中的一个 Kernel Dispatch，可以包含很多个 Work-group。为看清 6 个 XCC 怎样分工，下面用一次包含 12 个 Work-group 的 Dispatch 举例：
+Queue 是提交任务的入口。一条 Queue 中的一个 Kernel Dispatch，可以包含很多个 Work-group。为看清 8 个 XCC 怎样分工，下面用一次包含 16 个 Work-group 的 Dispatch 举例：
 
 ```text
 Q0 的 Ring 中有一个 Kernel Dispatch Packet
-    └─ 这次 Kernel 包含 12 个 Work-group
-       ├─ XCC 0：执行组 0、6
-       ├─ XCC 1：执行组 1、7
-       ├─ XCC 2：执行组 2、8
-       ├─ XCC 3：执行组 3、9
-       ├─ XCC 4：执行组 4、10
-       └─ XCC 5：执行组 5、11
+    └─ 这次 Kernel 包含 16 个 Work-group
+       ├─ XCC 0：执行组 0、8
+       ├─ XCC 1：执行组 1、9
+       ├─ XCC 2：执行组 2、10
+       ├─ XCC 3：执行组 3、11
+       ├─ XCC 4：执行组 4、12
+       ├─ XCC 5：执行组 5、13
+       ├─ XCC 6：执行组 6、14
+       └─ XCC 7：执行组 7、15
 ```
 
 **[DESIGN]** 图中组号用于示意轮转分配，不规定实际分配的起点或执行完成顺序。各 XCC 分担同一次 Dispatch 中的不同 Work-group，每个 Work-group 只执行一次。全文的 1024 元素案例仍使用原来的 4 个 Work-group。
@@ -2722,18 +2719,18 @@ Q0 的 Ring 中有一个 Kernel Dispatch Packet
 Q0 在 XCC 0 上的 MQD  ──装载──→  XCC 0 的一个 HQD 槽位
 Q0 在 XCC 1 上的 MQD  ──装载──→  XCC 1 的一个 HQD 槽位
           ……                              ……
-Q0 在 XCC 5 上的 MQD  ──装载──→  XCC 5 的一个 HQD 槽位
+Q0 在 XCC 7 上的 MQD  ──装载──→  XCC 7 的一个 HQD 槽位
 ```
 
 这些 MQD 共同描述同一条 Q0，使用同一个 Ring，同时保留各 XCC 需要的配置差异。HQD 保存配置，AQL Packet 继续保存在 Ring 中。
 
-本章把队列配置装入相关 HQD 并激活的状态称为 **Queue 驻留**。在这个例子中，Q0 驻留时会在 6 个 XCC 上各占一个 HQD 槽位。Q1 也可以在各 XCC 的另一个槽位中驻留。两条队列的任务都可以使用这些 XCC 的 CU，**占用一个 HQD 槽位不会让 Q0 独占整个 XCC 的计算资源**。
+本章把队列配置装入相关 HQD 并激活的状态称为 **Queue 驻留**。在这个例子中，Q0 驻留时会在 8 个 XCC 上各占一个 HQD 槽位。Q1 也可以在各 XCC 的另一个槽位中驻留。两条队列的任务都可以使用这些 XCC 的 CU，**占用一个 HQD 槽位不会让 Q0 独占整个 XCC 的计算资源**。
 
 这样，应用可以通过一条 Queue 使用整个逻辑 GPU，无需为每个 XCC 分别创建队列、拆分并提交同一次 Kernel。若计算分区把这些 XCC 分成了不同逻辑设备，队列就只覆盖所属节点内的 XCC；“每个 XCC”始终指这个范围。
 
-> **[SPEC]** AMD 作者论文 *Realizing the AMD Exascale Heterogeneous Processor Vision*（ISCA 2024）§VI-A、图 13：[本地英文版第 9 页](./isca2024_exascale.pdf#page=9)、[中文译文第 17 页](./isca2024_exascale_中文全译.pdf#page=17)和 [图 13 所在的译文第 18 页](./isca2024_exascale_中文全译.pdf#page=18)。该节直接以 MI300A 说明：各 XCD 读取同一个 AQL Packet，分别启动部分 Work-group，使一个多 XCD 分区表现为一个逻辑 GPU；具体工作组分配策略可配置。
+> **[SPEC]** 本地 [ISCA 2024 论文 §VII，第 11 页](./isca2024_exascale.pdf#page=11)确认 MI300X 复用 XCD、IOD 组件；结合 [§VI-A、图 13，第 9 页](./isca2024_exascale.pdf#page=9)说明这些组件共同取包、分担 Work-group 和协调完成的关系。本节只采用多 XCD 计算部分的机制。具体消息格式和握手时序未在论文中展开。
 >
-> 轮转分配的部署示例另见 AMD [Deep dive into the MI300 compute and memory partition modes](https://rocm.blogs.amd.com/software-tools-optimization/compute-memory-modes/README.html)（2025-02-09）“Compute partitioning modes / Workgroup scheduling behavior”。该文以 MI300X 为例；本节的 6 个 XCC 和 12 个 Work-group 是前面说明的 MI300A 教学例子。
+> 轮转分配的 MI300X 依据见 [AMD：MI300 计算与内存分区模式](https://rocm.blogs.amd.com/software-tools-optimization/compute-memory-modes/README.html)（2025-02-09）“Compute partitioning modes / Workgroup scheduling behavior”：整卡作为单个计算设备时，Work-group 在 8 个 XCD 间分配。本节额外选用 16 个 Work-group，便于画出每个 XCC 分到两组的情况。
 
 > **[SOURCE]** Linux `248951ddc14d`，[`kfd_mqd_manager_v9.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 727～795 行使用同一份 Queue 属性为各 XCC 初始化 MQD，并分别设置逻辑 XCC 编号、保存区地址等字段；第 905～930 行在 No-HWS 装载路径中遍历节点的 `xcc_mask`，逐个调用 HQD 装载接口。No-HWS 的装载过程见第 3.2.1 节。
 
@@ -2750,35 +2747,35 @@ Q0 在 XCC 5 上的 MQD  ──装载──→  XCC 5 的一个 HQD 槽位
     留给用户计算队列：32 − 8 = 24 个槽位
 ```
 
-再回到 6 个 XCC 组成一个节点的例子。Q0 在每个 XCC 上各占一个槽位，Q1 也一样，直到 Q23：
+再回到 8 个 XCC 组成一个节点的例子。Q0 在每个 XCC 上各占一个槽位，Q1 也一样，直到 Q23：
 
 ```text
-应用队列       XCC 0    XCC 1    XCC 2    XCC 3    XCC 4    XCC 5
-Q0             占1个    占1个    占1个    占1个    占1个    占1个
-Q1             占1个    占1个    占1个    占1个    占1个    占1个
- ……             ……      ……      ……      ……      ……      ……
-Q23            占1个    占1个    占1个    占1个    占1个    占1个
+应用队列       XCC 0    XCC 1    XCC 2    XCC 3    XCC 4    XCC 5    XCC 6    XCC 7
+Q0             占1个    占1个    占1个    占1个    占1个    占1个    占1个    占1个
+Q1             占1个    占1个    占1个    占1个    占1个    占1个    占1个    占1个
+...
+Q23            占1个    占1个    占1个    占1个    占1个    占1个    占1个    占1个
 ```
 
-横着看，同一行始终是同一条应用队列。竖着看，每个 XCC 的 24 个用户槽位都已占满。因此，这里是 **24 条用户计算队列，共占用 144 个 HQD 槽位**。再增加 Q24 时，已有队列需要先让出驻留名额；是否允许等待和轮流驻留，由调度策略决定。
+横着看，同一行始终是同一条应用队列。竖着看，每个 XCC 的 24 个用户槽位都已占满。因此，这里是 **24 条用户计算队列，共占用 192 个 HQD 槽位**。再增加 Q24 时，已有队列需要先让出驻留名额；是否允许等待和轮流驻留，由调度策略决定。
 
-**[BOUNDARY]** `6 × 2 × 4 × 8 = 384` 计算的是 MI300A 按固定驱动枚举范围得到的全部 HQD 位置，包含第二个 MEC 和内核使用的资源。这个乘法不能证明 384 个位置都能同时供用户队列使用。计算本节的用户队列驻留名额，应使用上面的“每个 XCC 留下 24 个槽位、每条队列在各 XCC 各占一个”这一规则。
+**[BOUNDARY]** `8 × 2 × 4 × 8 = 512` 计算的是 MI300X 按固定驱动枚举范围得到的全部 HQD 位置，包含第二个 MEC 和内核使用的资源。这个乘法不能证明 512 个位置都能同时供用户队列使用。计算本节的用户队列驻留名额，应使用上面的“每个 XCC 留下 24 个槽位、每条队列在各 XCC 各占一个”这一规则。
 
 这 24 条是上述资源预留下的队列驻留名额，SDMA Queue 使用另一组资源。具体部署还要核对计算分区、内核预留、进程地址空间等限制；它也不表示 24 个 Kernel 或某个固定数量的 Wave 正在同时计算。
 
-**队列名额少，会不会让大量 CU 闲着？** 要看队列提交了多少可并行的工作。沿用前面包含 12 个 Work-group 的教学例子，只使用一条 Q0，也能把工作交给多个 XCC：
+**队列名额少，会不会让大量 CU 闲着？** 要看队列提交了多少可并行的工作。沿用前面包含 16 个 Work-group 的教学例子，只使用一条 Q0，也能把工作交给多个 XCC：
 
 ```text
 Q0：每个 XCC 占一个 HQD
     │ 读取同一个 Kernel Dispatch Packet
     ▼
-12 个 Work-group 分到 6 个 XCC
+16 个 Work-group 分到 8 个 XCC
     │ 各 XCC 在本地 CU 上执行分到的组
     ▼
 一条队列可以让多个 CU 获得工作
 ```
 
-这个例子只说明工作如何分散到多个 CU，12 个组不足以让整颗 MI300A 的 228 个 CU 同时执行这些组。要利用更多 CU，可以让同一次 Dispatch 包含更多独立 Work-group；实际利用率还取决于每组的资源需求、依赖和访存情况。HQD 数量限制的是同时驻留的队列数，不能直接换算成 CU 利用率。
+这个例子只说明工作如何分散到多个 CU，16 个组不足以让整颗 MI300X 的 304 个 CU 同时执行这些组。要利用更多 CU，可以让同一次 Dispatch 包含更多独立 Work-group；实际利用率还取决于每组的资源需求、依赖和访存情况。HQD 数量限制的是同时驻留的队列数，不能直接换算成 CU 利用率。
 
 > **[SOURCE]** Linux `248951ddc14d`，用户队列名额的计算依据：
 >
@@ -3144,7 +3141,7 @@ Ring 的 GPU 地址 0x10000000
 
 各份 HQD 的配置不完全相同。Ring 地址、容量等共同配置让各 XCC 找到同一条 Q0；逻辑 XCC 编号、读进度更新控制等配置则区分各自的分工。每个 XCC 使用自己的一组 HQD 寄存器。
 
-**[DESIGN]** 沿用 MI300A 的 6 个 XCC 同属一个节点、共同处理 Q0 的例子。下面只画 XCC 0 和 XCC 1，假设 XCC 0 是驱动标记的 Master XCC（主 XCC）；其余四个 XCC 也指向同一个 Ring。
+**[DESIGN]** 沿用 MI300X 的 8 个 XCC 同属一个节点、共同处理 Q0 的例子。下面只画 XCC 0 和 XCC 1，假设 XCC 0 是驱动标记的 Master XCC（主 XCC）；其余六个 XCC 也指向同一个 Ring。
 
 ```text
 XCC 0 中 Q0 的 HQD                  XCC 1 中 Q0 的 HQD
@@ -3164,25 +3161,27 @@ XCC 0 中 Q0 的 HQD                  XCC 1 中 Q0 的 HQD
 
 > **[SOURCE]** Linux `248951ddc14d`，[`kfd_mqd_manager_v9.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 279～293 行从 Queue 属性填写 Ring 基址、容量、进度地址和 Doorbell，第 324～330 行为 AQL 设置 `NO_UPDATE_RPTR`；第 740～743 行为各 XCC 使用同一份 Queue 属性初始化 MQD，第 753～769 行设置各自的保存区地址和逻辑 XCC 编号，第 771～779 行只为 Master XCC 清除 `NO_UPDATE_RPTR`。
 
-再看 Packet 0。假设它描述一次包含 12 个 Work-group 的 Kernel，各 XCC 都读取这个 Packet，再分别启动自己负责的 Work-group：
+再看 Packet 0。假设它描述一次包含 16 个 Work-group 的 Kernel，各 XCC 都读取这个 Packet，再分别启动自己负责的 Work-group：
 
 ```text
-Packet 0：执行这个 Kernel，共 12 个 Work-group
-   ├─ XCC 0：读取 Packet 0，执行组 0、6
-   ├─ XCC 1：读取 Packet 0，执行组 1、7
-   ├─ XCC 2：读取 Packet 0，执行组 2、8
-   ├─ XCC 3：读取 Packet 0，执行组 3、9
-   ├─ XCC 4：读取 Packet 0，执行组 4、10
-   └─ XCC 5：读取 Packet 0，执行组 5、11
+Packet 0：执行这个 Kernel，共 16 个 Work-group
+   ├─ XCC 0：读取 Packet 0，执行组 0、8
+   ├─ XCC 1：读取 Packet 0，执行组 1、9
+   ├─ XCC 2：读取 Packet 0，执行组 2、10
+   ├─ XCC 3：读取 Packet 0，执行组 3、11
+   ├─ XCC 4：读取 Packet 0，执行组 4、12
+   ├─ XCC 5：读取 Packet 0，执行组 5、13
+   ├─ XCC 6：读取 Packet 0，执行组 6、14
+   └─ XCC 7：读取 Packet 0，执行组 7、15
 ```
 
 读取 Packet 是取得任务描述，不会把它从 Ring 中拿走。**各 XCC 读取同一份描述，分别执行其中一部分工作。** 图中的组号只示意一种分配结果，不规定组 0 必须由物理 XCC 0 执行，也不规定完成顺序。全文的 `vector_add` 案例仍使用原来的 4 个 Work-group。
 
-各 XCC 的命令引擎在处理 Packet 的过程中还会相互同步。MI300A 的 Infinity Fabric 为此提供高优先级通信通道。例如，发出整个 Kernel 的完成通知之前，需要确认各 XCC 的工作都已完成，并满足写入可见性要求：
+各 XCC 的命令引擎在处理 Packet 的过程中还会相互同步。本例通过封装内互连协调各 XCC 的完成进度。例如，发出整个 Kernel 的完成通知之前，需要确认各 XCC 的工作都已完成，并满足写入可见性要求：
 
 ```text
 各 XCC 执行自己负责的 Work-group
-    │ 通过 Infinity Fabric 的高优先级通道通信、同步
+    │ 通过封装内互连协调完成进度
     ▼
 各 XCC 确认本次 Dispatch 的 Wave 已完成，写入已满足可见性要求
     │
@@ -3190,7 +3189,7 @@ Packet 0：执行这个 Kernel，共 12 个 Work-group
 一个指定的 XCC 发出整个 Kernel 的完成通知
 ```
 
-> **[SPEC]** AMD 作者论文 *Realizing the AMD Exascale Heterogeneous Processor Vision*，发表于 **ISCA 2024 Industry Track**，§VI-A“Unified Multi-chiplet Accelerator”，图 13。可直接阅读 [本地英文版第 9 页](./isca2024_exascale.pdf#page=9)，或 [中文译文第 17 页的过程说明](./isca2024_exascale_中文全译.pdf#page=17)和 [第 18 页的图 13](./isca2024_exascale_中文全译.pdf#page=18)。该节说明共同取包、分担 Work-group 和跨 XCD 同步：各 XCD 确认 Wave 完成、写入达到相应一致性作用域后，才由指定 XCD 发出完成信号。该段以 MI300A 为对象，本文沿用一个 XCD 对应一个 XCC 的关系说明。
+> **[SPEC]** 本地 [ISCA 2024 论文 §VII，第 11 页](./isca2024_exascale.pdf#page=11)确认 MI300X 复用 XCD、IOD 组件；结合 [§VI-A、图 13，第 9 页](./isca2024_exascale.pdf#page=9)说明这些组件共同取包、分担 Work-group 和协调完成的关系。本节只采用多 XCD 计算部分的机制。具体消息格式和握手时序未在论文中展开。
 
 对外读进度和 Kernel 完成通知仍是两件事：读进度用于管理 Ring 槽位的复用，Completion Signal 表示任务完成。本例中，CPU 发布 Packet 并更新写进度，GPU 报告读进度；Master XCC 对读进度的更新权限，不表示它负责修改 CPU 的写索引。两种进度与任务完成的关系在第 5～7 章继续展开。
 
@@ -3202,7 +3201,7 @@ Packet 0：执行这个 Kernel，共 12 个 Work-group
 
 如果 Q0 是 A 在当前节点的第一条 Queue，DQM 先分配 VMID、配置 A 的页表根。随后，DQM 为 Q0 预留 HQD 槽位并分配 Doorbell，再分配 MQD，把 Ring 属性和刚取得的资源信息填进去。预留 HQD 时，驱动先记下槽位编号，后面的装载才会把配置写入这组寄存器。
 
-**[DESIGN]** 假设 Q0 允许活动、驱动调度已运行，各步均成功。沿用第 3.0 节的教学配置：MI300A 的 6 个 XCC 同属一个 KFD 节点，DQM 为 Q0 预留了 MEC 1 / Pipe 1 / HQD 3。
+**[DESIGN]** 假设 Q0 允许活动、驱动调度已运行，各步均成功。沿用第 3.0 节的教学配置：MI300X 的 8 个 XCC 同属一个 KFD 节点，DQM 为 Q0 预留了 MEC 1 / Pipe 1 / HQD 3。
 
 驱动先选中 XCC 0 的这组 HQD 寄存器，从 Q0 对应的 MQD 读取配置字段并写入。例如，把 Ring 基址的编码值写入 `CP_HQD_PQ_BASE`，把 VMID 写入 `CP_HQD_VMID`。处理好 Doorbell 和写进度后，驱动将 `CP_HQD_ACTIVE` 的 `ACTIVE` 位设为 `1`，激活这份配置。
 
@@ -3215,10 +3214,12 @@ CPU 上的 KFD 驱动
   ├─ Q0 的 XCC 2 MQD → XCC 2 / MEC 1 / Pipe 1 / HQD 3 → 激活
   ├─ Q0 的 XCC 3 MQD → XCC 3 / MEC 1 / Pipe 1 / HQD 3 → 激活
   ├─ Q0 的 XCC 4 MQD → XCC 4 / MEC 1 / Pipe 1 / HQD 3 → 激活
-  └─ Q0 的 XCC 5 MQD → XCC 5 / MEC 1 / Pipe 1 / HQD 3 → 激活
+  ├─ Q0 的 XCC 5 MQD → XCC 5 / MEC 1 / Pipe 1 / HQD 3 → 激活
+  ├─ Q0 的 XCC 6 MQD → XCC 6 / MEC 1 / Pipe 1 / HQD 3 → 激活
+  └─ Q0 的 XCC 7 MQD → XCC 7 / MEC 1 / Pipe 1 / HQD 3 → 激活
 ```
 
-图中的六个 `HQD 3` 是六组独立的寄存器，分别保存 Q0 在各 XCC 上的配置。Q0 仍使用同一个 AQL Ring，各 XCC 按第 3.0.2 节的方式分担 Work-group。驱动实际遍历当前节点的 XCC，六次装载来自这里的教学假设。
+图中的八个 `HQD 3` 是八组独立的寄存器，分别保存 Q0 在各 XCC 上的配置。Q0 仍使用同一个 AQL Ring，各 XCC 按第 3.0.2 节的方式分担 Work-group。驱动实际遍历当前节点的 XCC，八次装载来自这里的教学配置。
 
 装载成功后，CP/MEC 已有读取 Q0 所需的配置。如果 Ring 还是空的，Q0 此时还没有可执行的任务；应用发布 `vector_add` 的 Packet 并通知 Doorbell 后，GPU 才能处理这次提交。`ACTIVE=1` 表示队列配置已激活，Kernel 的执行与完成要看后续 Packet 的处理进度。
 
@@ -3315,6 +3316,8 @@ kgd_gfx_v9_4_3_hqd_load()    选择该 XCC 的槽位、写 HQD 寄存器
 
 **HWS 下，KFD 准备 MQD，CP 侧调度固件决定 Q0 何时驻留，并把配置装入 HQD。** HQD 中仍然保存本节开头列出的 Ring 地址与容量、读写进度、Doorbell、VMID 和激活状态；变化的是选择和装载这些寄存器的执行者。
 
+为了让固件安排 Q0，KFD 要发送进程和队列的控制命令。**PM4 是驱动交给 GPU 命令处理器的一套命令包格式和执行约定。** 一个控制包先给出操作种类和后续参数的长度，再给出该操作需要的参数。这里的 KFD 用 PM4 包描述要调度的进程和 Queue；Q0 的 AQL Ring 则保存应用提交的 Kernel Dispatch Packet。04 的 [§5.2](<./04_AMD GPU MMU 与地址翻译.md#52-驱动选择失效路径先按-pasid必要时回退到-vmid>)会用 KIQ 实例展开 PM4 包头、运行时提交和完成确认。
+
 创建 Q0 时，KFD 先准备 Doorbell、MQD 等资源，并把 Q0 加入自己管理的队列列表。Q0 满足活动条件后，KFD 将它纳入**运行列表（runlist）**。runlist 是放在 GPU 可读内存中的进程与队列清单，由 PM4 控制包组成，用于告诉固件哪些 Queue 要参与调度。
 
 固件既需要知道 Q0 属于谁，也需要找到 Q0 的配置。KFD 用 `MAP_PROCESS` 控制包提供进程 A 的 PASID、GPU 页表根等信息，再用 `MAP_QUEUES` 提供 Q0 的 MQD 地址、写进度地址和 Doorbell offset。Q0 的 Kernel 任务继续保存在自己的 AQL Ring 中。
@@ -3337,7 +3340,7 @@ CP/MEC 依据 HQD 读取 Q0 的 AQL Ring，处理可执行的 Packet
 
 **KFD 提交 runlist 后，Q0 何时得到 HQD 由固件安排。** 装载成功后，Q0 仍按第 3.0 节的方式在所属节点各 XCC 上占用 HQD，各 XCC 分担同一次 Dispatch 的 Work-group。应用后续提交 Kernel 时，继续写 Q0 的 AQL Ring 和 Doorbell。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_device_queue_manager.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c) 第 2151～2199 行准备资源、登记队列并按活动条件进入调度路径；[`kfd_packet_manager.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager.c) 第 182～243 行构造进程与活动 Queue 的清单，第 359～399 行通过特权 Queue 提交指向 runlist 的控制包。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_device_queue_manager.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c) 第 2151～2199 行准备资源、登记队列并按活动条件进入调度路径；[`kfd_packet_manager.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager.c) 第 182～243 行构造进程与活动 Queue 的清单，第 359～399 行通过特权 Queue 提交指向 runlist 的控制包。[`kfd_pm4_headers_ai.h`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_pm4_headers_ai.h) 第 30～42 行定义 Type-3 包头中的类型、操作码和长度字段；[`kfd_packet_manager_v9.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager_v9.c) 第 101～110 行实际填入 `MAP_PROCESS` 的包头与 PASID。
 
 HWS 还可以让多条 Queue 轮流使用有限的驻留名额。在第 3.0.3 节的默认资源预留下，一个节点有 24 条用户计算队列的驻留名额。允许超额订阅且满足软件资源限制时，可以创建更多待调度 Queue；暂时没有名额的 Queue 保留 Ring、MQD 和待处理 Packet，等待固件安排。
 

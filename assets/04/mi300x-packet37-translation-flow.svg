@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1140" height="750" viewBox="0 0 1140 750" role="img" aria-labelledby="title desc">
+  <title id="title">Packet 37 的地址翻译与读取流程</title>
+  <desc id="desc">CP/MEC 请求读取 GPUVA 0x1000_0940，VMID 为 5。根据 VMID 选中进程配置，查询翻译缓存。缓存没有可用结果时，Page Walker 从根页表开始逐级读取。取得允许读的翻译结果后，经 PCIe 和 Host IOMMU 读取主机 RAM 中的 Ring，内容返回 CP/MEC。这是逻辑流程，不表示物理布局。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#3b5870"/></marker>
+    <style>
+      text { font-family: 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif; fill: #183449; }
+      .label { font-size: 26px; font-weight: 700; }
+      .detail { font-size: 23px; }
+      .edge-label { font-size: 20px; fill: #3b5870; }
+      .arrow { fill: none; stroke: #3b5870; stroke-width: 3; marker-end: url(#arrow); }
+      .box { stroke-width: 2; rx: 14; }
+    </style>
+  </defs>
+  <rect width="1140" height="750" fill="#fff"/>
+  <rect class="box" x="40" y="20" width="620" height="90" fill="#f4f6f8" stroke="#becbd5"/>
+  <text class="label" x="350" y="56" text-anchor="middle">CP/MEC：我要读取 Packet 37</text>
+  <text class="detail" x="350" y="89" text-anchor="middle">GPUVA = 0x1000_0940，VMID = 5</text>
+  <path class="arrow" d="M350 110 V150"/>
+
+  <rect class="box" x="40" y="150" width="620" height="90" fill="#edf5ff" stroke="#7fa9d7"/>
+  <text class="label" x="350" y="186" text-anchor="middle">① 选中本进程的配置</text>
+  <text class="detail" x="350" y="218" text-anchor="middle">VMID 5 上下文：保存根页表入口</text>
+  <path class="arrow" d="M350 240 V282"/>
+
+  <rect class="box" x="40" y="282" width="620" height="90" fill="#edf5ff" stroke="#7fa9d7"/>
+  <text class="label" x="350" y="318" text-anchor="middle">② 查找已有的地址对应关系</text>
+  <text class="detail" x="350" y="350" text-anchor="middle">翻译缓存：是否已有所需的翻译结果</text>
+
+  <path class="arrow" d="M660 327 H740"/>
+  <text class="edge-label" x="700" y="302" text-anchor="middle">未命中</text>
+  <rect class="box" x="740" y="258" width="360" height="150" fill="#fff7e9" stroke="#d1a258"/>
+  <text class="label" x="920" y="295" text-anchor="middle">③ 读取页表</text>
+  <text class="detail" x="920" y="331" text-anchor="middle">Page Walker 硬件</text>
+  <text class="detail" x="920" y="368" text-anchor="middle">从根表逐级查到目标页</text>
+
+  <path class="arrow" d="M350 372 V468"/>
+  <text class="edge-label" x="370" y="427">命中可用翻译，且允许读</text>
+  <path class="arrow" d="M920 408 V468"/>
+  <text class="edge-label" x="900" y="442" text-anchor="end">查表成功，且允许读</text>
+
+  <rect class="box" x="40" y="468" width="1060" height="104" fill="#edf8f1" stroke="#83b59a"/>
+  <text class="label" x="570" y="509" text-anchor="middle">④ 用翻译得到的地址，继续读取 Ring</text>
+  <text class="detail" x="570" y="546" text-anchor="middle">PCIe → Host IOMMU → 主机 system RAM</text>
+  <path class="arrow" d="M570 572 V616"/>
+  <rect class="box" x="240" y="616" width="660" height="76" fill="#edf8f1" stroke="#83b59a"/>
+  <text class="label" x="570" y="663" text-anchor="middle">Packet 37 的内容返回 CP/MEC</text>
+  <text class="edge-label" x="570" y="731" text-anchor="middle">逻辑流程示意：本例页表在 GPU 本地 HBM，Ring 在主机 RAM</text>
+</svg>

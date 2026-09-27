@@ -11,7 +11,6 @@
 | AMD     | Advanced Micro Devices                          | AMD 公司                                                       |
 | AMDGPU  | AMD GPU Linux Kernel Driver                     | Linux 中的 AMD GPU 驱动                                        |
 | API     | Application Programming Interface               | 应用程序编程接口                                               |
-| APU     | Accelerated Processing Unit                     | CPU 与 GPU 等计算单元共享封装或内存系统的处理器形态            |
 | AQL     | Architected Queuing Language                    | HSA 定义的架构化队列语言；本文主要指命令包格式与队列协议       |
 | ASIC    | Application-Specific Integrated Circuit         | 专用集成电路；本文指具体 GPU 芯片或代际                        |
 | BO      | Buffer Object                                   | 驱动管理的一类缓冲对象                                         |
@@ -35,6 +34,7 @@
 | GEM     | Graphics Execution Manager                      | DRM 的图形内存对象管理框架                                     |
 | GFX     | Graphics                                        | AMDGPU 中图形与计算 IP 系列的代际前缀                          |
 | GPU     | Graphics Processing Unit                        | 图形处理器                                                     |
+| HBM | High Bandwidth Memory | 高带宽内存；本模型中用于 GPU 本地显存 |
 | GPUVA   | GPU Virtual Address                             | GPU 虚拟地址                                                   |
 | GPUVM   | GPU Virtual Memory                              | GPU 虚拟地址空间及其页表                                       |
 | GWS     | Global Wave Sync                                | 全局 Wave 同步                                                 |
@@ -94,7 +94,7 @@
 | XCC     | Accelerator Core Complex                        | 驱动管理的一组计算资源；MI300 中一个 XCD 对应一个 XCC          |
 | XCD     | Accelerator Complex Die                         | MI300 中包含计算单元和部分缓存的计算芯粒                       |
 
-**[BOUNDARY]** 本文 GPU 硬件基线为 **AMD Instinct MI300 / CDNA 3**。Wave、寄存器和指令语义以本地 MI300 ISA 为准；Linux、ROCr、CLR 的实现以第 0.3 节固定提交为准。当前尚未确认 MI300A 或 MI300X，涉及主机连接、内存组织和整机资源数量时只说明适用条件，不预设型号。
+**[BOUNDARY]** 本文固定采用外部 Host CPU + **AMD Instinct MI300X / CDNA 3** 的学习模型，主机内存与 GPU 本地 HBM 通过 PCIe 连接。Wave、寄存器和指令语义以本地 MI300 ISA 为准；Linux、ROCr、CLR 的实现以第 0.3 节固定提交为准。实际实验另行核对设备配置。
 
 ## 0. 文档定位与阅读主线
 
@@ -476,7 +476,7 @@ CP/MEC 命令前端也位于 GPU，但它与这些 Firmware 控制域不同。�
 
 ### 3.5 Firmware 怎样进入可工作状态
 
-**[BOUNDARY]** 下图只说明采用 PCIe 枚举的驱动初始化过程，不据此判断 MI300A/MI300X 的封装形态或 CPU 访问内存时的实际互连。
+**[BOUNDARY]** 下图说明本模型通过 PCIe 枚举 MI300X 并初始化驱动的过程；BAR 的实际地址与窗口大小由平台配置决定。
 
 在 PCIe 设备初始化示例中，供电、复位和芯片启动逻辑先让设备能够响应枚举。Linux 识别设备并绑定 AMDGPU Driver 后，Driver 再为各个目标 IP 选择、校验并装载匹配的 Firmware，执行该 IP 所需的软件和硬件初始化，最后确认对应控制域可以工作。
 
@@ -774,7 +774,7 @@ Driver 和 Runtime 需要保证这些分配在目标进程的 GPUVM 中具有有
 
 “已映射”只解决地址翻译和访问权限，不自动证明输入内容已经复制完成，也不自动保证 CPU/GPU Cache 可见性。判断一块内存能否用于当前 Dispatch 时，要分别核对后备存储、GPUVM 映射、数据准备和同步顺序，不能用其中一项代替其余三项。
 
-> **[BOUNDARY]** 数据搬运可能由 CPU Copy、SDMA、PCIe Copy Path 或统一内存迁移完成。SDMA 是独立拷贝引擎，不执行 `vector_add` Kernel。Pinned Memory 指保持驻留并允许设备访问的 Host 页面；Managed Memory 的位置与迁移由 Runtime/Driver 共同管理；MI300A 与 MI300X 的主机内存关系不同，须先确认具体型号再判断是否需要跨内存复制。本文只固定“目标 Agent 能通过有效 GPUVA 访问数据”。
+> **[BOUNDARY]** 数据搬运可能由 CPU Copy、SDMA、PCIe Copy Path 或统一内存迁移完成。SDMA 是独立拷贝引擎，不执行 `vector_add` Kernel。Pinned Memory 指保持驻留并允许设备访问的 Host 页面；Managed Memory 的位置与迁移由 Runtime/Driver 共同管理；本模型的主机 RAM 与设备 HBM 分开，是否需要复制取决于数据实际位置和目标映射。本文只固定“目标 Agent 能通过有效 GPUVA 访问数据”。
 
 ### 5.4 根据 Kernel ABI 准备 Kernarg
 
@@ -1303,7 +1303,7 @@ MI300 采用多个计算芯粒组织计算资源。这里需要区分三个名�
 - **XCC（Accelerator Core Complex）**：驱动看到的一组计算资源，包括多个 CU、缓存和相关控制资源。
 - **CU（Compute Unit）**：这组资源中负责执行 Wave 的计算单元。
 
-**在 MI300A 和 MI300X 中，一个 XCD 对应一个 XCC。** 因此，硬件架构图常用 XCD，驱动在选择计算资源或访问寄存器时常用 XCC；这里说的是同一块芯粒及其计算资源的两个观察角度。
+**在 MI300X 中，一个 XCD 对应一个 XCC。** 因此，硬件架构图常用 XCD，驱动在选择计算资源或访问寄存器时常用 XCC；这里说的是同一块芯粒及其计算资源的两个观察角度。
 
 下面把这一关系接到 CU 和 SIMD 上：
 
@@ -1326,7 +1326,7 @@ MI300 采用多个计算芯粒组织计算资源。这里需要区分三个名�
 
 > **[SOURCE]** Linux `248951ddc14d`，[`amdgpu-glossary.rst`](./2.源码/linux/Documentation/gpu/amdgpu/amdgpu-glossary.rst) 第 288～289 行将 XCC 展开为 `Accelerator Core Complex`，本文沿用该名称。[`kfd_mqd_manager_v9.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 905～930 行逐 XCC 装载队列；[`amdgpu_amdkfd_gc_9_4_3.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gc_9_4_3.c) 第 284～309 行选择目标 XCC 并写入该实例的 HQD 寄存器。
 
-> **[SPEC]** [AMD SMI 27.0.0：GPU partitioning](https://rocmdocs.amd.com/projects/amdsmi/en/latest/conceptual/partition.html#architecture-background) 的“Architecture background / Physical die types / Logical units”说明：XCD 是物理计算芯粒，XCC 是驱动看到的计算资源集合；MI300A、MI300X 均为每个 XCD 对应一个 XCC。该文使用 `Accelerated Compute Core` 这一展开方式，本文的英文名称采用上面的固定 Linux 术语表。
+> **[SPEC]** [AMD SMI 27.0.0：GPU partitioning](https://rocmdocs.amd.com/projects/amdsmi/en/latest/conceptual/partition.html#architecture-background) 的“Architecture background / Physical die types / Logical units”说明：XCD 是物理计算芯粒，XCC 是驱动看到的计算资源集合；MI300X 的每个 XCD 对应一个 XCC。该文使用 `Accelerated Compute Core` 这一展开方式，本文的英文名称采用上面的固定 Linux 术语表。
 
 > **[SOURCE]** Linux `248951ddc14d`，[`gfx_v9_4_3.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c) 第 30、5041 行使用 `vega10_enum.h` 中的 `NUM_SIMD_PER_CU` 填写 MI300 路径的 CU 信息；[`vega10_enum.h`](./2.源码/linux/drivers/gpu/drm/amd/include/vega10_enum.h) 第 1139～1141 行将该常量定义为 4。这里核对的是 MI300 实际使用的字段，不能因头文件名含 Vega10 就把整个旧架构套到 MI300。
 
@@ -1336,7 +1336,7 @@ MI300 采用多个计算芯粒组织计算资源。这里需要区分三个名�
 
 > **[SPEC]** [MI300 / CDNA 3 ISA](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf)（封面日期 2025-08-05）§9.1.10.2，原文第 74～75 页，对 `TG_SPLIT` 条件下的缓存行为单独作出说明；这些条件不能混入默认案例。
 
-> **[SPEC]** [AMD CDNA 3 架构白皮书](https://www.amd.com/content/dam/amd/en/documents/instinct-tech-docs/white-papers/amd-cdna-3-white-paper.pdf)，原文第 5～6 页，图 3～4，说明 XCD、CU 以及 CU 内的标量、向量、矩阵、访存和 LDS 资源。本文只采用 MI300 系列共有的层级，不预设 MI300A/MI300X 的整机数量。
+> **[SPEC]** [AMD CDNA 3 架构白皮书](https://www.amd.com/content/dam/amd/en/documents/instinct-tech-docs/white-papers/amd-cdna-3-white-paper.pdf)，原文第 5～6 页，图 3～4，说明 XCD、CU 以及 CU 内的标量、向量、矩阵、访存和 LDS 资源。本文采用 MI300X 的 XCD 内部层级，整卡含 8 个 XCD。
 
 ### 8.5 Work-group 怎样变成多个 Wave
 

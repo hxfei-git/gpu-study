@@ -2,88 +2,89 @@
 
 ## 缩写表
 
-| 缩写                  | 英文全称                                                   | 中文含义                                     |
-| --------------------- | ---------------------------------------------------------- | -------------------------------------------- |
-| ABI                   | Application Binary Interface                               | 应用程序二进制接口                           |
-| AF                    | Access Flag                                                | 访问标志                                     |
-| AMDGPU                | AMD GPU Linux Kernel Driver                                | AMD GPU Linux 内核驱动                       |
-| AP                    | Access Permission                                          | 访问权限                                     |
-| API                   | Application Programming Interface                          | 应用程序编程接口                             |
-| ARM / ARM64           | Arm Architecture / Arm 64-bit Architecture                 | Arm 架构 / 64 位 Arm 架构                    |
-| ASID                  | Address Space Identifier                                   | 地址空间标识符                               |
-| AttrIndx              | Attribute Index                                            | 内存属性索引                                 |
-| BADDR                 | Base Address                                               | 基地址                                       |
-| CDNA | Compute DNA | AMD 面向数据中心计算的 GPU 架构系列；本文 GPU 参考架构为 CDNA 3 |
-| CLONE_VM              | Clone Virtual Memory flag                                  | 创建任务时共享虚拟地址空间的标志             |
-| COW                   | Copy-on-Write                                              | 写时复制                                     |
-| CPU                   | Central Processing Unit                                    | 中央处理器                                   |
-| DMA                   | Direct Memory Access                                       | 直接内存访问                                 |
-| DSB                   | Data Synchronization Barrier                               | 数据同步屏障                                 |
-| EL0 / EL1             | Exception Level 0 / Exception Level 1                      | 异常级别 0 / 异常级别 1                      |
-| ELR_EL1               | Exception Link Register at Exception Level 1               | 异常级别 1 异常链接寄存器                    |
-| ERET                  | Exception Return                                           | 异常返回指令                                 |
-| GEM                   | Graphics Execution Manager                                 | 图形执行管理器                               |
-| GFP                   | Get Free Pages                                             | Linux 内存分配行为标志                       |
-| GPU                   | Graphics Processing Unit                                   | 图形处理器                                   |
-| GPUVM | GPU Virtual Memory | GPU 虚拟地址空间及其页表 |
-| HMM                   | Heterogeneous Memory Management                            | 异构内存管理                                 |
-| IOMMU                 | Input/Output Memory Management Unit                        | 输入/输出内存管理单元                        |
-| IOVA                  | Input/Output Virtual Address                               | 输入/输出虚拟地址；设备使用的一类 DMA 地址   |
-| IPI                   | Inter-Processor Interrupt                                  | 处理器间中断                                 |
-| IRQ                   | Interrupt Request                                          | 中断请求                                     |
-| ISA | Instruction Set Architecture | 指令集架构 |
-| ISB                   | Instruction Synchronization Barrier                        | 指令同步屏障                                 |
-| KiB / MiB / GiB       | Kibibyte / Mebibyte / Gibibyte                             | 二进制千字节 / 兆字节 / 吉字节               |
-| L0～L3                | Level 0 through Level 3                                    | 第 0 级到第 3 级页表                         |
-| LR                    | Link Register                                              | 链接寄存器                                   |
-| LRU                   | Least Recently Used                                        | 最近最少使用；Linux 页面回收使用的链表类别   |
-| MAIR_EL1              | Memory Attribute Indirection Register at Exception Level 1 | 异常级别 1 内存属性间接寄存器                |
-| MM                    | Memory Management                                          | 内存管理；`mm_struct` 表示地址空间管理对象 |
-| MMIO                  | Memory-Mapped Input/Output                                 | 内存映射输入/输出                            |
-| MMU                   | Memory Management Unit                                     | 内存管理单元                                 |
-| MPU                   | Memory Protection Unit                                     | 内存保护单元                                 |
-| nG                    | non-Global                                                 | 非全局映射标志                               |
-| NS                    | Non-secure                                                 | 非安全属性                                   |
-| PA                    | Physical Address                                           | 物理地址                                     |
-| PAN                   | Privileged Access Never                                    | 特权访问禁止                                 |
-| PC                    | Program Counter                                            | 程序计数器                                   |
-| PFN                   | Page Frame Number                                          | 物理页框编号                                 |
-| PGD                   | Page Global Directory                                      | 页全局目录                                   |
-| PID / TGID            | Process Identifier / Thread Group Identifier               | 任务标识符 / 线程组标识符                    |
-| PMD                   | Page Middle Directory                                      | 页中间目录                                   |
-| PSTATE                | Process State                                              | 处理器状态                                   |
-| pt_regs               | Linux structure name; regs means Registers                 | Linux 保存异常现场的寄存器结构体             |
-| PTE                   | Page Table Entry                                           | 页表项                                       |
-| PUD                   | Page Upper Directory                                       | 页上级目录                                   |
-| PXN                   | Privileged Execute Never                                   | 特权级禁止执行                               |
-| RAM                   | Random Access Memory                                       | 随机存取存储器；本章主要指系统物理内存       |
-| RET                   | Return                                                     | 函数返回指令                                 |
-| rmap                  | Reverse Mapping                                            | 反向映射                                     |
-| RSS                   | Resident Set Size                                          | 驻留集大小                                   |
-| RTOS                  | Real-Time Operating System                                 | 实时操作系统                                 |
-| RW                    | Read-Write                                                 | 读写                                         |
-| SG                    | Scatter-Gather                                             | 分散—聚集；用条目列表描述多段内存           |
-| SH                    | Shareability                                               | 可共享属性                                   |
-| SIGSEGV               | Segmentation Violation Signal                              | 段错误信号                                   |
-| SP                    | Stack Pointer                                              | 栈指针                                       |
-| SP_EL0 / SP_EL1       | Stack Pointer at Exception Level 0 / 1                     | 异常级别 0 / 1 栈指针寄存器                  |
-| SPSR_EL1              | Saved Program Status Register at Exception Level 1         | 异常级别 1 保存程序状态寄存器                |
-| SVM                   | Shared Virtual Memory                                      | 共享虚拟内存                                 |
-| T0SZ                  | TTBR0 Address Space Size Field                             | TTBR0 地址空间大小字段                       |
-| TCR_EL1               | Translation Control Register at Exception Level 1          | 异常级别 1 转换控制寄存器                    |
-| TG0                   | Translation Granule for TTBR0                              | TTBR0 的转换粒度字段                         |
-| TLB                   | Translation Lookaside Buffer                               | 地址转换后备缓冲器（快表）                   |
-| TLBI                  | Translation Lookaside Buffer Invalidate                    | TLB 无效化操作                               |
-| TTBR0_EL1 / TTBR1_EL1 | Translation Table Base Register 0 / 1 at Exception Level 1 | 异常级别 1 转换表基址寄存器 0 / 1            |
-| TTM                   | Translation Table Maps                                     | 转换表映射内存管理器                         |
-| UXN                   | Unprivileged Execute Never                                 | 非特权级禁止执行                             |
-| VA                    | Virtual Address                                            | 虚拟地址                                     |
-| VM                    | Virtual Memory                                             | 虚拟内存                                     |
-| VMA                   | Virtual Memory Area                                        | 虚拟内存区域                                 |
-| VPN                   | Virtual Page Number                                        | 虚拟页号                                     |
-| VRAM                  | Video Random-Access Memory                                 | 显存                                         |
+| 缩写                  | 英文全称                                                   | 中文含义                                                        |
+| --------------------- | ---------------------------------------------------------- | --------------------------------------------------------------- |
+| ABI                   | Application Binary Interface                               | 应用程序二进制接口                                              |
+| AF                    | Access Flag                                                | 访问标志                                                        |
+| AMDGPU                | AMD GPU Linux Kernel Driver                                | AMD GPU Linux 内核驱动                                          |
+| AP                    | Access Permission                                          | 访问权限                                                        |
+| API                   | Application Programming Interface                          | 应用程序编程接口                                                |
+| ARM / ARM64           | Arm Architecture / Arm 64-bit Architecture                 | Arm 架构 / 64 位 Arm 架构                                       |
+| ASID                  | Address Space Identifier                                   | 地址空间标识符                                                  |
+| AttrIndx              | Attribute Index                                            | 内存属性索引                                                    |
+| BADDR                 | Base Address                                               | 基地址                                                          |
+| CDNA                  | Compute DNA                                                | AMD 面向数据中心计算的 GPU 架构系列；本文 GPU 参考架构为 CDNA 3 |
+| CLONE_VM              | Clone Virtual Memory flag                                  | 创建任务时共享虚拟地址空间的标志                                |
+| COW                   | Copy-on-Write                                              | 写时复制                                                        |
+| CPU                   | Central Processing Unit                                    | 中央处理器                                                      |
+| DMA                   | Direct Memory Access                                       | 直接内存访问                                                    |
+| DSB                   | Data Synchronization Barrier                               | 数据同步屏障                                                    |
+| EL0 / EL1             | Exception Level 0 / Exception Level 1                      | 异常级别 0 / 异常级别 1                                         |
+| ELR_EL1               | Exception Link Register at Exception Level 1               | 异常级别 1 异常链接寄存器                                       |
+| ERET                  | Exception Return                                           | 异常返回指令                                                    |
+| GEM                   | Graphics Execution Manager                                 | 图形执行管理器                                                  |
+| GFP                   | Get Free Pages                                             | Linux 内存分配行为标志                                          |
+| GPU                   | Graphics Processing Unit                                   | 图形处理器                                                      |
+| HBM                   | High Bandwidth Memory                                      | 高带宽内存；本模型中用于 GPU 本地显存                           |
+| GPUVM                 | GPU Virtual Memory                                         | GPU 虚拟地址空间及其页表                                        |
+| HMM                   | Heterogeneous Memory Management                            | 异构内存管理                                                    |
+| IOMMU                 | Input/Output Memory Management Unit                        | 输入/输出内存管理单元                                           |
+| IOVA                  | Input/Output Virtual Address                               | 输入/输出虚拟地址；设备使用的一类 DMA 地址                      |
+| IPI                   | Inter-Processor Interrupt                                  | 处理器间中断                                                    |
+| IRQ                   | Interrupt Request                                          | 中断请求                                                        |
+| ISA                   | Instruction Set Architecture                               | 指令集架构                                                      |
+| ISB                   | Instruction Synchronization Barrier                        | 指令同步屏障                                                    |
+| KiB / MiB / GiB       | Kibibyte / Mebibyte / Gibibyte                             | 二进制千字节 / 兆字节 / 吉字节                                  |
+| L0～L3                | Level 0 through Level 3                                    | 第 0 级到第 3 级页表                                            |
+| LR                    | Link Register                                              | 链接寄存器                                                      |
+| LRU                   | Least Recently Used                                        | 最近最少使用；Linux 页面回收使用的链表类别                      |
+| MAIR_EL1              | Memory Attribute Indirection Register at Exception Level 1 | 异常级别 1 内存属性间接寄存器                                   |
+| MM                    | Memory Management                                          | 内存管理；`mm_struct` 表示地址空间管理对象                    |
+| MMIO                  | Memory-Mapped Input/Output                                 | 内存映射输入/输出                                               |
+| MMU                   | Memory Management Unit                                     | 内存管理单元                                                    |
+| MPU                   | Memory Protection Unit                                     | 内存保护单元                                                    |
+| nG                    | non-Global                                                 | 非全局映射标志                                                  |
+| NS                    | Non-secure                                                 | 非安全属性                                                      |
+| PA                    | Physical Address                                           | 物理地址                                                        |
+| PAN                   | Privileged Access Never                                    | 特权访问禁止                                                    |
+| PC                    | Program Counter                                            | 程序计数器                                                      |
+| PFN                   | Page Frame Number                                          | 物理页框编号                                                    |
+| PGD                   | Page Global Directory                                      | 页全局目录                                                      |
+| PID / TGID            | Process Identifier / Thread Group Identifier               | 任务标识符 / 线程组标识符                                       |
+| PMD                   | Page Middle Directory                                      | 页中间目录                                                      |
+| PSTATE                | Process State                                              | 处理器状态                                                      |
+| pt_regs               | Linux structure name; regs means Registers                 | Linux 保存异常现场的寄存器结构体                                |
+| PTE                   | Page Table Entry                                           | 页表项                                                          |
+| PUD                   | Page Upper Directory                                       | 页上级目录                                                      |
+| PXN                   | Privileged Execute Never                                   | 特权级禁止执行                                                  |
+| RAM                   | Random Access Memory                                       | 随机存取存储器；本章主要指系统物理内存                          |
+| RET                   | Return                                                     | 函数返回指令                                                    |
+| rmap                  | Reverse Mapping                                            | 反向映射                                                        |
+| RSS                   | Resident Set Size                                          | 驻留集大小                                                      |
+| RTOS                  | Real-Time Operating System                                 | 实时操作系统                                                    |
+| RW                    | Read-Write                                                 | 读写                                                            |
+| SG                    | Scatter-Gather                                             | 分散—聚集；用条目列表描述多段内存                              |
+| SH                    | Shareability                                               | 可共享属性                                                      |
+| SIGSEGV               | Segmentation Violation Signal                              | 段错误信号                                                      |
+| SP                    | Stack Pointer                                              | 栈指针                                                          |
+| SP_EL0 / SP_EL1       | Stack Pointer at Exception Level 0 / 1                     | 异常级别 0 / 1 栈指针寄存器                                     |
+| SPSR_EL1              | Saved Program Status Register at Exception Level 1         | 异常级别 1 保存程序状态寄存器                                   |
+| SVM                   | Shared Virtual Memory                                      | 共享虚拟内存                                                    |
+| T0SZ                  | TTBR0 Address Space Size Field                             | TTBR0 地址空间大小字段                                          |
+| TCR_EL1               | Translation Control Register at Exception Level 1          | 异常级别 1 转换控制寄存器                                       |
+| TG0                   | Translation Granule for TTBR0                              | TTBR0 的转换粒度字段                                            |
+| TLB                   | Translation Lookaside Buffer                               | 地址转换后备缓冲器（快表）                                      |
+| TLBI                  | Translation Lookaside Buffer Invalidate                    | TLB 无效化操作                                                  |
+| TTBR0_EL1 / TTBR1_EL1 | Translation Table Base Register 0 / 1 at Exception Level 1 | 异常级别 1 转换表基址寄存器 0 / 1                               |
+| TTM                   | Translation Table Maps                                     | 转换表映射内存管理器                                            |
+| UXN                   | Unprivileged Execute Never                                 | 非特权级禁止执行                                                |
+| VA                    | Virtual Address                                            | 虚拟地址                                                        |
+| VM                    | Virtual Memory                                             | 虚拟内存                                                        |
+| VMA                   | Virtual Memory Area                                        | 虚拟内存区域                                                    |
+| VPN                   | Virtual Page Number                                        | 虚拟页号                                                        |
+| VRAM                  | Video Random-Access Memory                                 | 显存                                                            |
 
-**[BOUNDARY]** 本文服务于 **AMD Instinct MI300 / CDNA 3** 的内存学习。Linux 的 `mm_struct`、VMA、PFN、`struct page` 和 DMA 接口是 CPU 侧基础；ARM64 页表、TTBR、ASID 与 TLBI 只作为 CPU 架构教学对照，不代表 MI300 的 GPU 页表或指令，也不表示已经确认实际 Host CPU 为 ARM64。MI300A/MI300X 型号、Host CPU 和内核配置须分别核实。GPU 指令与内存语义以本地 MI300 ISA（封面日期 2025-08-05）为准，CPU/GPU 映射关系继续见 [02_GPU 内存管理基础](<./02_GPU 内存管理基础.md>)。
+**[BOUNDARY]** 本文服务于外部 Host CPU + **AMD Instinct MI300X / CDNA 3** 的内存学习。Linux 的 `mm_struct`、VMA、PFN、`struct page` 和 DMA 接口是 CPU 侧基础；ARM64 页表、TTBR、ASID 与 TLBI 只作为 CPU 架构教学对照，不代表 MI300 的 GPU 页表或指令，也不表示已经确认实际 Host CPU 为 ARM64。GPU 学习模型固定为 MI300X；实际 Host CPU 和内核配置在实验时核对。GPU 指令与内存语义以本地 MI300 ISA（封面日期 2025-08-05）为准，CPU/GPU 映射关系继续见 [02_GPU 内存管理基础](<./02_GPU 内存管理基础.md>)。
 
 本文保留 ARM/MMU 例子，用于理解 Linux 地址空间、物理页和常用内存接口。更完整且带本地 Linux/AMDGPU 源码基线的扩展笔记见 [2A. Linux 内存管理基础](<./1.笔记/2A. Linux 内存管理基础：从物理内存、PFN 与 struct page 到 GEM、TTM、HMM.md>)。
 
@@ -2617,7 +2618,7 @@ PFN 500 → PFN 501 → PFN 502 → PFN 503
 
 DMA 地址不是 CPU VA。在一些简单平台中，DMA 地址可能与系统物理地址相同，但一般不能依赖这一点。存在 IOMMU 时，它可以把设备使用的 DMA 地址转换到缓冲区所在的系统物理页。
 
-GPU VA 和 CPU VA 分别属于 GPU 与 CPU 的访问上下文。驱动可以把缓冲区映射进 GPUVM；两侧地址数值可以相同，也可以不同，须分别确认映射。对于 MI300，是否共享物理内存、数据是否需要搬运，还取决于具体型号和分配方式，不能仅凭“系统内存/VRAM”两个名称判断。
+GPU VA 和 CPU VA 分别属于 GPU 与 CPU 的访问上下文。驱动可以把缓冲区映射进 GPUVM；两侧地址数值可以相同，也可以不同，须分别确认映射。本模型中主机 RAM 与 MI300X 的本地 HBM 分开。两端可以通过各自映射访问同一块主机缓冲区；若要把内容放到 HBM，则需完成相应数据传输。
 
 下面以系统内存缓冲区为例，假设 CPU、DMA 设备和 GPU 都具有一段连续地址，三种地址分别映射到同一批系统内存页：
 
@@ -3909,7 +3910,7 @@ DMA描述符
 
 `dma_alloc_coherent()` 没有单独的 DMA 方向参数；在 DMA API 中，这类分配按双向访问处理。它也不表示所有设备数据都适合放入 coherent 内存：如果缓冲区已经由其他接口创建，或者只是用于一次数据传输，下一节的 streaming DMA 映射通常更合适。
 
-> **[BOUNDARY]** `dma_alloc_coherent()` 是通用设备 DMA 接口，不代表大型 GPU 缓冲对象都由它分配。MI300 缓冲对象的后端还取决于具体型号与驱动分配路径，并会组合 SG 表、GPU VA 和放置策略；本节只建立 coherent DMA 缓冲区的通用使用模型。
+> **[BOUNDARY]** `dma_alloc_coherent()` 是通用设备 DMA 接口，不代表大型 GPU 缓冲对象都由它分配。MI300X 缓冲对象的后端还取决于驱动分配路径，并会组合 SG 表、GPU VA 和放置策略；本节只建立 coherent DMA 缓冲区的通用使用模型。
 
 > **[SOURCE]** 本地 Linux `248951ddc14d`：[include/linux/dma-mapping.h](./2.源码/linux/include/linux/dma-mapping.h) 第 614～624 行定义 `dma_alloc_coherent()` 和 `dma_free_coherent()`，第 641～646 行定义 `dma_set_mask_and_coherent()`；[kernel/dma/mapping.c](./2.源码/linux/kernel/dma/mapping.c) 第 625～696 行展示 coherent 分配和释放如何选择设备专用区域、direct DMA、IOMMU 或平台 DMA 操作；[Documentation/core-api/dma-api-howto.rst](./2.源码/linux/Documentation/core-api/dma-api-howto.rst) 第 201～235 行说明 DMA mask，第 348～390 行区分 coherent 的可见性与访问顺序，第 420～464 行说明分配、返回值和配对释放，第 511～554 行说明 DMA 方向；[Documentation/memory-barriers.txt](./2.源码/linux/Documentation/memory-barriers.txt) 第 1914～1955 行说明 `dma_rmb()`、`dma_wmb()` 与 CPU—设备共享内存的顺序保证。
 

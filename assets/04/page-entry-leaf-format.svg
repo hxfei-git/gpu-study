@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="779" viewBox="0 0 1240 779">
+<rect width="1240" height="779" fill="white"/>
+<text x="44" y="48" font-family="Microsoft YaHei, sans-serif" font-size="30" font-weight="700" text-anchor="start" fill="#18344f">图 C　最终叶子项：直接描述数据映射</text>
+<text x="44" y="84" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" text-anchor="start" fill="#18344f">适用条件：有效且已选中叶子解释；页大小还取决于层级和翻译配置。</text>
+<desc>两行位图分别显示位 63 至 32、位 31 至 0；横向每格代表一位。下方说明字段用途与当前场景的判断条件。</desc>
+<text x="44" y="112" font-family="Consolas, monospace" font-size="16" font-weight="600" text-anchor="start" fill="#18344f">[63:32]</text>
+<text x="62.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">63</text>
+<text x="98.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">62</text>
+<text x="134.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">61</text>
+<text x="170.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">60</text>
+<text x="206.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">59</text>
+<text x="242.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">58</text>
+<text x="278.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">57</text>
+<text x="314.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">56</text>
+<text x="350.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">55</text>
+<text x="386.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">54</text>
+<text x="422.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">53</text>
+<text x="458.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">52</text>
+<text x="494.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">51</text>
+<text x="530.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">50</text>
+<text x="566.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">49</text>
+<text x="602.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">48</text>
+<text x="638.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">47</text>
+<text x="674.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">46</text>
+<text x="710.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">45</text>
+<text x="746.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">44</text>
+<text x="782.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">43</text>
+<text x="818.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">42</text>
+<text x="854.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">41</text>
+<text x="890.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">40</text>
+<text x="926.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">39</text>
+<text x="962.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">38</text>
+<text x="998.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">37</text>
+<text x="1034.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">36</text>
+<text x="1070.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">35</text>
+<text x="1106.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">34</text>
+<text x="1142.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">33</text>
+<text x="1178.0" y="141" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">32</text>
+<rect x="44" y="151" width="180" height="64" fill="#edf0f4" stroke="#8fa2b5"/>
+<text x="134.0" y="190" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="600" text-anchor="middle" fill="#18344f">?</text>
+<rect x="224" y="151" width="72" height="64" fill="#e4f3e9" stroke="#8fa2b5"/>
+<text x="260.0" y="190" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="600" text-anchor="middle" fill="#18344f">M</text>
+<rect x="296" y="151" width="36" height="64" fill="#fff0cd" stroke="#8fa2b5"/>
+<text x="314.0" y="190" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="600" text-anchor="middle" fill="#18344f">TF</text>
+<rect x="332" y="151" width="36" height="64" fill="#fff0cd" stroke="#8fa2b5"/>
+<text x="350.0" y="190" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="600" text-anchor="middle" fill="#18344f">L</text>
+<rect x="368" y="151" width="36" height="64" fill="#fff0cd" stroke="#8fa2b5"/>
+<text x="386.0" y="190" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="600" text-anchor="middle" fill="#18344f">P</text>
+<rect x="404" y="151" width="72" height="64" fill="#edf0f4" stroke="#8fa2b5"/>
+<text x="440.0" y="190" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="600" text-anchor="middle" fill="#18344f">?</text>
+<rect x="476" y="151" width="36" height="64" fill="#fff0cd" stroke="#8fa2b5"/>
+<text x="494.0" y="190" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="600" text-anchor="middle" fill="#18344f">T</text>
+<rect x="512" y="151" width="108" height="64" fill="#edf0f4" stroke="#8fa2b5"/>
+<text x="566.0" y="190" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="600" text-anchor="middle" fill="#18344f">?</text>
+<rect x="620" y="151" width="576" height="64" fill="#e3efff" stroke="#8fa2b5"/>
+<text x="908.0" y="190" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="600" text-anchor="middle" fill="#18344f">数据页地址 [47:32]</text>
+<text x="44" y="249" font-family="Consolas, monospace" font-size="16" font-weight="600" text-anchor="start" fill="#18344f">[31:0]</text>
+<text x="62.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">31</text>
+<text x="98.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">30</text>
+<text x="134.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">29</text>
+<text x="170.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">28</text>
+<text x="206.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">27</text>
+<text x="242.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">26</text>
+<text x="278.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">25</text>
+<text x="314.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">24</text>
+<text x="350.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">23</text>
+<text x="386.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">22</text>
+<text x="422.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">21</text>
+<text x="458.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">20</text>
+<text x="494.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">19</text>
+<text x="530.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">18</text>
+<text x="566.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">17</text>
+<text x="602.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">16</text>
+<text x="638.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">15</text>
+<text x="674.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">14</text>
+<text x="710.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">13</text>
+<text x="746.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">12</text>
+<text x="782.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">11</text>
+<text x="818.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">10</text>
+<text x="854.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">9</text>
+<text x="890.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">8</text>
+<text x="926.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">7</text>
+<text x="962.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">6</text>
+<text x="998.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">5</text>
+<text x="1034.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">4</text>
+<text x="1070.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">3</text>
+<text x="1106.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">2</text>
+<text x="1142.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">1</text>
+<text x="1178.0" y="278" font-family="Consolas, monospace" font-size="14" font-weight="400" text-anchor="middle" fill="#516579">0</text>
+<rect x="44" y="288" width="720" height="64" fill="#e3efff" stroke="#8fa2b5"/>
+<text x="404.0" y="327" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="600" text-anchor="middle" fill="#18344f">数据页地址 [31:12]</text>
+<rect x="764" y="288" width="180" height="64" fill="#fff0cd" stroke="#8fa2b5"/>
+<text x="854.0" y="327" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="600" text-anchor="middle" fill="#18344f">FRAG</text>
+<rect x="944" y="288" width="36" height="64" fill="#e4f3e9" stroke="#8fa2b5"/>
+<text x="962.0" y="327" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="600" text-anchor="middle" fill="#18344f">W</text>
+<rect x="980" y="288" width="36" height="64" fill="#e4f3e9" stroke="#8fa2b5"/>
+<text x="998.0" y="327" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="600" text-anchor="middle" fill="#18344f">R</text>
+<rect x="1016" y="288" width="36" height="64" fill="#e4f3e9" stroke="#8fa2b5"/>
+<text x="1034.0" y="327" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="600" text-anchor="middle" fill="#18344f">X</text>
+<rect x="1052" y="288" width="36" height="64" fill="#fff0cd" stroke="#8fa2b5"/>
+<text x="1070.0" y="327" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="600" text-anchor="middle" fill="#18344f">Z</text>
+<rect x="1088" y="288" width="36" height="64" fill="#e4f3e9" stroke="#8fa2b5"/>
+<text x="1106.0" y="327" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="600" text-anchor="middle" fill="#18344f">C</text>
+<rect x="1124" y="288" width="36" height="64" fill="#e4f3e9" stroke="#8fa2b5"/>
+<text x="1142.0" y="327" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="600" text-anchor="middle" fill="#18344f">S</text>
+<rect x="1160" y="288" width="36" height="64" fill="#e4f3e9" stroke="#8fa2b5"/>
+<text x="1178.0" y="327" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="600" text-anchor="middle" fill="#18344f">V</text>
+<text x="44" y="394" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="700" text-anchor="start" fill="#18344f">字段释义</text>
+<text x="44" y="431" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" text-anchor="start" fill="#18344f">地址 [47:12]：数据页基址，低 12 位补 0。</text>
+<text x="640" y="431" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" text-anchor="start" fill="#18344f">M [58:57] = MTYPE：目标数据的内存类型。</text>
+<text x="44" y="468" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" text-anchor="start" fill="#18344f">TF [56]：本篇有效叶子为 0，不再向下查表。</text>
+<text x="640" y="468" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" text-anchor="start" fill="#18344f">P [54]：PDB1 大页为 1；本例 PDB0 / PTB 为 0。</text>
+<text x="44" y="505" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" text-anchor="start" fill="#18344f">FRAG [11:7]：连续映射的片段大小编码。</text>
+<text x="640" y="505" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" text-anchor="start" fill="#18344f">R / W [5 / 6]：READABLE / WRITEABLE。</text>
+<text x="44" y="542" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" text-anchor="start" fill="#18344f">X [4] = EXECUTABLE：驱动的可执行映射标志。</text>
+<text x="640" y="542" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" text-anchor="start" fill="#18344f">C [2] = SNOOPED：目标访问的一致性属性。</text>
+<text x="44" y="579" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" text-anchor="start" fill="#18344f">S [1] = SYSTEM：0 本地内存，1 系统内存。</text>
+<text x="640" y="579" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" text-anchor="start" fill="#18344f">V [0] = VALID：表项是否有效。</text>
+<text x="44" y="616" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" text-anchor="start" fill="#18344f">T [51] = PRT：部分驻留映射相关标志。</text>
+<text x="640" y="616" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" text-anchor="start" fill="#18344f">Z [3] = TMZ：可信内存区域相关标志。</text>
+<text x="44" y="653" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" text-anchor="start" fill="#18344f">L [55] = LOG：位宏已确认，完整作用待核实。</text>
+<text x="640" y="653" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" text-anchor="start" fill="#18344f">高层叶子需按大页大小对齐目标地址。</text>
+<line x1="44" y1="709" x2="1196" y2="709" stroke="#ccd6e1"/>
+<text x="44" y="736" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" text-anchor="start" fill="#18344f">图 C 的 [11:6] 为属性；图 A、B 的同一位区间属于下级表地址。</text>
+<text x="44" y="764" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400" text-anchor="start" fill="#516579">? 表示该场景的完整定义待核实；不代表保留位或必须写 0。</text>
+</svg>

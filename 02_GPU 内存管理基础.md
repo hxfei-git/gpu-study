@@ -98,7 +98,7 @@
 
 > 缩写表只用于查阅。正文会在概念首次出现时重新解释，不要求预先背诵。
 
-**[BOUNDARY]** 本文以 **AMD Instinct MI300 / CDNA 3** 为 GPU 硬件基线。指令与内存访问语义以本地 MI300 ISA（封面日期 2025-08-05）为准，软件实现按下列固定提交核对。MI300A/MI300X 尚未确认：system RAM、VRAM 首先表示分配和映射中的资源类别，不预设二者一定是两套独立物理内存。PCIe/BAR 示例只适用于明确标出的连接条件。
+**[BOUNDARY]** 本文固定采用外部 Host CPU + **AMD Instinct MI300X / CDNA 3** 的学习模型。主机 system RAM 与 GPU 本地 HBM 分开，通过 PCIe 连接；BAR 窗口大小与 Host IOMMU 配置按具体例子说明。指令与访存语义以本地 MI300 ISA（封面日期 2025-08-05）为准，软件实现按下列固定提交核对。
 
 ## 全文大纲
 
@@ -148,14 +148,18 @@ CPU和GPU各自获得可用地址
 
 ### 0.2 CPU 和 GPU 访问内存的总矩阵
 
-MI300 系列不能统一套用“CPU 有主机内存，GPU 有独立显存，两者都通过 PCIe 互访”的模型。具体型号尚未确认，先保留两种条件：
+本篇固定使用外部主机连接 MI300X 的模型。Host CPU 运行 Linux、驱动和应用的 CPU 端代码，主机 RAM 保存系统页面；MI300X 执行 GPU Kernel，使用自己的本地 HBM。两者通过 PCIe 连接。
 
-| 条件                 | 内存关系                                             | 本文如何使用                                                      |
-| -------------------- | ---------------------------------------------------- | ----------------------------------------------------------------- |
-| MI300X 接入外部 Host | GPU 本地 HBM 与 Host 内存分别管理；主机连接采用 PCIe | 可用下表说明 PCIe/BAR 访问，但窗口大小仍须核实                    |
-| MI300A               | CPU 与 GPU 集成并共享 HBM 内存系统                   | 按各自地址空间和映射判断访问；不能把 CPU/GPU 交接都画成 PCIe 复制 |
+```text
+Host CPU ──访问──→ 主机 RAM
+    │
+    │ PCIe：寄存器访问、提交通知及内存请求
+    ▼
+MI300X   ──访问──→ 设备本地 HBM
+    └─ 也可通过已建立的 DMA 映射访问主机 RAM
+```
 
-> **[SPEC]** [AMD CDNA 3 架构白皮书](https://www.amd.com/content/dam/amd/en/documents/instinct-tech-docs/white-papers/amd-cdna-3-white-paper.pdf)，原文第 2～4、12～14 页，区分 MI300X 的独立 GPU 组织与 MI300A 的共享 HBM 组织。这里只列型号差异，不将其中一种认定为当前机器。
+> **[SPEC]** 本地 [ISCA 2024 论文 §VII～VIII，第 11～12 页](./isca2024_exascale.pdf#page=11)给出 MI300X 的本地 HBM 与外部 PCIe 主机连接。
 
 对于采用 PCIe 连接、Host RAM 与 GPU 本地 HBM 分开的条件示例：
 
@@ -166,7 +170,7 @@ MI300 系列不能统一套用“CPU 有主机内存，GPU 有独立显存，两
 | GPU    | Host RAM           | GPUVA → GPU 页表 → DMA 地址 → 主机互连与必要的 IOMMU → RAM | 是                           |
 | GPU    | 本地 HBM           | GPUVA → GPU 页表 → 本地内存地址 → HBM                       | 否                           |
 
-GPU 页表、Host IOMMU 和互连在表中按逻辑职责列出，不表示芯片内部物理排列。MI300A 的共享内存仍需要正确的 CPU/GPU 地址映射与同步，不能从“共享 HBM”直接推导出共用页表或省略 release/acquire。
+GPU 页表、Host IOMMU 和互连在表中按访问过程列出，不表示芯片内部的物理排列。CPU 与 GPU 访问同一缓冲区时，需要各自的有效映射，并按 release/acquire 协议交接内容。
 
 GPU 发起内存访问时，执行者可以是 Shader、命令处理前端或 SDMA。SDMA 是专门搬运数据的引擎；普通 Kernel 的 load/store 不必经过 SDMA。
 
@@ -248,7 +252,7 @@ GPU侧：GPUVA ──→ GPU页表 ┘
 
 ### 1.1 数据可能放在哪里
 
-本文先区分两类内存资源。下表中的物理分离和 PCIe 访问特征用于 MI300X 式条件示例；MI300A 共享 HBM 的分配不能直接套用这张物理位置表：
+本文区分主机 RAM 和 MI300X 本地 HBM 两类内存资源，下表按实际存放位置说明它们的访问方式：
 
 | 存储       | 所在位置     | 谁访问更自然 | 典型特点                                      |
 | ---------- | ------------ | ------------ | --------------------------------------------- |
@@ -313,7 +317,7 @@ GPU 访问本地 VRAM 仍然可以从 GPUVA 开始，但最终落在 GPU 本地�
 GPUVA → GPU MMU / GPU页表 → 本地显存地址 → VRAM
 ```
 
-在第 0.2 节的 MI300X 式条件示例中，GPU 访问 Host system RAM 需要经过主机连接：
+在第 0.2 节的 MI300X 模型中，GPU 访问 Host system RAM 需要经过主机连接：
 
 ```text
 GPUVA → GPU MMU / GPU页表 → DMA地址 → PCIe → system RAM
@@ -356,10 +360,10 @@ CPU VA
 驱动需要对内存控制器FB位置附近所报告的VRAM大小作特殊处理。
 ```
 
-这组字段分别保存 CPU 可访问窗口与 GPU 视角的内存地址。PCIe/BAR 是窗口的一种来源，APU 或 CPU—GPU XGMI 路径另有处理：
+这组字段分别保存 CPU 可访问窗口与 GPU 视角的内存地址。在本篇 PCIe 模型中，CPU 窗口来自 BAR：
 
 - 第 223 行表明这些字段属于同一个 GMC 状态对象，但它们不是同一种地址。
-- 第 224～230 行定义 CPU 侧 aperture：`aper_base` 是 CPU 可访问窗口的起点，`aper_size` 是窗口长度；PCIe 路径从 BAR 取得，其他平台路径可覆盖这两个字段。CPU 后续 mmap VRAM BO 时依赖这类窗口，而不是使用 GPUVA。
+- 第 224～230 行定义 CPU 侧 aperture：`aper_base` 是 CPU 可访问窗口的起点，`aper_size` 是窗口长度；本模型从 BAR 取得这两个值。CPU 后续 mmap VRAM BO 时依赖这类窗口，而不是使用 GPUVA。
 - 第 231～233 行的 `mc_vram_size` 保存内存控制器视角下需要经过芯片特殊规则修正的显存大小；它不是 BAR 长度。
 - 第 234 行的 `visible_vram_size` 是驱动最终认定“当前具备 CPU 直访条件”的 VRAM 长度，后面还会受到 BAR、真实 VRAM 大小和模块参数的共同限制。
 
@@ -397,52 +401,22 @@ CPU VA
 1702: 	}
 1703: 	adev->gmc.aper_base = pci_resource_start(adev->pdev, 0);
 1704: 	adev->gmc.aper_size = pci_resource_len(adev->pdev, 0);
-1705:
-1706: #ifdef CONFIG_X86_64
-1707: 	/*
-1708: 	 * AMD Accelerated Processing Platform (APP) supporting GPU-HOST xgmi
-1709: 	 * interface can use VRAM through here as it appears system reserved
-1710: 	 * memory in host address space.
-1711: 	 *
-1712: 	 * For APUs, VRAM is just the stolen system memory and can be accessed
-1713: 	 * directly.
-1714: 	 *
-1715: 	 * Otherwise, use the legacy Host Data Path (HDP) through PCIe BAR.
-1716: 	 */
-1717:
-1718: 	/* check whether both host-gpu and gpu-gpu xgmi links exist */
-1719: 	if ((!amdgpu_sriov_vf(adev) &&
-1720: 		(adev->flags & AMD_IS_APU) && !amdgpu_passthrough(adev)) ||
-1721: 	    (adev->gmc.xgmi.supported &&
-1722: 	     adev->gmc.xgmi.connected_to_cpu)) {
-1723: 		adev->gmc.aper_base =
-1724: 			adev->gfxhub.funcs->get_mc_fb_offset(adev) +
-1725: 			adev->gmc.xgmi.physical_node_id *
-1726: 			adev->gmc.xgmi.node_segment_size;
-1727: 		adev->gmc.aper_size = adev->gmc.real_vram_size;
-1728: 	}
-1729:
-1730: #endif
+```
+
+这段代码处于 `gmc_v9_0_mc_init()` 初始化函数中。在本模型下，`is_app_apu` 为 false，`AMD_IS_APU` 标志未设置，`connected_to_cpu` 也为 false；因此第 1688～1690 行读取设备显存容量，第 1697～1702 行尝试调整 BAR，第 1703～1704 行读取 BAR0 的起点和长度。第 1692 行的英文调试信息意为“把 APP APU 的 mc_vram_size 设为 0”，本模型不进入该分支。
+
+接下来的第 1706～1730 行属于其他连接方式的条件处理，本模型不执行其中的覆盖动作。第 1731 行继续使用前面得到的 BAR 长度：
+
+```c
 1731: 	adev->gmc.visible_vram_size = adev->gmc.aper_size;
 ```
 
-英文注释与调试信息的相关含义：容量回调以 MiB 为单位；应用型 APU 分支把 `mc_vram_size` 设为 0。x86-64 条件块说明，CPU—GPU XGMI 或满足条件的 APU 可以通过主机地址空间直接访问相应内存，其余路径使用 PCIe BAR。源码中的 SI、APU 等注释属于公共实现的历史和平台分支，不是 MI300 全系列采用同一种内存组织的证据。
-
-这段代码主要证明 aperture 的选择顺序：
-
-- 第 1683～1695 行进入初始化并确定驱动采用的容量字段。
-- 第 1697～1704 行在非 APU、非 CPU—GPU XGMI 条件下尝试调整 BAR，再读取当前 BAR0 的起点和长度。
-- 第 1706～1730 行是关键平台分支：满足 APU 或 CPU—GPU XGMI 条件时，按节点内存布局重算 `aper_base`，并令 `aper_size = real_vram_size`。
-- 第 1731 行使用上述分支最终确定的 `aper_size` 初始化 `visible_vram_size`。因此最终 CPU 可见范围的来源可能是 BAR，也可能是平台内存映射。
-
 ```text
-读取 BAR0 → 得到初始 aper_base / aper_size
-              ↓
-符合 APU 或 CPU—GPU XGMI 条件？
-  是：用平台内存地址和 real_vram_size 覆盖 aperture
-  否：保留 BAR aperture
-              ↓
-visible_vram_size = 最终 aper_size
+尝试调整 BAR0 → 读取 BAR0 的起点和长度
+                       ↓
+               aper_base / aper_size
+                       ↓
+          visible_vram_size = aper_size
 ```
 
 > **[SOURCE]** Linux [`drivers/gpu/drm/amd/amdgpu/amdgpu_gmc.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_gmc.c) 第 225～229 行随后还可能缩小这个软件可用长度：
@@ -455,7 +429,7 @@ visible_vram_size = 最终 aper_size
 229: 		mc->visible_vram_size = mc->real_vram_size;
 ```
 
-这五行用两个软件上限收紧前面按平台分支确定的初始可见长度：
+这五行用两个软件上限收紧前面从 BAR 得到的初始可见长度：
 
 - 第 225～226 行先处理用户通过模块参数设置的 `vis_limit`。只有该限制非 0 且比当前值更小时才生效，因此它只能缩小 CPU-visible VRAM，不能凭空扩大硬件 BAR。
 - 第 228～229 行再用 `real_vram_size` 封顶，防止可见窗口长度超过真实显存容量。即使平台报告了更大的 BAR，也不能据此访问不存在的 VRAM。
@@ -524,7 +498,7 @@ visible_vram_size <= real_vram_size
 - 第 1178～1184 行在改动资源前关闭 PCI memory decoding，并拆除依赖现有 BAR 的 Doorbell 状态，避免硬件仍按旧 BAR 地址响应访问。
 - 第 1186～1188 行调用 `pci_resize_resource()` 修改资源编号 0，也就是 BAR0。最后一个参数是代际相关的资源对齐要求，说明 BAR 调整还受 ASIC 规则约束。
 
-本摘录没有展示函数后半段的错误恢复和重新初始化，因此不能仅凭第 1186 行认定调整一定成功。前面的 `gmc_v9_0_mc_init()` 会在本函数返回后重新读取 BAR0；如果随后进入 APU/XGMI 分支，还会继续覆盖 `aper_base/aper_size`。
+本摘录没有展示函数后半段的错误恢复和重新初始化，因此不能仅凭第 1186 行认定调整一定成功。前面的 `gmc_v9_0_mc_init()` 会在本函数返回后重新读取 BAR0；本篇 PCIe 条件下保留从 BAR0 取得的 `aper_base/aper_size`。
 
 `pci_resize_resource(..., 0, ...)` 中的 `0` 表示 PCI BAR0。这个函数不直接修改 `visible_vram_size`；它先调整 BAR0 资源，调用者返回后再读取新的 `pci_resource_len()`，由此更新 `aper_size` 和 `visible_vram_size`。
 
@@ -696,7 +670,7 @@ PTE 保存目标页面地址和访问属性，不保存缓冲区数据。
 
 `VALID` 表示映射有效，`SYSTEM` 表示目标是 system memory，`READABLE`、`WRITEABLE`、`EXECUTABLE` 表示访问权限。地址部分在不同目标下含义不同：
 
-**[BOUNDARY]** 下表中的 Host IOMMU 分支沿用第 0.2 节外部 Host 的 DMA 访问条件。MI300A 的共享 HBM 路径须按实际平台的地址映射确认。
+**[BOUNDARY]** 下表中的 Host IOMMU 分支说明同一 MI300X 模型下，启用主机地址翻译或使用直接 DMA 时的地址关系。
 
 | PTE 映射目标             | PTE 地址部分可怎样理解 | 后续是否经过 Host IOMMU |
 | ------------------------ | ---------------------- | ----------------------- |
@@ -5837,7 +5811,7 @@ GPU使用D0发出设备内存访问
               └─ Host IOMMU关闭：D0作为直连DMA/总线地址
               ▼
 经适用互连到达system RAM中的Ring第0页
-（外部Host的PCIe条件例见0.2；不据此推定MI300A路径）
+（沿用0.2的外部Host与MI300X经PCIe连接的模型）
               │
               ▼
 Packet数据返回CP/MEC
@@ -5849,7 +5823,7 @@ Packet数据返回CP/MEC
 - 本节源码证明活动 VMID 关联一套页表，并通过上下文寄存器取得根页表基值。
 - 1.4 说明 TLB 未命中后，硬件 Page Walker 从根页表开始读取 PDE/PTE。
 
-图只表示逻辑数据流，不展示 ASIC 内部缓存和互连模块的物理布局。Host IOMMU 的两条分支用于外部 Host 的 DMA 路径；MI300A 共享 HBM 应按实际平台地址映射理解。
+图只表示逻辑数据流，不展示 ASIC 内部缓存和互连模块的物理布局。Host IOMMU 的两条分支说明本模型中外部 Host 的 DMA 地址解释方式。
 
 如果 Ring 位于 VRAM，MAP、VMID、TLB 和 Page Walk 的处理不变。区别在叶子 PTE：它给出本地 VRAM 地址，访问随后直接进入 GPU 本地内存系统，不经过 Host IOMMU 和 PCIe。
 
@@ -6865,7 +6839,7 @@ MI300 的缓存行为需要同时看驱动生成的 PTE 属性、访存指令控
 
 > **[SOURCE]** Linux `248951ddc14d`，[`gmc_v9_0.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gmc_v9_0.c) 第 1161～1199 行。`gmc_v9_0_get_vm_pte()` 将 UAPI 类型转换为 PTE 编码；对有效且有 BO 的映射，继续调用 `gmc_v9_0_get_coherence_flags()`。
 
-MI300 对应的 GFX9.4.3 分支还会区分 APU、设备本地内存、外部 Host 内存、NUMA 归属以及显式 uncached/extended-coherent 属性。例如该版本的本地类型变量默认从 `MTYPE_RW` 开始；外部 Host 内存和 APU 内存走不同判断，不能给所有 Ring 指定一个固定 MTYPE。
+MI300X 对应的 GFX9.4.3 分支根据设备本地 HBM、外部主机页面以及显式 uncached/extended-coherent 标志选择属性。例如，本地类型变量默认从 `MTYPE_RW` 开始，本版本对外部主机内存选择 `MTYPE_UC`。最终应读取实际生成的 PTE，不能把某一次映射的属性推广到所有对象。
 
 > **[SOURCE]** Linux `248951ddc14d`，[`gmc_v9_0.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gmc_v9_0.c) 第 1101～1158 行。选择 GFX9.4.3 的一致性分支、判断本地性并填写 MTYPE/SNOOPED；第 1201～1256 行的 `gmc_v9_0_override_vm_pte_flags()` 还可能根据系统页面的 NUMA 归属作逐页调整。
 

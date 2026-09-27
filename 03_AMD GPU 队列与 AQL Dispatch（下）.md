@@ -32,6 +32,7 @@
 | DRM     | Direct Rendering Manager                        | Linux 直接渲染管理框架                                                |
 | ELF     | Executable and Linkable Format                  | 可执行与可链接格式；本文 Code Object 使用的二进制文件格式             |
 | EOP     | End of Pipe                                     | 管线末端；本文指 Queue 使用的 EOP 状态资源                            |
+| FPGA    | Field-Programmable Gate Array                  | 现场可编程门阵列；下文只用它举硬件设计示意                            |
 | FW      | Firmware                                        | 固件                                                                  |
 | GDS     | Global Data Share                               | AMD GPU 的全局数据共享资源                                            |
 | GFX     | Graphics                                        | AMDGPU 图形/计算 IP 的版本前缀；不能等同于编译器目标名                |
@@ -138,12 +139,12 @@
 | [第 8 章](#8-queue-销毁与错误处理)               | Queue 销毁与错误处理               | 生命周期、状态观测与故障判断 |
 | [第 9 章](#9-完整-dispatch-复盘与知识检索)       | Dispatch 全流程复盘与知识点检索    | 贯穿复盘           |
 
-**[BOUNDARY]** 本文硬件基线为 **AMD Instinct MI300 / CDNA 3**，Wave 使用 wave64，Queue 寄存器和回调按本地 GFX9.4.3 路径核对。MI300A/MI300X 尚未确认，内存组织、主机连接及分区只按条件说明。硬件型号不能推定部署的软件版本或调度参数。
+**[BOUNDARY]** 本文固定采用外部 Host CPU + **AMD Instinct MI300X / CDNA 3** 的学习模型，通过 PCIe 连接。Wave 使用 wave64，Queue 寄存器和回调按本地 GFX9.4.3 路径核对。多 XCC 案例固定整卡 8 个 XCC 组成一个逻辑 GPU；实际实验另行核对设备分区和软件配置。
 
 本文采用以下固定证据基线：
 
 - [MI300 / CDNA 3 ISA](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf)（封面日期 2025-08-05），执行模型重点见 §1.1、§2、§3、§4.3，原文第 4～13、19 页；
-- AMD 作者论文 [Realizing the AMD Exascale Heterogeneous Processor Vision](./isca2024_exascale.pdf)（ISCA 2024，作者版本），上篇第 3 章重点使用 §IV-B 的 XCD 结构和 §VI-A 的多 XCD 协作机制；[本地中文译文](./isca2024_exascale_中文全译.pdf)用于辅助阅读，非官方译本，页码与英文版分别标注；
+- AMD 作者论文 [Realizing the AMD Exascale Heterogeneous Processor Vision](./isca2024_exascale.pdf)（ISCA 2024，作者版本），上篇第 3 章结合 §VII 的 MI300X 组件复用说明，使用 §IV-B 的 XCD 结构和 §VI-A 的多 XCD 协作机制；[本地中文译文](./isca2024_exascale_中文全译.pdf)用于辅助阅读，非官方译本，页码与英文版分别标注；
 - HSA Platform System Architecture Specification 1.2，重点是 §2.8“User mode queuing”和 §2.9“Architected Queuing Language”；
 - Linux `248951ddc14de84de3910f9b13f51491a8cd91df`；
 - ROCr `ba56a24c6132c5d195686ae4adf969ca1222fbba`；
@@ -225,7 +226,7 @@ Q0 的 AQL Ring：一个 64 字节 Kernel Dispatch Packet
 
 `grid_size_x = 1024` 描述整个逻辑 GPU 上这次 Dispatch 的任务范围。各 XCC 分担这四组工作，每组只执行一次；应用仍只向 Ring 写一个 Packet。XCC、MEC、Pipe 和 HQD 的编号由前面建立的队列配置及后续分派机制使用，Kernel Dispatch Packet 无需携带这些编号。
 
-> **[SPEC]** AMD 作者论文 *Realizing the AMD Exascale Heterogeneous Processor Vision*（ISCA 2024，作者版本）§VI-A、图 13，[本地英文版第 9 页](./isca2024_exascale.pdf#page=9)：同一多 XCD 分区内的命令前端读取同一个 AQL Packet，分别启动其中一部分 Work-group。论文以 MI300A 为对象；这里沿用第 3.0.2、3.2 节的多 XCC 教学条件，不假定当前机器的具体型号、XCC 数量或分区。
+> **[SPEC]** 本地 [ISCA 2024 论文 §VII，第 11 页](./isca2024_exascale.pdf#page=11)确认 MI300X 复用 XCD、IOD 组件；结合 [§VI-A、图 13，第 9 页](./isca2024_exascale.pdf#page=9)说明这些组件共同取包、分担 Work-group 和协调完成的关系。本节只采用多 XCD 计算部分的机制。具体消息格式和握手时序未在论文中展开。
 
 图中只固定任务总量。四组落到哪些 XCC、哪些 CU，以及是否同时运行，由实际分派和资源条件决定，第 6 章继续展开。`completion_signal` 字段保存的也是句柄，数值 1 保存在 Signal 对象中，不能把“初值为 1”误填成“句柄等于 1”。该 Signal 表示整次 Dispatch 的完成，多 XCC 的完成协作见第 3.2 节。
 
@@ -655,7 +656,7 @@ Packet B.kernel_object = 0x7000_2000 → vector_mul Descriptor
 > - Descriptor 地址成为句柄：ROCr [`loader/executable.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/loader/executable.cpp) 第 1464～1494 行保存 `.kd` 装载地址，第 465～471 行返回句柄查询结果。
 > - CLR 取得并填写句柄：[`rockernel.cpp`](./2.源码/rocm-clr/rocclr/device/rocm/rockernel.cpp) 第 33～48 行保存 `kernelCodeHandle_`；[`rocvirtual.cpp`](./2.源码/rocm-clr/rocclr/device/rocm/rocvirtual.cpp) 第 4138～4142 行将其写入 Packet。
 
-> **[SPEC]** 编译方法见 HIP 6.2.2 的 [Kernel compilation（Kernel 编译）](https://rocm.docs.amd.com/projects/HIP/en/docs-6.2.2/reference/cpp_language_extensions.html#kernel-compilation)；MI300A、MI300X 的 `gfx942` 目标见 [AMD GPU 规格表](https://rocmdocs.amd.com/en/develop/reference/gpu-specs.html)。这不限定实际安装的软件版本。
+> **[SPEC]** 编译方法见 HIP 6.2.2 的 [Kernel compilation（Kernel 编译）](https://rocm.docs.amd.com/projects/HIP/en/docs-6.2.2/reference/cpp_language_extensions.html#kernel-compilation)；MI300X 的 `gfx942` 目标见 [AMD GPU 规格表](https://rocmdocs.amd.com/en/develop/reference/gpu-specs.html)。这不限定实际安装的软件版本。
 
 > **[SPEC]** AMDGPU ABI 的 [Symbols（符号）](https://llvm.org/docs/AMDGPUUsage.html#symbols)、[Note Records（附注记录）](https://llvm.org/docs/AMDGPUUsage.html#code-object-v3-and-above-note-records)说明文件内容；[Kernel Descriptor（内核描述符）](https://llvm.org/docs/AMDGPUUsage.html#kernel-descriptor)规定入口偏移相对于 Descriptor 基址，也可以为负。[Preloaded Kernel Arguments（预加载内核参数）](https://llvm.org/docs/AMDGPUUsage.html#preloaded-kernel-arguments)说明预加载时的入口调整，本节地址图未启用该功能。在线规范核对日期为 2026-09-09。
 
@@ -1943,33 +1944,52 @@ MI300 的 HWS/CPSCH 路径中，KFD 把 Q0 的 Doorbell offset、MQD 地址和�
 
 **在本章直接写硬件 Doorbell 的路径中，CPU 向 Q0 的 Doorbell 映射地址 D 写入数值 `37`，完成一次 MMIO 写。** `doorbell_signal` 保存的是 Signal 句柄，ROCr 根据句柄找到内部记录的地址 D。
 
-从通知到任务描述，关联链路是：**Q0 的 Doorbell → Q0 当前使用的 HQD 配置 → Q0 的 Ring → 按队列顺序处理的 Packet。** 沿用 Q0 已驻留的条件，下面只展开一个 XCC。假设 Ring 的 GPUVA 为 `0x10000000`，容量为 256 槽，前序 Packet 已处理到可以启动 37 的阶段：
+##### 5.4.2.1 Doorbell 写入触发 GPU 队列处理
+
+本例 Q0 已驻留。D 是映射到 GPU Doorbell BAR 的 CPU 地址，对应 Q0 的 Doorbell slot 3；Q0 的 HQD 已配置相应的 Doorbell offset 并启用通知。Packet 37 的内容已经写在 system RAM 中的 Q0 Ring，CPU 现在写 D。图中“内部事件”及其后续传递是帮助理解的推演：
 
 ```text
-CPU 调用 Runtime：通知 Q0 的 doorbell_signal，值为 37
+Host CPU：向 Doorbell 地址 D 写入 37（已发布的 Packet ID）
+    ↓ PCIe 写事务到达 GPU 的 Doorbell BAR
+GPU Doorbell 接收逻辑：地址命中 slot 3，写入值为 37
+    ↓ [INFERENCE] 把这次命中变成 Q0 的“有新工作”事件
+GPU 内部（推演）：通过硬件信号或固件唤醒推动 Q0 取包
     ↓
-ROCr 根据句柄找到 Q0 的 Doorbell 地址 D
-    ↓
-CPU 向地址 D 写入 64 位数值 37（MMIO 写）
-    ↓ 该 Doorbell 已通过队列配置与 Q0 关联
-硬件使用 Q0 当前的 HQD 配置
-    保存 Ring 基址、容量、队列进度和地址空间等信息
-    ↓ CP/MEC 根据配置定位 Ring
-Q0 的 Ring：GPUVA = 0x10000000，容量 = 256 个 Packet
+CP/MEC：按 Q0 HQD 中的 Ring 配置读取可处理的 Packet
+```
+
+Doorbell BAR 后面接的是 GPU 的设备接收电路。PCIe 写事务到达时，电路就能看到“slot 3 被写入 37”。接下来可以把这次命中理解成“Q0 有新工作”的内部事件；不必等 MEC 反复读取 system RAM 中的某个 Doorbell 变量。
+
+**[DESIGN]** 若用 FPGA 实现，可让地址比较电路在 slot 3 被写时置位 `Q0_pending`，取包状态机看到该位便读取 Ring。这里的 `Q0_pending` 是教学信号名，不是 MI300X 已公开的寄存器或信号。
+
+**[INFERENCE]** 可以用两种实现来理解 GPU 内部的“通知”：门铃命中后，硬件状态机直接启动取包；或者门铃逻辑把事件交给 MEC 固件，由内部中断或唤醒事件安排取包。
+
+**[BOUNDARY]** 固定 GFX9.4.3 寄存器头文件定义了 `DOORBELL_HIT` 字段，可把“门铃命中”当作理解线索；字段定义没有给出 MI300X 从 Doorbell 到 MEC 的内部信号路径，不能据此确认是否存在 MEC 中断处理程序。
+
+##### 5.4.2.2 根据 HQD 定位 Packet 37
+
+Doorbell 的值 `37` 告诉 Q0 提交进度；Ring 基址、容量和地址空间来自 Q0 的 HQD 配置。下面只展开一个 XCC，假设 Ring 的 GPUVA 为 `0x1000_0000`，容量为 256 槽，前序 Packet 已处理到可以启动 37 的阶段：
+
+```text
+Q0 的 HQD：Ring GPUVA = 0x1000_0000，容量 = 256 个 Packet
+    ↓ CP/MEC 根据配置定位 Q0 Ring
+Q0 Ring：保存已发布的 Packet
     ↓ 按队列处理进度，本例下一份是 Packet 37
 slot = 37 % 256 = 37
-Packet GPUVA = 0x10000000 + 37 × 64 = 0x10000940
+Packet GPUVA = 0x1000_0000 + 37 × 64 = 0x1000_0940
     ↓ 通过 Q0 所用的 GPU 地址空间访问该槽位
 读取 Packet 37 的任务描述
     kernel_object   → Kernel 执行对象
     kernarg_address → 本次参数块
 ```
 
-这里“通过 Doorbell 找到 Q0”指硬件使用已经建立的 Doorbell 与队列上下文关联，随后依据 HQD 找 Ring；普通通知过程无需再让 CPU 上的 KFD 按 Queue ID 查找软件对象。上图的 Packet 地址是 GPUVA，实际读取仍使用对应的 GPU 地址翻译通路。
+上图的 Packet 地址是 GPUVA，实际读取仍使用 Q0 的 GPU 地址翻译通路。Doorbell 写入不携带 Ring 地址，也不需要 CPU 上的 KFD 再按 Queue ID 查找 Q0。
 
 **通知值 37 表示提交进度，不会让 GPU 跳过前面的 Packet。** 如果 Q0 还有 Packet 35、36 尚未处理，就先按队列规则推进，再轮到 37；前序槽位仍为 `INVALID` 时，后面的 37 也不能越过它启动。这里的队内启动顺序与“等待前序 Kernel 全部完成”分开判断，是否增加完成等待由 barrier 等依赖条件决定，见第 5.5 节。
 
 > **[SPEC]** HSA System Architecture 1.2 §2.8.3，原文第 19～21 页，规定 Doorbell 通知使用 Packet ID、槽位按容量取余定位，以及队内按序 Dispatch、前序 `INVALID` 阻挡后继 Packet 的规则。HQD 中 Ring 与 Doorbell 配置的固定源码依据见第 5.4.1 节。
+
+> **[SOURCE]** ROCr `ba56a24c6132`，[`amd_aql_queue.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp) 第 468～475 行给出直接写硬件 Doorbell 的分支；Linux `248951ddc14d`，[`amdgpu_doorbell_mgr.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_doorbell_mgr.c) 第 204～211 行取得 GPU 的 Doorbell BAR，[`kfd_mqd_manager_v9.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 283～293 行把 Ring、进度地址和 Doorbell offset 写入 MQD，[`amdgpu_amdkfd_gc_9_4_3.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gc_9_4_3.c) 第 295～309 行装载 HQD 并启用 Doorbell 逻辑；[`gc_9_4_3_sh_mask.h`](./2.源码/linux/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_sh_mask.h) 第 16404～16418 行定义 `DOORBELL_OFFSET`、`DOORBELL_EN`、`DOORBELL_HIT` 等字段，但未给出命中后到 MEC 的信号路径。
 
 这次提交写了两个不同的位置：
 
@@ -2017,7 +2037,7 @@ GPU 处理 Q0 中待执行的 Packet
 
 #### 5.4.4 Doorbell 通知与其他进度观察机制
 
-本章普通 AQL 提交的通知步骤是更新 Queue 的 Doorbell Signal。在直接 MMIO 快速路径中，Producer 完成这次写入即可，无需再额外发送中断或逐 Packet 提交 ioctl。
+本章普通 AQL 提交的通知步骤是更新 Queue 的 Doorbell Signal。在直接 MMIO 快速路径中，Producer 完成这次写入即可，不必再单独发送另一种提交通知或逐 Packet 提交 ioctl。这里描述的是 CPU 侧的提交动作；它不能用来判断 GPU 内部是否以中断方式响应 Doorbell。
 
 GPU 还可以通过配置好的 wptr 地址观察写进度，或在通知前发现有效 Packet。但 Producer 仍须完成 Doorbell 通知，不能只更新 `write_index` 就省略发布和通知步骤。
 
@@ -2356,7 +2376,7 @@ Header scope 为 `NONE` 时，对应 Packet fence 跳过，需要的同步由其
 
 先区分 HQD 槽位与 Work-group。按 [第 3.0.3 节](<./03_AMD GPU 队列与 AQL Dispatch（上）.md#303-每个-xcc-的-24-个用户计算队列驻留名额>)的默认资源预留，一个 XCC 的 24 个用户可用 HQD 槽位，可以分别保存 24 条 Queue 的配置。每条 Queue 的 Ring 可以持续接收 Packet，一个 Kernel Dispatch Packet 又可以描述很多个 Work-group。**24 计的是 Queue 的驻留名额，不是 Work-group 的数量。**
 
-下面提前看第 6.3.1 节的例子：Q0 的 Packet 37 包含四组，Q1 的 Packet 80 包含六组。沿用第三章六个 XCC 组成一个逻辑 GPU 的教学配置，只展开其中的 XCC 0。假设两条 Queue 都已驻留，两份任务独立、启动条件已满足，CU 资源足够；本例中，XCC 0 从两份 Packet 中各分到组 0：
+下面提前看第 6.3.1 节的例子：Q0 的 Packet 37 包含四组，Q1 的 Packet 80 包含六组。沿用第三章八个 XCC 组成一个逻辑 GPU 的教学配置，只展开其中的 XCC 0。假设两条 Queue 都已驻留，两份任务独立、启动条件已满足，CU 资源足够；本例中，XCC 0 从两份 Packet 中各分到组 0：
 
 ```text
 ① 保存配置：XCC 0 的 HQD 槽位
@@ -2421,12 +2441,12 @@ Wave 是工作编组，CU 是执行这些工作的物理计算单元。同一个
 
 #### 6.3.1 Packet 37 的 4 个 Work-group 在 XCC 间的分配
 
-沿用 [第 3.0.2 节](<./03_AMD GPU 队列与 AQL Dispatch（上）.md#302-为什么一条-queue-要在多个-xcc-上占用-hqd>)的教学配置：假设 MI300A 的 6 个 XCC 组成一个逻辑 GPU。当前机器的具体型号和分区仍未确认。为了看清 XCC 怎样处理不同 Queue 的任务，本例同时放入两条 Queue：
+沿用 [第 3.0.2 节](<./03_AMD GPU 队列与 AQL Dispatch（上）.md#302-为什么一条-queue-要在多个-xcc-上占用-hqd>)的教学配置：固定 MI300X 的 8 个 XCC 组成一个逻辑 GPU。为了看清 XCC 怎样处理不同 Queue 的任务，本例同时放入两条 Queue：
 
 - **Q0**：Ring 中的 Packet 37 描述主例 `vector_add`，共 1024 个 Work-item，每组 256 个，因此有 **4 个 Work-group（组 0～3）**，共 16 个 Wave。
 - **Q1**：另一条独立 Queue，其 Ring 中的 Packet 80 描述另一次 `vector_add`，共 1536 个 Work-item，每组 256 个，因此有 **6 个 Work-group（组 0～5）**，共 24 个 Wave。
 
-两次调用使用各自的 A/B/C 数组，参数 N 分别为 1024、1536。假设两条 Queue 都已在六个 XCC 上驻留，两份 Packet 已发布、启动依赖已满足，任务之间没有数据依赖，CU 资源也足够。
+两次调用使用各自的 A/B/C 数组，参数 N 分别为 1024、1536。假设两条 Queue 都已在八个 XCC 上驻留，两份 Packet 已发布、启动依赖已满足，任务之间没有数据依赖，CU 资源也足够。
 
 **先看 Queue 的配置。** 沿用第 3.0.3 节的默认资源预留条件，每个 XCC 有 24 个用户计算 Queue 可用的 HQD 槽位。Q0、Q1 在每个 XCC 上各占一个，剩余 22 个空闲。方框中保存的是队列配置，其中包括查找 Ring 所需的信息：
 
@@ -2438,26 +2458,30 @@ XCC 2    [Q0 配置]    [Q1 配置]    [空闲]       [空闲]       …   [空�
 XCC 3    [Q0 配置]    [Q1 配置]    [空闲]       [空闲]       …   [空闲]
 XCC 4    [Q0 配置]    [Q1 配置]    [空闲]       [空闲]       …   [空闲]
 XCC 5    [Q0 配置]    [Q1 配置]    [空闲]       [空闲]       …   [空闲]
+XCC 6    [Q0 配置]    [Q1 配置]    [空闲]       [空闲]       …   [空闲]
+XCC 7    [Q0 配置]    [Q1 配置]    [空闲]       [空闲]       …   [空闲]
 ```
 
-六行中的 Q0 配置都指向同一个 Q0 Ring，Q1 配置则都指向另一个 Q1 Ring。图中的 HQD slot 1～24 是教学编号，不是实际的 MEC / Pipe / HQD 硬件坐标。
+八行中的 Q0 配置都指向同一个 Q0 Ring，Q1 配置则都指向另一个 Q1 Ring。图中的 HQD slot 1～24 是教学编号，不是实际的 MEC / Pipe / HQD 硬件坐标。
 
 **再看这次分到哪些 Work-group。** 各 XCC 的命令前端根据 HQD 配置找到 Ring，读取同一份 Packet，再按工作分配策略确定自己负责哪些组。对 Q0 处理的是 Packet 37，对 Q1 处理的是 Packet 80：
 
 ```text
-         Q0 Ring / Packet 37           	Q1 Ring / Packet 80
-         4 个 Work-group              	6 个 Work-group
-XCC 0    组 0：下标   0～255            	组 0：下标    0～255
-XCC 1    组 1：下标 256～511             组 1：下标  256～511
-XCC 2    组 2：下标 512～767             组 2：下标  512～767
-XCC 3    组 3：下标 768～1023            组 3：下标  768～1023
-XCC 4    本次没有分到组                	组 4：下标 1024～1279
-XCC 5    本次没有分到组                 	组 5：下标 1280～1535
+         Q0 Ring / Packet 37                 Q1 Ring / Packet 80
+         4 个 Work-group                     6 个 Work-group
+XCC 0    组 0：下标 0～255                   组 0：下标 0～255
+XCC 1    组 1：下标 256～511                 组 1：下标 256～511
+XCC 2    组 2：下标 512～767                 组 2：下标 512～767
+XCC 3    组 3：下标 768～1023                组 3：下标 768～1023
+XCC 4    本次没有分到组                      组 4：下标 1024～1279
+XCC 5    本次没有分到组                      组 5：下标 1280～1535
+XCC 6    本次没有分到组                      本次没有分到组
+XCC 7    本次没有分到组                      本次没有分到组
 ```
 
 **[DESIGN]** 此处假设两份 Dispatch 都从 XCC 0 开始轮转分配；后面的 CU 编号也只表示一种可行安排。真实硬件的分配起点、CU 选择和完成顺序不由这些教学图规定。两列中的“组 0”分别属于两次 Dispatch，每个组只执行一次。
 
-XCC 4、5 本次只分到了 Q1 的计算工作，HQD 中仍同时保留 Q0、Q1 的配置。以 XCC 5 为例，把配置与工作连起来看：
+XCC 4、5 本次只分到了 Q1 的计算工作，XCC 6、7 没有分到这两次 Dispatch 的组；各 XCC 的 HQD 中仍同时保留 Q0、Q1 的配置。以 XCC 5 为例，把配置与工作连起来看：
 
 ```text
 XCC 5 保存的队列配置              根据配置找到任务          本次分到的工作
@@ -2465,18 +2489,20 @@ HQD slot 1：[Q0 配置]  ────────→  Q0 Ring / Packet 37  ─�
 HQD slot 2：[Q1 配置]  ────────→  Q1 Ring / Packet 80  ─→  组 5
 ```
 
-Q0 驻留时已经在六个 XCC 上各占一个 HQD 槽位。Packet 37 的组数只够分给四个 XCC，Q0 仍可保持驻留；之后 Q0 提交新的 Packet，各 XCC 可以继续根据这份配置取包。是否换出 Q0，由队列调度决定。
+Q0 驻留时已经在八个 XCC 上各占一个 HQD 槽位。Packet 37 的组数只够分给四个 XCC，Q0 仍可保持驻留；之后 Q0 提交新的 Packet，各 XCC 可以继续根据这份配置取包。是否换出 Q0，由队列调度决定。
 
 **最后为分到的组安排 CU。** XCC 内的分派硬件为每个组寻找资源足够的本地 CU。假设安排如下，每个方框中的一组都包含 4 个 Wave；各行的 CU 编号属于各自的 XCC：
 
 ```text
-         CU 0                         CU 1                         其他 CU
-XCC 0    [Q0 / Packet 37 / 组 0]      [Q1 / Packet 80 / 组 0]      本例未使用
-XCC 1    [Q0 / Packet 37 / 组 1]      [Q1 / Packet 80 / 组 1]      本例未使用
-XCC 2    [Q0 / Packet 37 / 组 2]      [Q1 / Packet 80 / 组 2]      本例未使用
-XCC 3    [Q0 / Packet 37 / 组 3]      [Q1 / Packet 80 / 组 3]      本例未使用
-XCC 4    [Q1 / Packet 80 / 组 4]      [暂无工作]                    本例未使用
-XCC 5    [Q1 / Packet 80 / 组 5]      [暂无工作]                    本例未使用
+         CU 0                            CU 1                            其他 CU
+XCC 0    [Q0 / Packet 37 / 组 0]         [Q1 / Packet 80 / 组 0]         本例未使用
+XCC 1    [Q0 / Packet 37 / 组 1]         [Q1 / Packet 80 / 组 1]         本例未使用
+XCC 2    [Q0 / Packet 37 / 组 2]         [Q1 / Packet 80 / 组 2]         本例未使用
+XCC 3    [Q0 / Packet 37 / 组 3]         [Q1 / Packet 80 / 组 3]         本例未使用
+XCC 4    [Q1 / Packet 80 / 组 4]         [暂无工作]                      本例未使用
+XCC 5    [Q1 / Packet 80 / 组 5]         [暂无工作]                      本例未使用
+XCC 6    [暂无工作]                      [暂无工作]                      本例未使用
+XCC 7    [暂无工作]                      [暂无工作]                      本例未使用
 ```
 
 在 XCC 5 上，HQD slot 2 保存 Q1 配置，Q1 的组 5 却交给 CU 0 执行。HQD 槽位与 CU 没有固定的一一对应关系：HQD 让命令前端找到 Queue，Packet 描述要做的工作，CU 执行分派过来的组。
@@ -2485,11 +2511,11 @@ XCC 5    [Q1 / Packet 80 / 组 5]      [暂无工作]                    本例�
 
 Q0 的 Packet 37 等自己的四组全部完成，再经过第 6.2 节的完成收尾。Q1 的六组由 Packet 80 的完成流程处理；本例两次 Dispatch 没有相互等待的依赖。
 
-#### 6.3.2 额外例子：12 个 Work-group 在 6 个 XCC 间的分配
+#### 6.3.2 额外例子：16 个 Work-group 在 8 个 XCC 间的分配
 
-上一例中，Packet 37 只有四组，还看不出“同一个 XCC 分到多个组后，怎样安排执行”。下面单独设一个 **12 组的 Dispatch**，并在 6.3.3～6.3.5 持续追踪它。它与前面的 Packet 37、Packet 80 是不同的调用。
+上一例中，Packet 37 只有四组，还看不出“同一个 XCC 分到多个组后，怎样安排执行”。下面单独设一个 **16 组的 Dispatch**，并在 6.3.3～6.3.5 持续追踪它。它与前面的 Packet 37、Packet 80 是不同的调用。
 
-这份额外教学 Packet 仍提交到 Q0：执行 `vector_add`，A/B/C 各有 3072 个元素，`N=3072`，每组 256 个 Work-item。假设前例的 Packet 37、Packet 80 都已完成，Q0、Q1 继续驻留；现在只有 Q0 的这份新 Packet 提供计算工作，启动条件也已满足。
+这份额外教学 Packet 仍提交到 Q0：执行 `vector_add`，A/B/C 各有 4096 个元素，`N=4096`，每组 256 个 Work-item。假设前例的 Packet 37、Packet 80 都已完成，Q0、Q1 继续驻留；现在只有 Q0 的这份新 Packet 提供计算工作，启动条件也已满足。
 
 先看队列配置。沿用上一节的 24 个用户可用 HQD 槽位，每个 XCC 的 slot 1 保存本地的 Q0 配置，slot 2 保存本地的 Q1 配置：
 
@@ -2501,9 +2527,11 @@ XCC 2    [Q0 配置]    [Q1 配置]    [空闲]       [空闲]       …   [空�
 XCC 3    [Q0 配置]    [Q1 配置]    [空闲]       [空闲]       …   [空闲]
 XCC 4    [Q0 配置]    [Q1 配置]    [空闲]       [空闲]       …   [空闲]
 XCC 5    [Q0 配置]    [Q1 配置]    [空闲]       [空闲]       …   [空闲]
+XCC 6    [Q0 配置]    [Q1 配置]    [空闲]       [空闲]       …   [空闲]
+XCC 7    [Q0 配置]    [Q1 配置]    [空闲]       [空闲]       …   [空闲]
 ```
 
-六个 XCC 各自保存一份 Q0 的 HQD 配置，Ring 地址指向同一个 Q0 Ring，逻辑 XCC 编号等字段则可不同。Q1 当前没有待执行任务，配置仍可保留在 HQD 中。上图的槽位编号仍是教学编号，配置如何装载见 [第 3.2 节](<./03_AMD GPU 队列与 AQL Dispatch（上）.md#32-hqd队列配置寄存器与两种装载方式>)。
+八个 XCC 各自保存一份 Q0 的 HQD 配置，Ring 地址指向同一个 Q0 Ring，逻辑 XCC 编号等字段则可不同。Q1 当前没有待执行任务，配置仍可保留在 HQD 中。上图的槽位编号仍是教学编号，配置如何装载见 [第 3.2 节](<./03_AMD GPU 队列与 AQL Dispatch（上）.md#32-hqd队列配置寄存器与两种装载方式>)。
 
 各 XCC 的命令前端分别沿本地配置读取这份 Packet：
 
@@ -2511,8 +2539,8 @@ XCC 5    [Q0 配置]    [Q1 配置]    [空闲]       [空闲]       …   [空�
 各 XCC 的命令前端
     ↓ 使用本地 HQD slot 1 中的 Q0 Ring 地址等配置
 访问同一个 Q0 Ring，读取其中同一份额外教学 Packet
-    grid_size_x = 3072，workgroup_size_x = 256
-    → 共 12 个 Work-group，每组 4 个 Wave，整次共 48 个 Wave
+    grid_size_x = 4096，workgroup_size_x = 256
+    → 共 16 个 Work-group，每组 4 个 Wave，整次共 64 个 Wave
     ↓ 按本例的轮转分配，确定本 XCC 负责哪些组
 各 XCC 分担下面列出的工作
 ```
@@ -2520,22 +2548,24 @@ XCC 5    [Q0 配置]    [Q1 配置]    [空闲]       [空闲]       …   [空�
 下面只列工作组的归属和下标范围；具体由哪个 CU 执行，在下一节展开：
 
 ```text
-         本 XCC 负责的 Work-group 与全局下标                         工作量
-XCC 0    [组 0：i =    0～255]   [组 6：i = 1536～1791]              2 组，8 个 Wave
-XCC 1    [组 1：i =  256～511]   [组 7：i = 1792～2047]              2 组，8 个 Wave
-XCC 2    [组 2：i =  512～767]   [组 8：i = 2048～2303]              2 组，8 个 Wave
-XCC 3    [组 3：i =  768～1023]  [组 9：i = 2304～2559]              2 组，8 个 Wave
-XCC 4    [组 4：i = 1024～1279]  [组 10：i = 2560～2815]             2 组，8 个 Wave
-XCC 5    [组 5：i = 1280～1535]  [组 11：i = 2816～3071]             2 组，8 个 Wave
+         本 XCC 负责的两组及其全局下标                                     工作量
+XCC 0    [组 0：i = 0～255]               [组 8：i = 2048～2303]           2 组，8 个 Wave
+XCC 1    [组 1：i = 256～511]             [组 9：i = 2304～2559]           2 组，8 个 Wave
+XCC 2    [组 2：i = 512～767]             [组 10：i = 2560～2815]          2 组，8 个 Wave
+XCC 3    [组 3：i = 768～1023]            [组 11：i = 2816～3071]          2 组，8 个 Wave
+XCC 4    [组 4：i = 1024～1279]           [组 12：i = 3072～3327]          2 组，8 个 Wave
+XCC 5    [组 5：i = 1280～1535]           [组 13：i = 3328～3583]          2 组，8 个 Wave
+XCC 6    [组 6：i = 1536～1791]           [组 14：i = 3584～3839]          2 组，8 个 Wave
+XCC 7    [组 7：i = 1792～2047]           [组 15：i = 3840～4095]          2 组，8 个 Wave
 ```
 
-一行中的两个方框是两份组级工作。例如 XCC 0 负责组 0、组 6，每组各有 4 个 Wave。两组可以在资源允许时重叠执行，摆放在左右两侧并不规定执行先后。
+一行中的两个方框是两份组级工作。例如 XCC 0 负责组 0、组 8，每组各有 4 个 Wave。两组可以在资源允许时重叠执行，摆放在左右两侧并不规定执行先后。
 
 **[DESIGN]** 本例固定上述轮转分配结果，每个组只执行一次。后续图中的 CU 编号、资源变化和时间点也都是教学条件，用于说明组怎样等待和执行，不表示固定的硬件分配算法。
 
-第三章的 KFD / HWS/CPSCH 已经为 Q0 安排了驻留。现在由设备上的工作分派硬件为各组寻找 CU；应用只提交这份 Packet，无需替十二个组分别选择 CU。
+第三章的 KFD / HWS/CPSCH 已经为 Q0 安排了驻留。现在由设备上的工作分派硬件为各组寻找 CU；应用只提交这份 Packet，无需替十六个组分别选择 CU。
 
-> **[SPEC]** AMD 作者论文 *Realizing the AMD Exascale Heterogeneous Processor Vision*（ISCA 2024，作者版本）§VI-A、图 13，[本地英文版第 9 页](./isca2024_exascale.pdf#page=9)：各 XCD 读取同一 Packet，按可配置的策略启动其中一部分 Work-group；设备分派硬件在本地 CU 中寻找执行空间，初始化 Wave 的寄存器状态和代码起点。论文以 MI300A 为对象，这里沿用第三章一个 XCD 对应一个 XCC 的教学条件。
+> **[SPEC]** 本地 [ISCA 2024 论文 §VII，第 11 页](./isca2024_exascale.pdf#page=11)确认 MI300X 复用 XCD、IOD 组件；结合 [§VI-A、图 13，第 9 页](./isca2024_exascale.pdf#page=9)说明这些组件共同取包、分担 Work-group 和协调完成的关系。本节只采用多 XCD 计算部分的机制。具体消息格式和握手时序未在论文中展开。Work-group 在 CU 上启动的状态与资源要求另见本节引用的 MI300 ISA。
 
 #### 6.3.3 XCC 内的 CU 资源检查与 Work-group 分派
 
@@ -2549,34 +2579,36 @@ XCC 5    [组 5：i = 1280～1535]  [组 11：i = 2816～3071]             2 组
 
 ```text
 安排 A：两组分别放到两个 CU
-t1：只运行这份 12 组的 Dispatch；每个组包含 4 个 Wave
+t1：只运行这份 16 组的 Dispatch；每个组包含 4 个 Wave
 
-         CU 0          CU 1          CU 2     CU 3     …   CU 37    另外 2 个物理 CU
-XCC 0    [组 0]        [组 6]        [空闲]   [空闲]   …   [空闲]   [禁用，不接收工作]
-XCC 1    [组 1]        [组 7]        [空闲]   [空闲]   …   [空闲]   [禁用，不接收工作]
-XCC 2    [组 2]        [组 8]        [空闲]   [空闲]   …   [空闲]   [禁用，不接收工作]
-XCC 3    [组 3]        [组 9]        [空闲]   [空闲]   …   [空闲]   [禁用，不接收工作]
-XCC 4    [组 4]        [组 10]       [空闲]   [空闲]   …   [空闲]   [禁用，不接收工作]
-XCC 5    [组 5]        [组 11]       [空闲]   [空闲]   …   [空闲]   [禁用，不接收工作]
+         CU 0          CU 1          CU 2 … CU 37            另外 2 个物理 CU
+XCC 0    [组 0]        [组 8]        [空闲]                  [禁用，不接收工作]
+XCC 1    [组 1]        [组 9]        [空闲]                  [禁用，不接收工作]
+XCC 2    [组 2]        [组 10]       [空闲]                  [禁用，不接收工作]
+XCC 3    [组 3]        [组 11]       [空闲]                  [禁用，不接收工作]
+XCC 4    [组 4]        [组 12]       [空闲]                  [禁用，不接收工作]
+XCC 5    [组 5]        [组 13]       [空闲]                  [禁用，不接收工作]
+XCC 6    [组 6]        [组 14]       [空闲]                  [禁用，不接收工作]
+XCC 7    [组 7]        [组 15]       [空闲]                  [禁用，不接收工作]
 
 每个 XCC：2 个 CU 各执行一组，另外 36 个启用 CU 空闲
 ```
 
-以 XCC 0 为例，组 0 的四个 Wave 全部在 CU 0，组 6 的四个 Wave 全部在 CU 1。虽然还有 36 个启用 CU 空闲，本次分给 XCC 0 的工作总量只有两组；每组都要完整安排到一个 CU 上。
+以 XCC 0 为例，组 0 的四个 Wave 全部在 CU 0，组 8 的四个 Wave 全部在 CU 1。虽然还有 36 个启用 CU 空闲，本次分给 XCC 0 的工作总量只有两组；每组都要完整安排到一个 CU 上。
 
 资源允许时，同样的两个组也可以一起驻留在 CU 0。只展开 XCC 0，对照两种分配结果；各组始终保留自己的四个 Wave：
 
 ```text
-两种可选安排        CU 0                                  	CU 1               	CU 2 … CU 37
-A：分别放置         [组 0：4 个 Wave]                     	[组 6：4 个 Wave]  	[空闲] … [空闲]
+两种可选安排      CU 0                                  CU 1                  CU 2 … CU 37
+A：分别放置       [组 0：4 个 Wave]                     [组 8：4 个 Wave]     [空闲]
+B：共同驻留       [组 0：4 个 Wave][组 8：4 个 Wave]    [空闲]                [空闲]
 
-B：共同驻留         [组 0：4 个 Wave][组 6：4 个 Wave]     	[空闲]             	[空闲] … [空闲]
-                    └──── CU 0 中共驻留 8 个 Wave ────┘
+安排 B 中，CU 0 共驻留 8 个 Wave。
 ```
 
-**[DESIGN]** A、B 都是资源允许时的可行安排，不指定硬件必须选择哪一种。第 6.3.4～6.3.5 节继续追踪安排 A，组 0 在 CU 0，组 6 在 CU 1。
+**[DESIGN]** A、B 都是资源允许时的可行安排，不指定硬件必须选择哪一种。第 6.3.4～6.3.5 节继续追踪安排 A，组 0 在 CU 0，组 8 在 CU 1。
 
-> **[SPEC]** AMD 作者论文 *Realizing the AMD Exascale Heterogeneous Processor Vision*（ISCA 2024）§IV-B，[本地英文版第 4 页](./isca2024_exascale.pdf#page=4)说明每个 XCD 物理实现 40 个 CU、启用 38 个；在本文 MI300A 教学配置中，一个 XCD 对应一个 XCC。同一 Work-group 的 Wave 在同一 CU 上运行，依据本节开头引用的 MI300 / CDNA 3 ISA（封面日期 2025-08-05）§4.3，原文第 19 页。
+> **[SPEC]** 本地 [ISCA 2024 论文 §VII，第 11 页](./isca2024_exascale.pdf#page=11)确认 MI300X 使用 8 个 XCD、304 个启用 CU；结合 [§IV-B，第 4 页](./isca2024_exascale.pdf#page=4)核对所复用 XCD 的 40 个物理 CU 与 38 个启用 CU。同一 Work-group 的 Wave 在同一 CU 上运行，依据本节开头引用的 MI300 / CDNA 3 ISA（2025-08-05）§4.3，原文第 19 页。
 
 第 3.0.1 节介绍过，一个 CU 内有 4 个 SIMD，每个 SIMD 最多驻留 8 个 Wave：
 
@@ -2595,28 +2627,28 @@ B：共同驻留         [组 0：4 个 Wave][组 6：4 个 Wave]     	[空闲] 
 > **[SPEC]** [ROCm Compute Profiler 3.8.0：Pipeline descriptions](https://rocm.docs.amd.com/projects/rocprofiler-compute/en/latest/conceptual/cdna/pipeline-descriptions.html)说明 MI300 的一个 CU 有 4 个 SIMD，每个 SIMD 有 8 个 Wave 槽位；AMD HIP 6.2.2 文档 [Hardware features（硬件特性）](https://rocm.docs.amd.com/projects/HIP/en/docs-6.2.2/reference/hardware_features.html)的 CDNA3 列给出每 CU 最多驻留 32 个 Wave。实际可驻留数量还受寄存器、LDS 等资源限制。
 
 <details>
-<summary>可选推演：已有其他任务占用 CU，组 6 怎样等待资源</summary>
+<summary>可选推演：已有其他任务占用 CU，组 8 怎样等待资源</summary>
 
 另设一种资源紧张的场景：XCC 0 上已有其他任务，它们的组仍驻留在各 CU 中。这里的“旧工作”来自另外的任务，不是前例已经完成的 Packet 80；只规定当前资源状态，不展开这些任务的总组数。
 
 假设 CU 0 的剩余资源只够再接纳本例的一组，CU 1～CU 37 的剩余资源都不足以接纳一组。为了与上面的资源充足场景区分，下面用 u0、u1 标记时间：
 
 ```text
-XCC 0：本次负责组 0、组 6；每组 256 个 Work-item、4 个 Wave
+XCC 0：本次负责组 0、组 8；每组 256 个 Work-item、4 个 Wave
 
 时刻与动作       CU 0              CU 1           CU 2         …   CU 37        另外 2 个 CU
 u0 分派前        [余量够 1 组]     [余量不足]     [余量不足]   …   [余量不足]   [禁用]
 u0 分派组 0 后   [组 0 执行中]     [余量不足]     [余量不足]   …   [余量不足]   [禁用]
-     ↓ CU 1 上的旧工作结束，释放出足够接纳组 6 的资源
-u1 分派组 6 后   [组 0 继续执行]   [组 6 执行中]  [余量不足]   …   [余量不足]   [禁用]
+     ↓ CU 1 上的旧工作结束，释放出足够接纳组 8 的资源
+u1 分派组 8 后   [组 0 继续执行]   [组 8 执行中]  [余量不足]   …   [余量不足]   [禁用]
 
-本次尚待分派：u0 分派前为组 0、组 6 → 分派组 0 后只剩组 6 → u1 分派后为无
+本次尚待分派：u0 分派前为组 0、组 8 → 分派组 0 后只剩组 8 → u1 分派后为无
 “余量不足”：旧工作仍占用资源，剩余资源不足以接纳本例的一组
 ```
 
-组 6 等待时，已经没有能够接纳它的本地启用 CU。到了 u1，CU 1 腾出足够资源，组 6 就可以获得执行机会，CU 0 上的组 0 仍可继续运行。若 CU 2～CU 37 中任何一个更早具备足够资源，组 6 也可以被安排过去，无需固定等 CU 1。
+组 8 等待时，已经没有能够接纳它的本地启用 CU。到了 u1，CU 1 腾出足够资源，组 8 就可以获得执行机会，CU 0 上的组 0 仍可继续运行。若 CU 2～CU 37 中任何一个更早具备足够资源，组 8 也可以被安排过去，无需固定等 CU 1。
 
-Producer 早已提交描述这十二个组的 Packet，后续组获得执行资源时，无需再提交 Packet 或再写 Doorbell。这里的等待来自 CU 资源不足，组号本身没有要求组 6 等组 0 完成。
+Producer 早已提交描述这十六个组的 Packet，后续组获得执行资源时，无需再提交 Packet 或再写 Doorbell。这里的等待来自 CU 资源不足，组号本身没有要求组 8 等组 0 完成。
 
 </details>
 
@@ -2624,17 +2656,16 @@ Producer 早已提交描述这十二个组的 Packet，后续组获得执行资�
 
 #### 6.3.4 CU 上的 Wave 执行
 
-继续上一节资源充足场景中 t1 之后的执行，只展开 XCC 0 上获得本次工作的两个 CU：组 0 的四个 Wave 在 CU 0，组 6 的四个 Wave 在 CU 1，其余启用 CU 此时空闲。它们运行同一份 `vector_add` 代码，各 Work-item 使用自己的全局下标 `i`。下图的 Wave 0～3 都是**组内编号**：
+继续上一节资源充足场景中 t1 之后的执行，只展开 XCC 0 上获得本次工作的两个 CU：组 0 的四个 Wave 在 CU 0，组 8 的四个 Wave 在 CU 1，其余启用 CU 此时空闲。它们运行同一份 `vector_add` 代码，各 Work-item 使用自己的全局下标 `i`。下图的 Wave 0～3 都是**组内编号**：
 
 ```text
-                    XCC 0 / CU 0 / 组 0         XCC 0 / CU 1 / 组 6
-组的起始下标        	0 × 256 = 0                 6 × 256 = 1536
-Wave 0              i =   0～63                 i = 1536～1599
-Wave 1              i =  64～127                i = 1600～1663
-Wave 2              i = 128～191                i = 1664～1727
-Wave 3              i = 192～255                i = 1728～1791
-                    ↓ 写入对应下标的 C          ↓ 写入对应下标的 C
-本组负责的输出      C[0]～C[255]                C[1536]～C[1791]
+                    XCC 0 / CU 0 / 组 0             XCC 0 / CU 1 / 组 8
+组的起始下标        0 × 256 = 0                     8 × 256 = 2048
+Wave 0              i = 0～63                       i = 2048～2111
+Wave 1              i = 64～127                     i = 2112～2175
+Wave 2              i = 128～191                    i = 2176～2239
+Wave 3              i = 192～255                    i = 2240～2303
+本组负责的输出      C[0]～C[255]                    C[2048]～C[2303]
 
 每个 Work-item：读取 A[i]、B[i] → 相加 → 写入 C[i] = A[i] + B[i]
 ```
@@ -2649,57 +2680,57 @@ CU 的执行硬件推进已经驻留且就绪的 Wave。“就绪”指接下来
 组 0 / Wave 2                         [可推进就绪指令]
 组 0 / Wave 3                         [可推进就绪指令]
 
-CU 1 中的组 6：也按自身 Wave 的就绪情况执行，无需等组 0 的四条 Wave 全部结束
+CU 1 中的组 8：也按自身 Wave 的就绪情况执行，无需等组 0 的四条 Wave 全部结束
 ```
 
 上图表示等待访存期间可以推进其他就绪工作，具体推进哪条 Wave 由当时的执行状态决定。Wave 0～3 不必按编号逐条完整执行；Wave 0 等待数据时，仍占用其寄存器等驻留资源。
 
-组 0 的四条 Wave 全部结束，组 0 才完成；组 6 也要等自己的四条 Wave 全部结束。两组谁先完成，取决于各自的执行情况。Wave 和组结束后，相应资源归还，后续工作才有机会使用这些空间。
+组 0 的四条 Wave 全部结束，组 0 才完成；组 8 也要等自己的四条 Wave 全部结束。两组谁先完成，取决于各自的执行情况。Wave 和组结束后，相应资源归还，后续工作才有机会使用这些空间。
 
 > **[SPEC]** [MI300 / CDNA 3 ISA](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf#page=12)（封面日期 2025-08-05）§1，原文第 4 页，说明通过跟踪处于不同执行阶段的工作来交叠计算与访存；[§4.3～4.4，原文第 19 页](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf#page=27)说明同组 Wave 及访存依赖。HSA System Architecture 1.2 §2.11，原文第 32～33 页，规定组内所有 Wave 完成后 Work-group 才完成。
 
 #### 6.3.5 资源释放后的工作分派
 
-继续前面的十二组 Dispatch：Q0 的组 0 在 XCC 0 的 CU 0 上执行，组 6 在 CU 1 上执行。这两个组都已分派，所以 XCC 0 手里没有这份任务中还在排队等待 CU 的组。
+继续前面的十六组 Dispatch：Q0 的组 0 在 XCC 0 的 CU 0 上执行，组 8 在 CU 1 上执行。这两个组都已分派，所以 XCC 0 手里没有这份任务中还在排队等待 CU 的组。
 
-假设组 0 先完成，CU 0 就可以接其他工作，不必等组 6 完成。下面让仍驻留的 Q1 提交一份新任务，其中一个组分给 XCC 0，已满足依赖条件，CU 0 的资源也够用：
+假设组 0 先完成，CU 0 就可以接其他工作，不必等组 8 完成。下面让仍驻留的 Q1 提交一份新任务，其中一个组分给 XCC 0，已满足依赖条件，CU 0 的资源也够用：
 
 ```text
-XCC 0 的时间线       CU 0                    						CU 1
-t1：两组都在执行     [Q0 的组 0]             							[Q0 的组 6]
-                          │												│
-                          ↓ 组 0 的四条 Wave 全部结束，释放资源			↓
-t2：CU 0 空出来      [空闲]                  						[Q0 的组 6 继续执行]
-                          │												│
-                          ↓ 分派硬件安排 Q1 的新工作						↓
-t3：CU 0 接到新工作  [Q1 新任务中的一个组]   							[Q0 的组 6 继续执行]
+XCC 0 的时间线              CU 0                        CU 1
+t1：两组都在执行            [Q0 的组 0]                 [Q0 的组 8]
+组 0 的四条 Wave 结束       释放组 0 的资源             [Q0 的组 8 继续执行]
+t2：CU 0 空出来             [空闲]                      [Q0 的组 8 继续执行]
+分派硬件安排 Q1 的工作      取得所需资源                [Q0 的组 8 继续执行]
+t3：CU 0 接到新工作         [Q1 新任务中的一个组]       [Q0 的组 8 继续执行]
 ```
 
 图中只展开 CU 0、CU 1；其余 36 个启用 CU 在本例中保持空闲，另外 2 个物理 CU 仍禁用。选择 CU 0 接 Q1 的工作只是举例，硬件也可以选择其他资源足够的 CU。
 
 如果没有其他可执行的工作，CU 0 就保持空闲。有空闲资源，还要有可执行的组，才能继续计算。
 
-**[INFERENCE]** 本次 Dispatch 总共只有十二个组，工作总量由 Packet 确定。这里继续沿用既定的 XCC 归属，不假设 XCC 0 空闲后会自动接管其他 XCC 的组。
+**[INFERENCE]** 本次 Dispatch 总共只有十六个组，工作总量由 Packet 确定。这里继续沿用既定的 XCC 归属，不假设 XCC 0 空闲后会自动接管其他 XCC 的组。
 
-接下来只看 Q0 这份十二组 Dispatch 的完成进度。假设又过了一段时间，其中其他组都已完成，只有 XCC 5 的组 11 仍在运行：
+接下来只看 Q0 这份十六组 Dispatch 的完成进度。假设又过了一段时间，其中其他组都已完成，只有 XCC 7 的组 15 仍在运行：
 
 ```text
-         本 XCC 负责的两组                 本 XCC 的执行进度
-XCC 0    [组 0：完成]  [组 6：完成]         两组均已完成
-XCC 1    [组 1：完成]  [组 7：完成]         两组均已完成
-XCC 2    [组 2：完成]  [组 8：完成]         两组均已完成
-XCC 3    [组 3：完成]  [组 9：完成]         两组均已完成
-XCC 4    [组 4：完成]  [组 10：完成]        两组均已完成
-XCC 5    [组 5：完成]  [组 11：运行中]      仍有一组未完成
-                  ↓
+         本 XCC 负责的两组                      本 XCC 的执行进度
+XCC 0    [组 0：完成]      [组 8：完成]         两组均已完成
+XCC 1    [组 1：完成]      [组 9：完成]         两组均已完成
+XCC 2    [组 2：完成]      [组 10：完成]        两组均已完成
+XCC 3    [组 3：完成]      [组 11：完成]        两组均已完成
+XCC 4    [组 4：完成]      [组 12：完成]        两组均已完成
+XCC 5    [组 5：完成]      [组 13：完成]        两组均已完成
+XCC 6    [组 6：完成]      [组 14：完成]        两组均已完成
+XCC 7    [组 7：完成]      [组 15：运行中]      仍有一组未完成
+
 这份 Dispatch 仍未完成
-                  ↓ 组 11 也完成，且满足规定的写入可见性条件
+    ↓ 组 15 也完成，且满足规定的写入可见性条件
 各 XCC 完成协作，由指定 XCC 发出整次 Dispatch 的完成信号
 ```
 
 因此，一个 CU 空出资源、一个 XCC 做完自己的组、整次 Dispatch 完成，是执行过程中不同的进度。整次 Dispatch 的完成要求所有参与 XCC 的工作都结束，并完成规定的收尾；多 XCC 的完成协作见 [第 3.2 节](<./03_AMD GPU 队列与 AQL Dispatch（上）.md#32-hqd队列配置寄存器与两种装载方式>)。
 
-回到主例 Packet 37，它仍是 **4 个 Work-group、16 个 Wave**，也遵循同样的分派、执行和完成关系。上面的十二组只是为了展开资源等待和多 XCC 协作。
+回到主例 Packet 37，它仍是 **4 个 Work-group、16 个 Wave**，也遵循同样的分派、执行和完成关系。上面的十六组只是为了展开资源等待和多 XCC 协作。
 
 #### 6.3.6 推演：总量仍是 1024，把每组从 256 改为 128，会怎样
 
@@ -5106,7 +5137,7 @@ Doorbell 槽位复用还存在迟到通知问题。假设 Q0 曾使用 Doorbell 
 | Packet ID、rptr/wptr、容量与回绕                  | [5.1 索引与槽位](#51-packet-id物理槽位与容量约束)                                                                                                                                                                                     |
 | SINGLE/MULTI、atomic-add 与 CAS                   | [5.2 预留实现](#52-producer-预留编号与等待槽位)                                                                                                                                                                                       |
 | INVALID、32 位原子 release 与所有权               | [5.3 Header 发布](#53-填写-packet并用-32-位原子写发布-header)                                                                                                                                                                         |
-| Doorbell、并发发布与 INVALID 洞                   | [5.4 通知](#54-doorbell-与-queue提交进度的对应关系)、[5.5 多 Producer](#55-多-producer-的发布顺序与-queue-推进)                                                                                                                        |
+| Doorbell MMIO、GPU 侧响应与 INVALID 洞            | [5.4.2.1 GPU 侧响应](#5421-doorbell-写入触发-gpu-队列处理)、[5.5 多 Producer](#55-多-producer-的发布顺序与-queue-推进)                                                                                                                |
 | 发布过程及常见错误                                | [5.6 提交伪代码](#56-完整提交伪代码与常见错误)                                                                                                                                                                                        |
 
 **执行、完成、退出与综合查阅（第 6～9 章）**

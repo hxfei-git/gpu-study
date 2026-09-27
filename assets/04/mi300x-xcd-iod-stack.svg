@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="660" viewBox="0 0 1120 660" role="img" aria-labelledby="title desc">
+  <title id="title">两个 XCD 叠在一个 IOD 上方</title>
+  <desc id="desc">MI300X 局部堆叠示意。两个包含 CU 和 L2 缓存的 XCD 位于一个 IOD 上方，通过芯粒间连接相连。IOD 包含互连、内存控制器和 SDMA，并连接其他 IOD 及旁边的两堆 HBM。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#52647c"/></marker>
+  </defs>
+  <style>
+    text { font-family: "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; fill: #203047; }
+    .heading { font-size: 30px; font-weight: 700; }
+    .name { font-size: 26px; font-weight: 700; }
+    .body { font-size: 22px; }
+    .note { font-size: 18px; fill: #52647c; }
+    .wire { fill: none; stroke: #52647c; stroke-width: 3; }
+  </style>
+  <rect width="1120" height="660" rx="16" fill="#f5f7fb"/>
+  <text x="48" y="58" class="heading">两个 XCD 叠在一个 IOD 上方</text>
+  <text x="120" y="104" class="note">上层：计算芯粒</text>
+
+  <rect x="120" y="120" width="250" height="150" rx="12" fill="#eee9ff" stroke="#7863ab" stroke-width="2"/>
+  <text x="145" y="159" class="name">XCD</text>
+  <text x="145" y="202" class="body">CU：执行 Kernel</text>
+  <text x="145" y="239" class="body">自己的 L2 缓存</text>
+
+  <rect x="420" y="120" width="250" height="150" rx="12" fill="#eee9ff" stroke="#7863ab" stroke-width="2"/>
+  <text x="445" y="159" class="name">XCD</text>
+  <text x="445" y="202" class="body">CU：执行 Kernel</text>
+  <text x="445" y="239" class="body">自己的 L2 缓存</text>
+
+  <path d="M 245 270 V 340 M 545 270 V 340" class="wire"/>
+  <rect x="270" y="290" width="250" height="32" fill="#f5f7fb"/>
+  <text x="395" y="313" text-anchor="middle" class="note">芯粒间连接（3D 堆叠）</text>
+
+  <rect x="100" y="340" width="600" height="250" rx="12" fill="#e5effb" stroke="#426d9a" stroke-width="2"/>
+  <text x="125" y="382" class="name">IOD：下方的一块 I/O 芯粒</text>
+  <path d="M 125 399 H 675" stroke="#c2d4e8" stroke-width="2"/>
+  <text x="125" y="439" class="body">互连：将请求送往其他芯粒</text>
+  <text x="125" y="499" class="body">内存控制器：处理 HBM 读写</text>
+  <text x="125" y="559" class="body">SDMA：执行数据搬运</text>
+
+  <path d="M 700 430 H 824" class="wire" marker-end="url(#arrow)"/>
+  <rect x="840" y="395" width="210" height="70" rx="10" fill="#e5effb" stroke="#426d9a" stroke-width="2"/>
+  <text x="945" y="439" text-anchor="middle" class="body">其他 IOD</text>
+
+  <path d="M 700 490 H 775 V 510 H 824" class="wire" marker-end="url(#arrow)"/>
+  <rect x="840" y="475" width="210" height="70" rx="10" fill="#eefaf6" stroke="#41877a" stroke-width="2"/>
+  <rect x="850" y="484" width="90" height="52" rx="6" fill="#ddf4ee"/>
+  <rect x="950" y="484" width="90" height="52" rx="6" fill="#ddf4ee"/>
+  <text x="895" y="519" text-anchor="middle" class="body">HBM</text>
+  <text x="995" y="519" text-anchor="middle" class="body">HBM</text>
+  <text x="945" y="566" text-anchor="middle" class="note">两堆 HBM，位于旁边</text>
+
+  <text x="48" y="630" class="note">仅示意上下堆叠和硬件连接；未按实物尺寸绘制。</text>
+</svg>

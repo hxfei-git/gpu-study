@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="600" viewBox="0 0 1280 600" role="img" aria-labelledby="title desc">
+  <title id="title">Q0 和 Q1 通过 VMID 5 使用进程 A 的根页表</title>
+  <desc id="desc">一个 XCC 中的驻留结果。Q0 和 Q1 分别占用不同的 HQD，两个 HQD 中当前 VMID 都为 5。根据编号选择 GFXHUB 的 VMID 5 上下文，该上下文的根配置 P 给出 HBM 中进程 A 根页表的地址 0x8000_0000。Queue 驻留位置是 HQD，VMID 是地址空间上下文的编号。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L10 5 L0 10Z" fill="#52647c"/></marker>
+  </defs>
+  <style>
+    text { font-family: "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; fill: #203047; }
+    .title { font-size: 30px; font-weight: 700; }
+    .name { font-size: 24px; font-weight: 700; }
+    .body { font-size: 21px; }
+    .note { font-size: 18px; fill: #52647c; }
+    .wire { fill: none; stroke: #52647c; stroke-width: 3; }
+  </style>
+  <rect width="1280" height="600" rx="16" fill="#f5f7fb"/>
+  <text x="44" y="56" class="title">Q0、Q1 使用同一套进程页表</text>
+  <text x="44" y="91" class="note">只看一个 XCC：固件已安排进程 A 使用 VMID 5，并使两条队列同时驻留</text>
+
+  <text x="56" y="144" class="note">队列占用的硬件槽位</text>
+  <rect x="44" y="164" width="310" height="124" rx="12" fill="#eee9ff" stroke="#7863ab" stroke-width="2"/>
+  <text x="66" y="204" class="name">Q0 所占用的 HQD</text>
+  <text x="66" y="244" class="body">当前 VMID = 5</text>
+  <text x="66" y="274" class="note">保存 Q0 的 Ring 等运行配置</text>
+
+  <rect x="44" y="340" width="310" height="124" rx="12" fill="#eee9ff" stroke="#7863ab" stroke-width="2"/>
+  <text x="66" y="380" class="name">Q1 所占用的 HQD</text>
+  <text x="66" y="420" class="body">当前 VMID = 5</text>
+  <text x="66" y="450" class="note">保存 Q1 的 Ring 等运行配置</text>
+
+  <path d="M354 226 H401 V314 H460 M354 402 H401 V314" class="wire"/>
+  <path d="M401 314 H460" class="wire" marker-end="url(#arrow)"/>
+  <text x="414" y="295" text-anchor="middle" class="note">按编号 5 选择</text>
+
+  <text x="488" y="188" class="note">GFXHUB 保存的地址空间配置</text>
+  <rect x="474" y="211" width="346" height="206" rx="12" fill="#e5effb" stroke="#426d9a" stroke-width="2"/>
+  <text x="497" y="254" class="name">VMID 5 的上下文</text>
+  <path d="M497 271 H797" stroke="#c2d4e8" stroke-width="2"/>
+  <text x="497" y="308" class="body">根配置 P = 0x8000_0001</text>
+  <text x="497" y="348" class="body">地址部分 = 0x8000_0000</text>
+  <text x="497" y="387" class="note">本例仅假设 VALID 属性为 1</text>
+
+  <path d="M820 314 H904" class="wire" marker-end="url(#arrow)"/>
+  <text x="864" y="280" text-anchor="middle" class="note">按入口</text>
+  <text x="864" y="302" text-anchor="middle" class="note">读表</text>
+
+  <text x="938" y="188" class="note">实际保存页表内容的内存</text>
+  <rect x="920" y="211" width="316" height="206" rx="12" fill="#ddf4ee" stroke="#41877a" stroke-width="2"/>
+  <text x="942" y="254" class="name">进程 A 的根页表</text>
+  <text x="942" y="301" class="body">位于 HBM</text>
+  <text x="942" y="340" class="body">地址：0x8000_0000</text>
+  <text x="942" y="381" class="note">PDE 指向后续的页表</text>
+
+  <text x="44" y="522" class="body">HQD 保存“用哪个 VMID”；VMID 上下文保存“从哪里开始查页表”。</text>
+  <text x="44" y="562" class="note">箭头表示选择与读表关系；图示为配置完成后的状态，不表示固件写寄存器的先后顺序。</text>
+</svg>
