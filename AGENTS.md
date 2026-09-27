@@ -45,12 +45,13 @@ Before submitting, preview edited files to check tables, Mermaid diagrams, code 
 
 ## Writing Style & Naming Conventions
 
-Follow the surrounding Chinese-language prose and retain established technical terms such as GPUVM, KFD, AQL, MQD, and HQD. Give each note one `#` title, then use numbered `##` sections and concise `###` subsections. Prefer short explanatory paragraphs, tables for comparisons, and fenced blocks tagged with a language such as `text` or `mermaid`.
+Follow the surrounding Chinese-language prose and retain established technical terms such as GPUVM, KFD, AQL, MQD, and HQD. Give each note one `#` title, then use numbered `##` sections and concise `###` subsections. Prefer short explanatory paragraphs, concrete examples, and relationship or flow diagrams. Tag fenced blocks with a language such as `text` or `mermaid`.
 
 When answering questions about this repository, keep the response concise, clear, and direct. Use a short concrete example when it helps explain an abstract concept.
 
 ### 学习说明的展开方式
 
+- 创建、补充、改写文档和回答问题时，尽量避免使用表格对比，尤其不要用职责表或字段对照表代替概念讲解。优先围绕同一个具体例子，用连贯文字、必要的步骤和关系图说明对象如何配合；比较两个对象时，先交代各自在例子中的作用，再解释联系与区别。用户明确要求表格，或需要集中查阅参数、缩写等信息时可以使用，但仍须讲清必要的前提和过程。
 - 补充知识点时，不能只在原段落中插入一句结论。应单独展开，用关系图、流程图或带具体数值的例子配合简短解释，让读者看清对象之间的联系。
 - 展开一个主题前，先接住具体任务：当前是谁在做什么、已经拿到什么、接下来要得到什么。先给本节所需的完整关系图或执行路径，让读者看到起点、终点和各步作用，再沿图解释概念、字段、数值计算与分支条件。不要先孤立罗列术语，直到末尾才说明这些术语用来完成什么。
 - 用于带读者进入问题的关系图应放在正文前部。图中可以出现后面要解释的字段或函数名，但应同时标注它们的中文作用；不能因为含有源码名称，就把整张关系图移到文末的“可选源码”。原始源码摘录仍放在相关概念和过程讲清之后，作为验证。
@@ -105,7 +106,7 @@ Separate facts from analysis with the labels already used in the notes: `[SOURCE
 
 ### 源码摘录与解释规则
 
-源码是结论的证据，不是学习主线。正文应先用清晰结论、具体例子、表格或图示讲懂概念，再按需要提供源码或规范验证；读者不查看源码块也应能理解主线。“最小摘录”指能够独立读懂当前结论的最小完整上下文，不以行数最少为目标。
+源码是结论的证据，不是学习主线。正文应先用连贯解释、具体例子或图示讲懂概念，再按需要提供源码或规范验证；读者不查看源码块也应能理解主线。“最小摘录”指能够独立读懂当前结论的最小完整上下文，不以行数最少为目标。
 
 源码和规范证据的引导文字必须使用 Markdown 引用块，与学习主线形成清晰的视觉分隔。`[SOURCE]` 和 `[SPEC]` 都遵守此格式：
 

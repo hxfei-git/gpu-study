@@ -34,7 +34,7 @@
 | GEM     | Graphics Execution Manager                      | DRM 的图形内存对象管理框架                                     |
 | GFX     | Graphics                                        | AMDGPU 中图形与计算 IP 系列的代际前缀                          |
 | GPU     | Graphics Processing Unit                        | 图形处理器                                                     |
-| HBM | High Bandwidth Memory | 高带宽内存；本模型中用于 GPU 本地显存 |
+| HBM     | High Bandwidth Memory                           | 高带宽内存；本模型中用于 GPU 本地显存                          |
 | GPUVA   | GPU Virtual Address                             | GPU 虚拟地址                                                   |
 | GPUVM   | GPU Virtual Memory                              | GPU 虚拟地址空间及其页表                                       |
 | GWS     | Global Wave Sync                                | 全局 Wave 同步                                                 |
