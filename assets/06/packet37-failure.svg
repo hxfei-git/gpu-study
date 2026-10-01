@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1420" height="1600" viewBox="0 0 1420 1600">
+<rect width="100%" height="100%" fill="white"/>
+<defs><marker id="arr" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="#9b5026"/></marker></defs>
+<text x="710" y="30" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="32" font-weight="700" fill="#172b42">Packet 37：无效参数访问 → 错误事件 → 进程退出</text>
+<text x="710" y="84" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#54677a">本例：普通内存错误事件；无调试接管、无应用回调报告已处理；驱逐与退出停止成功</text>
+<rect x="45" y="150" width="405" height="180" rx="14" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="67" y="168" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#285b8f">Host 应用线程</text>
+<text x="67" y="214" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">正在等待 S 的正常完成</text>
+<text x="67" y="248" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">还没有取得读取 C 的依据</text>
+<rect x="495" y="150" width="430" height="180" rx="14" fill="#fff4eb" stroke="#9b5026" stroke-width="2"/>
+<text x="517" y="168" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#9b5026">Q0 / Packet 37</text>
+<text x="517" y="214" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">T4 已开始，参数中的 A 错误</text>
+<text x="517" y="248" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">读取无效 GPUVA 触发故障</text>
+<rect x="970" y="150" width="405" height="180" rx="14" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="992" y="168" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#285b8f">Q1 / Packet 100、101</text>
+<text x="992" y="214" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">100 等待 S；101 尚未执行</text>
+<text x="992" y="248" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">尚未消费这份 C</text>
+<path d="M710,330 L710,390" fill="none" stroke="#9b5026" stroke-width="3" marker-end="url(#arr)"/>
+<rect x="130" y="390" width="1160" height="190" rx="14" fill="#fff4eb" stroke="#9b5026" stroke-width="2"/>
+<text x="152" y="408" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#9b5026">设备访问失败，Host 内核尝试恢复</text>
+<text x="152" y="454" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">本例错误 A = 0x3100_0000；i=5 发出的地址为 0x3100_0014</text>
+<text x="152" y="488" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">错误范围既没有合法 CPU VMA，也没有 KFD SVM 范围记录</text>
+<text x="152" y="522" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">恢复无法建立合法映射，转入内存错误报告</text>
+<path d="M710,580 L710,635" fill="none" stroke="#9b5026" stroke-width="3" marker-end="url(#arr)"/>
+<rect x="130" y="635" width="1160" height="185" rx="14" fill="#fff4eb" stroke="#9b5026" stroke-width="2"/>
+<text x="152" y="653" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#9b5026">Host 内核 KFD：驱逐 Queue，设置错误事件</text>
+<text x="152" y="699" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">按进程身份定位 P，驱逐 P 在 GPU0 上的 Q0 / Q1</text>
+<text x="152" y="733" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">保存故障设备、地址和原因，设置内存错误事件并唤醒其等待者</text>
+<text x="152" y="767" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">Q1 从等待转入停止；C 没有成为可供消费者使用的完整结果</text>
+<path d="M710,820 L710,890" fill="none" stroke="#9b5026" stroke-width="3" marker-end="url(#arr)"/>
+<text x="740" y="830" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#9b5026">内核与用户态之间通过事件通知</text>
+<rect x="130" y="890" width="1160" height="195" rx="14" fill="#fff4eb" stroke="#9b5026" stroke-width="2"/>
+<text x="152" y="908" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#9b5026">Host 用户态 ROCr：异步处理错误并终止 P</text>
+<text x="152" y="954" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">Runtime 的异步处理通路读取事件，执行 VMFaultHandler()</text>
+<text x="152" y="988" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">没有应用系统事件回调报告已处理：进入默认诊断与终止分支</text>
+<text x="152" y="1022" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">最终断言终止或 abort()；应用等待线程也随 P 结束</text>
+<path d="M710,1085 L710,1150" fill="none" stroke="#9b5026" stroke-width="3" marker-end="url(#arr)"/>
+<rect x="130" y="1150" width="1160" height="190" rx="14" fill="#eef9f7" stroke="#087a78" stroke-width="2"/>
+<text x="152" y="1168" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#087a78">内核退出清理：结束剩余使用并释放资源</text>
+<text x="152" y="1214" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">继续处理 Queue、地址空间及软件引用，排空相应后台使用</text>
+<text x="152" y="1248" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">满足最后使用者与引用条件后，解除映射、归还资源</text>
+<text x="152" y="1282" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">连接正文 6.5.3；异常终止不保证用户态正常析构顺序</text>
+<rect x="130" y="1400" width="1160" height="125" rx="14" fill="#f7f9fc" stroke="#54677a" stroke-width="2"/>
+<text x="152" y="1418" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#54677a">本次应用没有走到正常 T6</text>
+<text x="152" y="1464" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">C 不能作为完整计算结果使用；S 的单次读数不能代替错误事件。</text>
+<text x="710" y="1554" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#54677a">图示使用请求地址说明原因；实际故障记录可能按页报告，不假定首个故障来自 i=5。</text>
+</svg>

@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1560" viewBox="0 0 1200 1560">
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#52677d"/></marker></defs>
+<rect width="100%" height="100%" fill="#fff"/>
+<text x="48" y="56" font-family="Microsoft YaHei, sans-serif" font-size="31" font-weight="700" fill="#20344c">从线程到 Queue，再到第二个进程</text>
+<text x="48" y="95" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#52677d">普通 KFD 主上下文 · 同进程共享 mm / fd 表 · 无跨进程共享缓冲</text>
+<rect x="50" y="135" width="1100" height="327" rx="14" fill="#f2f6fa" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="72" y="172" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#285f90">① 同一进程增加 T1：增加 CPU 执行者，复用 GPU 环境</text>
+<rect x="80" y="208" width="240" height="125" rx="14" fill="#fff" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="102" y="245" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#285f90">T0 与 T1</text>
+<text x="102" y="285" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">各自 task_struct</text>
+<rect x="395" y="208" width="725" height="125" rx="14" fill="#fff" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="417" y="245" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#285f90">同一个 P 的地址空间与打开文件</text>
+<text x="417" y="285" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">同一 mm；fd 表中的 kfd_fd / render fd</text>
+<path d="M320 268L395 268" fill="none" stroke="#52677d" stroke-width="2.4" marker-end="url(#arr)"/>
+<text x="335" y="253" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#52677d">共享</text>
+<path d="M753 333L753 370" fill="none" stroke="#52677d" stroke-width="2.4" marker-end="url(#arr)"/>
+<text x="112" y="406" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">kfd_process(P) → PDD(P, GPU0) → GPUVM(P)；Q0、Ring 和数据继续复用</text>
+<text x="112" y="441" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#52677d">T0 / T1 同时写 Q0 时，使用多 Producer 协议；还要保护参数与数据。</text>
+<path d="M600 462L600 501" fill="none" stroke="#52677d" stroke-width="2.4" marker-end="url(#arr)"/>
+<rect x="50" y="502" width="1100" height="355" rx="14" fill="#f2f6fa" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="72" y="539" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#285f90">② 同一进程创建 Q1：增加 Queue 自身资源</text>
+<rect x="80" y="573" width="470" height="165" rx="14" fill="#fff" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="102" y="610" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#285f90">Q0</text>
+<text x="102" y="650" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">自己的 Ring、索引、MQD、Doorbell 槽</text>
+<text x="102" y="684" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">后续执行 vector_add，读取 A</text>
+<rect x="650" y="573" width="470" height="165" rx="14" fill="#fff" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="672" y="610" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#285f90">Q1</text>
+<text x="672" y="650" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">另一份 Ring、索引、MQD、Doorbell 槽</text>
+<text x="672" y="684" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">后续执行 prepare_A，写入 A</text>
+<path d="M315 738L315 777L590 777" fill="none" stroke="#52677d" stroke-width="2.4" marker-end="url(#arr)"/>
+<path d="M885 738L885 777L610 777" fill="none" stroke="#52677d" stroke-width="2.4" marker-end="url(#arr)"/>
+<text x="140" y="819" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#247054">共同使用 P 的 GPUVM 和 A；写完再读的先后由 Signal / Barrier 建立</text>
+<path d="M600 857L600 899" fill="none" stroke="#52677d" stroke-width="2.4" marker-end="url(#arr)"/>
+<rect x="50" y="900" width="1100" height="345" rx="14" fill="#f2f6fa" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="72" y="937" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#285f90">③ 独立进程 R 加入：新建自己的进程与地址空间资源</text>
+<rect x="80" y="974" width="470" height="172" rx="14" fill="#fff" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="102" y="1011" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#285f90">P / PASID 42</text>
+<text x="102" y="1051" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">P 的 mm、Runtime、文件与上下文</text>
+<text x="102" y="1085" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">GPUVM(P)、Q0/Q1、P 的数据 / Signal</text>
+<rect x="650" y="974" width="470" height="172" rx="14" fill="#fff" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="672" y="1011" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#285f90">R / PASID 77</text>
+<text x="672" y="1051" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">R 的 mm、Runtime、文件与上下文</text>
+<text x="672" y="1085" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">GPUVM(R)、QR、R 的数据 / Signal</text>
+<text x="109" y="1199" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#20344c">同一个数值的 GPUVA，分别通过 P / R 的 GPUVM 解释到各自存储。</text>
+<path d="M315 1245L315 1293" fill="none" stroke="#52677d" stroke-width="2.4" marker-end="url(#arr)"/>
+<path d="M885 1245L885 1293" fill="none" stroke="#52677d" stroke-width="2.4" marker-end="url(#arr)"/>
+<rect x="50" y="1294" width="1100" height="155" rx="14" fill="#eaf4ee" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="72" y="1331" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#247054">设备公共资源仍是同一套</text>
+<text x="72" y="1371" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">GPU0 节点 / DQM / 固件与内部通道 / IH / Doorbell 设备窗口</text>
+<text x="72" y="1405" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">共同使用有限的驻留位置、CU 与存储带宽；硬件状态可随调度改变</text>
+<text x="60" y="1506" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#52677d">Queue 换出时保留软件对象和后备存储；销毁时先结束设备使用，再解除相关引用。</text>
+</svg>

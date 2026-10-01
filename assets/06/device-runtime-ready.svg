@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="2180" viewBox="0 0 1100 2180">
+<rect width="100%" height="100%" fill="white"/>
+<text x="550.0" y="27" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="30" font-weight="700" fill="#172b42">T0：设备与进程准备，直到本次任务资源可用</text>
+<text x="550.0" y="75" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="19" font-weight="400" fill="#54677a">本例：外部 Host CPU + MI300X · 一个逻辑 GPU · HWS/CPSCH · PSP 固件装载</text>
+<text x="64" y="141" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#285b8f">01</text>
+<rect x="118" y="124" width="928" height="98" rx="12" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="136" y="139" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#285b8f">AMDGPU 模块：先建立全局 KFD 接口</text>
+<text x="136" y="174" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">字符设备、拓扑框架、进程工作队列 → 注册 PCI 驱动</text>
+<polyline points="578,222 578,251" fill="none" stroke="#285b8f" stroke-width="3"/>
+<polygon points="578,251 572.7804135906653,240.19463477176788 583.2195864093347,240.19463477176788" fill="#285b8f"/>
+<text x="64" y="271" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#285b8f">02</text>
+<rect x="118" y="254" width="928" height="98" rx="12" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="136" y="269" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#285b8f">PCI 匹配 → amdgpu_pci_probe()</text>
+<text x="136" y="304" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">建立 adev，启用设备 → amdgpu_device_init()</text>
+<polyline points="578,352 578,381" fill="none" stroke="#285b8f" stroke-width="3"/>
+<polygon points="578,381 572.7804135906653,370.1946347717679 583.2195864093347,370.1946347717679" fill="#285b8f"/>
+<text x="64" y="401" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#285b8f">03</text>
+<rect x="118" y="384" width="928" height="98" rx="12" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="136" y="399" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#285b8f">早期 IP 准备 → KFD 设备探测</text>
+<text x="136" y="434" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">选择模块回调、取得固件镜像；kfd_dev.init_complete = false</text>
+<polyline points="578,482 578,511" fill="none" stroke="#285b8f" stroke-width="3"/>
+<polygon points="578,511 572.7804135906653,500.1946347717679 583.2195864093347,500.1946347717679" fill="#285b8f"/>
+<text x="64" y="531" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#285b8f">04</text>
+<rect x="118" y="514" width="928" height="126" rx="12" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="136" y="529" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#285b8f">Doorbell 范围 + 内存、中断、内部队列资源</text>
+<text x="136" y="564" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">BO / GART / GPUVM 管理、IH Ring、AMDGPU 内部 Ring</text>
+<text x="136" y="594" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">公共模块与 GMC 的必要硬件准备穿插在初始化循环内</text>
+<polyline points="578,640 578,669" fill="none" stroke="#285b8f" stroke-width="3"/>
+<polygon points="578,669 572.7804135906653,658.1946347717678 583.2195864093347,658.1946347717678" fill="#285b8f"/>
+<text x="64" y="689" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#285b8f">05</text>
+<rect x="118" y="672" width="928" height="126" rx="12" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="136" y="687" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#285b8f">装载固件，启动并检查内部计算通道</text>
+<text x="136" y="722" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">微码 BO → 硬件阶段 1 → PSP 装载 → 硬件阶段 2</text>
+<text x="136" y="752" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">恢复 RLC / CP，准备内部队列，执行 Ring 检查</text>
+<polyline points="578,798 578,827" fill="none" stroke="#285b8f" stroke-width="3"/>
+<polygon points="578,827 572.7804135906653,816.1946347717678 583.2195864093347,816.1946347717678" fill="#285b8f"/>
+<text x="64" y="847" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#285b8f">06</text>
+<rect x="118" y="830" width="928" height="98" rx="12" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="136" y="845" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#285b8f">AMDGPU → kgd2kfd_device_init()</text>
+<text x="136" y="880" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">交给 KFD：可用 VMID、计算队列位置、Doorbell 范围等</text>
+<polyline points="578,928 578,957" fill="none" stroke="#285b8f" stroke-width="3"/>
+<polygon points="578,957 572.7804135906653,946.1946347717678 583.2195864093347,946.1946347717678" fill="#285b8f"/>
+<text x="64" y="977" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#285b8f">07</text>
+<rect x="118" y="960" width="928" height="126" rx="12" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="136" y="975" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#285b8f">KFD 节点完成准备 → 公布拓扑</text>
+<text x="136" y="1010" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">管理内存、中断、DQM → 启动队列管理器 → 加入拓扑</text>
+<text x="136" y="1040" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">本设备所有节点成功后：init_complete = true</text>
+<polyline points="578,1086 578,1115" fill="none" stroke="#285b8f" stroke-width="3"/>
+<polygon points="578,1115 572.7804135906653,1104.1946347717678 583.2195864093347,1104.1946347717678" fill="#285b8f"/>
+<text x="64" y="1135" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#285b8f">08</text>
+<rect x="118" y="1118" width="928" height="98" rx="12" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="136" y="1133" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#285b8f">设备初始化继续完成 → DRM 设备注册</text>
+<text x="136" y="1168" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">后期初始化、SVM 属性等 → 返回外层 probe 并注册设备</text>
+<polyline points="578,1216 578,1245" fill="none" stroke="#087a78" stroke-width="3"/>
+<polygon points="578,1245 572.7804135906653,1234.1946347717678 583.2195864093347,1234.1946347717678" fill="#087a78"/>
+<text x="64" y="1265" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#087a78">09</text>
+<rect x="118" y="1248" width="928" height="98" rx="12" fill="#edf8f6" stroke="#087a78" stroke-width="2"/>
+<text x="136" y="1263" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#087a78">进程 P：hsa_init() → 打开 /dev/kfd</text>
+<text x="136" y="1298" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">ROCr / HSAKMT 建立状态；KFD 建立或复用 P 的主上下文</text>
+<polyline points="578,1346 578,1375" fill="none" stroke="#087a78" stroke-width="3"/>
+<polygon points="578,1375 572.7804135906653,1364.1946347717678 583.2195864093347,1364.1946347717678" fill="#087a78"/>
+<text x="64" y="1395" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#087a78">10</text>
+<rect x="118" y="1378" width="928" height="98" rx="12" fill="#edf8f6" stroke="#087a78" stroke-width="2"/>
+<text x="136" y="1393" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#087a78">读取拓扑 → 打开 render 文件 → ACQUIRE_VM</text>
+<text x="136" y="1428" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">准备进程地址范围；PDD 关联 GPUVM 并持有 render 文件</text>
+<polyline points="578,1476 578,1505" fill="none" stroke="#087a78" stroke-width="3"/>
+<polygon points="578,1505 572.7804135906653,1494.1946347717678 583.2195864093347,1494.1946347717678" fill="#087a78"/>
+<text x="64" y="1525" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#087a78">11</text>
+<rect x="118" y="1508" width="928" height="126" rx="12" fill="#edf8f6" stroke="#087a78" stroke-width="2"/>
+<text x="136" y="1523" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#087a78">建立 GPU Agent 与运行资源 → hsa_init() 返回</text>
+<text x="136" y="1558" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">分配器、scratch、Trap Handler、内部搬运能力</text>
+<text x="136" y="1588" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">应用枚举并选择目标 GPU Agent</text>
+<polyline points="578,1634 578,1663" fill="none" stroke="#087a78" stroke-width="3"/>
+<polygon points="578,1663 572.7804135906653,1652.1946347717678 583.2195864093347,1652.1946347717678" fill="#087a78"/>
+<text x="64" y="1683" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#285b8f">12</text>
+<rect x="118" y="1666" width="928" height="98" rx="12" fill="#fff7e9" stroke="#9b6723" stroke-width="2"/>
+<text x="136" y="1681" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#9b6723">应用申请 Q0：hsa_queue_create()</text>
+<text x="136" y="1716" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">接回 03：申请 Ring → KFD 校验、MQD、Doorbell → 返回 Queue</text>
+<text x="550" y="2130" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#54677a">图示箭头为本例准备顺序；某条日志或单个成功标志只证明对应阶段。</text>
+
+<polyline points="580,1764 580,1830" fill="none" stroke="#285b8f" stroke-width="3"/><polygon points="580,1840 574,1828 586,1828" fill="#285b8f"/>
+<rect x="118" y="1840" width="928" height="190" rx="14" fill="#fff7e9" stroke="#a5671b" stroke-width="2"/>
+<text x="138" y="1856" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#a5671b">提交前共同满足：Queue、代码、内存与完成对象</text>
+<text x="138" y="1896" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">Q0 创建；代码装载并可执行；A/B/C、Kernarg、S 具备访问条件</text>
+<text x="138" y="1928" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">各项按依赖准备，可提前建立并复用；本轮内容在 T1 填写</text>
+<text x="138" y="1960" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">成功准备这些条件后，才进入 T1～T6 的正常任务主线</text>
+</svg>

@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1410" viewBox="0 0 1200 1410">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#526477"/></marker></defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="52" y="55.0" font-family="Microsoft YaHei, sans-serif" font-size="32" font-weight="700" fill="#172b42">一次应用怎样使用设备，并归还资源</text>
+<text x="52" y="93.0" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#526477">同一进程 P · 同一 Queue Q0 · 同一 Packet 37 · 同一完成 Signal S</text>
+<rect x="50" y="130" width="1100" height="216" rx="14" fill="#f2f6fa" stroke="#cdd9e3" stroke-width="1.5"/>
+<text x="74" y="169.0" font-family="Microsoft YaHei, sans-serif" font-size="26" font-weight="700" fill="#265b8b">1 设备就绪</text>
+<text x="76" y="215" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">AMDGPU 取得设备，准备内存与中断</text>
+<text x="76" y="251" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">装载固件，建立内部通道和 KFD 节点</text>
+<path d="M584 233L625 233" fill="none" stroke="#526477" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="646" y="190" width="480" height="91" rx="14" fill="#e9f4ed" stroke="#bed8c8" stroke-width="1.5"/>
+<text x="666" y="222.0" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#236850">留下设备公共服务</text>
+<text x="666" y="256.0" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#172b42">内存管理、IH、Doorbell 范围、DQM</text>
+<text x="76" y="319.0" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#526477">P 尚未启动；此处还没有用户 Q0、数组和完成对象。</text>
+<path d="M600 347L600 373" fill="none" stroke="#526477" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="50" y="376" width="1100" height="216" rx="14" fill="#f2f6fa" stroke="#cdd9e3" stroke-width="1.5"/>
+<text x="74" y="415.0" font-family="Microsoft YaHei, sans-serif" font-size="26" font-weight="700" fill="#265b8b">2 进程接入与资源准备</text>
+<text x="76" y="461" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">Runtime 打开 KFD 与 render 接口</text>
+<text x="76" y="497" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">关联 GPUVM，创建 Queue、映射与事件</text>
+<path d="M584 479L625 479" fill="none" stroke="#526477" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="646" y="436" width="480" height="91" rx="14" fill="#e9f4ed" stroke="#bed8c8" stroke-width="1.5"/>
+<text x="666" y="468.0" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#236850">留下 P 可复用的环境</text>
+<text x="666" y="502.0" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#172b42">进程 / PDD、GPUVM、Q0 与通知条件</text>
+<text x="76" y="565.0" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#526477">驱动资源按本次请求分配；任务内容仍由应用准备。</text>
+<path d="M600 593L600 619" fill="none" stroke="#526477" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="50" y="622" width="1100" height="216" rx="14" fill="#f2f6fa" stroke="#cdd9e3" stroke-width="1.5"/>
+<text x="74" y="661.0" font-family="Microsoft YaHei, sans-serif" font-size="26" font-weight="700" fill="#265b8b">3 请求、提交与设备执行</text>
+<text x="76" y="707" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">准备输入和参数，处理提交依赖</text>
+<text x="76" y="743" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">发布 Packet 37 → 取包 → CU 执行</text>
+<path d="M584 725L625 725" fill="none" stroke="#526477" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="646" y="682" width="480" height="91" rx="14" fill="#e9f4ed" stroke="#bed8c8" stroke-width="1.5"/>
+<text x="666" y="714.0" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#236850">本轮计算正在推进</text>
+<text x="666" y="748.0" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#172b42">Host 保存管理记录，设备保存活动状态</text>
+<text x="76" y="811.0" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#526477">Queue 驻留控制可在创建时或后续变化时参与，不是每包一次。</text>
+<path d="M600 839L600 865" fill="none" stroke="#526477" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="50" y="868" width="1100" height="216" rx="14" fill="#f2f6fa" stroke="#cdd9e3" stroke-width="1.5"/>
+<text x="74" y="907.0" font-family="Microsoft YaHei, sans-serif" font-size="26" font-weight="700" fill="#265b8b">4 完成后继续工作</text>
+<text x="76" y="953" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">GPU 写 C，完成同步并更新 S</text>
+<text x="76" y="989" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">Host 观察完成，或被唤醒后重新检查</text>
+<path d="M584 971L625 971" fill="none" stroke="#526477" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="646" y="928" width="480" height="91" rx="14" fill="#e9f4ed" stroke="#bed8c8" stroke-width="1.5"/>
+<text x="666" y="960.0" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#236850">本轮结果可以按协议使用</text>
+<text x="666" y="994.0" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#172b42">Queue、代码与映射可以继续保留</text>
+<text x="76" y="1057.0" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#526477">还有任务：回到 3 复用环境；准备退出：进入 5。</text>
+<path d="M600 1085L600 1111" fill="none" stroke="#526477" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="50" y="1114" width="1100" height="216" rx="14" fill="#f2f6fa" stroke="#cdd9e3" stroke-width="1.5"/>
+<text x="74" y="1153.0" font-family="Microsoft YaHei, sans-serif" font-size="26" font-weight="700" fill="#265b8b">5 应用退出与资源归还</text>
+<text x="76" y="1199" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">停止新提交，结束任务和消费者使用</text>
+<text x="76" y="1235" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400" fill="#172b42">停用 Queue，归还映射、对象和引用</text>
+<path d="M584 1217L625 1217" fill="none" stroke="#526477" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="646" y="1174" width="480" height="91" rx="14" fill="#e9f4ed" stroke="#bed8c8" stroke-width="1.5"/>
+<text x="666" y="1206.0" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#236850">P 的使用结束</text>
+<text x="666" y="1240.0" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#172b42">设备公共服务继续供其他应用使用</text>
+<text x="76" y="1303.0" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#526477">未完成时退出另走内核停止与回收路径，不承诺计算结果。</text>
+<text x="52" y="1390.0" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#526477">逻辑流程示意：普通 AQL 任务沿已建立的 Queue 与地址空间运行；各节注明源码与条件。</text>
+</svg>

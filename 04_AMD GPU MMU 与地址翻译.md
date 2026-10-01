@@ -1623,7 +1623,7 @@ off      = 0x1000_0940 & 0x3FFF_FFFF
 
 </details>
 
-使用大页时，同一个叶子项的权限和内存属性作用于整个大页。若只需改变其中 4 KiB 的映射，驱动可能要拆分映射，并处理缓存中的翻译和在途访问对原页面的使用。完整建表、拆表和页表更新作业留到 GPUVM 更新后端专题，范围见[待补充清单第 4 项](./待补充的知识点.md#4-通用-drmgemttm-机制与普通-ib-提交路径)。
+使用大页时，同一个叶子项的权限和内存属性作用于整个大页。若只需改变其中 4 KiB 的映射，驱动可能要拆分映射，并处理缓存中的翻译和在途访问对原页面的使用。完整建表、拆表和页表更新作业纳入 [07 大纲 §7.5](<./07_AMDGPU 通用内存管理与 DRM 任务提交（大纲）.md#75-gpuvm-更新后端超时与一次小范围验证>)。
 
 ## 4. TLB 与页表缓存的硬件组织
 
@@ -2337,7 +2337,7 @@ MI300X 中 `VM_L2` 保存翻译和目录相关信息；XCD 的数据 L2 保存�
 
 当前核对的 MI300X 资料未给出无效 PDE/PTE 是否这样缓存、缓存在哪里以及保留多久的直接定义，因此本章不据此设计缓存路径。即使此前没有有效的叶子结果，中间目录仍可能已被缓存；驱动新建映射后，仍须执行规定的页表同步与翻译失效流程。
 
-`amdgpu_vm_update_fault_cache()` 的软件记录以及 Retry CAM 的故障跟踪，也不能单独证明硬件存在这种失败翻译缓存。相关参数和失败结果缓存的直接证据继续保留在 [待补充的知识点](./待补充的知识点.md#5-mi300-翻译缓存的内部规格与失败结果缓存) 中。
+`amdgpu_vm_update_fault_cache()` 的软件记录以及 Retry CAM 的故障跟踪，也不能单独证明硬件存在这种失败翻译缓存。[07 大纲 §7.5](<./07_AMDGPU 通用内存管理与 DRM 任务提交（大纲）.md#75-gpuvm-更新后端超时与一次小范围验证>) 将结合更新后端区分这些记录，并保留缺少直接硬件证据的边界。
 
 > **[SOURCE]** Linux `248951ddc14d`，[`gmc_v9_0.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gmc_v9_0.c) 第 652 行调用软件故障缓存接口；[`amdgpu_gmc.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_gmc.c) 第 545～591 行处理 Retry 事件与过滤。这些代码证明软件和故障跟踪的作用，不提供失败翻译缓存的内部规格。
 
@@ -2958,7 +2958,7 @@ P0 的释放是另一项判断。本例的旧请求 R0 已结束；如果还有 
 
 MI300 ISA 中的 `S_WAITCNT` 也有明确范围：它等待当前 Wave 相关的指令计数达到要求。例如向量读取在数据回到向量寄存器后减少计数，向量写入的计数完成位置是数据 L2；这不是“整块 GPU 的全部访存都已结束”。ISA 的数据缓存控制指令则操作对应缓存和作用范围，不能用来代替本章按地址空间提交的 VM Hub 翻译失效。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_chardev.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) 第 1362～1379 行先等待页表更新，再请求失效；[`amdgpu_gmc.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_gmc.c) 第 833～874 行提交并等待 KIQ 控制命令，异常和 Reset 分支仍按 §5.2.2 判断。完整 CPU/SDMA 更新后端及 `last_pt_update` 等对象传播保留在[后续专题清单](./待补充的知识点.md#4-通用-drmgemttm-机制与普通-ib-提交路径)中。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_chardev.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) 第 1362～1379 行先等待页表更新，再请求失效；[`amdgpu_gmc.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_gmc.c) 第 833～874 行提交并等待 KIQ 控制命令，异常和 Reset 分支仍按 §5.2.2 判断。完整 CPU/SDMA 更新后端及 `last_pt_update` 等对象传播见 [07 大纲 §7.5](<./07_AMDGPU 通用内存管理与 DRM 任务提交（大纲）.md#75-gpuvm-更新后端超时与一次小范围验证>)。
 >
 > **[SPEC]** [MI300 ISA](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf#page=27)（封面日期 2025-08-05）§4.4，原文第 19～20 页，规定 `S_WAITCNT` 的计数与完成位置；[§9.1.10](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf#page=81)，原文第 73～75 页，规定数据访存与缓存控制的作用范围。
 
@@ -3373,4 +3373,4 @@ Descriptor、机器码、Kernarg、A/B/C 和 Signal 的访问可以重复这个�
 - **02 的地址与映射基础**：[GPU 地址翻译](<./02_GPU 内存管理基础.md#14-gpu-地址翻译>)、[PASID/VMID/根表](<./02_GPU 内存管理基础.md#154-pasidvmid-和根页表怎样连接>)、[PTE 的生成](<./02_GPU 内存管理基础.md#233-从-software-mapping-到硬件-pte>)、[页表完成后失效](<./02_GPU 内存管理基础.md#234-等待页表完成并-invalidate-旧-tlb-翻译>)。
 - **03 的 Queue 与执行基础**：[硬件结构与驻留](<./03_AMD GPU 队列与 AQL Dispatch（上）.md#30-mi300-的硬件结构与队列分工>)、[CP/MEC 取包](<./03_AMD GPU 队列与 AQL Dispatch（下）.md#60-cpmec-根据-hqd-读取-ring>)、[代码与数据访问](<./03_AMD GPU 队列与 AQL Dispatch（下）.md#61-packet-引出的代码与数据访问>)、[完成等待与 IH](<./03_AMD GPU 队列与 AQL Dispatch（下）.md#712-cpu-的轮询与阻塞等待>)、[故障记录的定位范围](<./03_AMD GPU 队列与 AQL Dispatch（下）.md#836-用提交记录与故障日志判断停滞>)。
 - **05 的 HMM/SVM 故障恢复与迁移**：从本篇第 6 章进入 [05 学习文档](<./05_HMM 与 SVM：GPU 缺页恢复与页面迁移.md>)，继续学习 CPU 页面来源、GPU 映射恢复、system RAM/HBM 迁移、并发失效与错误回收。其中 §4.4、§5.2 解释当前过程需要的页表更新与完成条件。
-- **后续 GPUVM 更新与 DRM 提交专题**：完整 CPU/SDMA 后端、更新 job、`last_pt_update`、`kgd_mem->sync` 和 Fence 完成传播仍保留在[待补充清单第 4 项](./待补充的知识点.md#4-通用-drmgemttm-机制与普通-ib-提交路径)中。
+- **第七章的 GPUVM 更新与 DRM 提交**：完整 CPU/SDMA 后端、更新 job、`last_pt_update`、`kgd_mem->sync` 和 Fence 完成传播按 [07 大纲 §7.5](<./07_AMDGPU 通用内存管理与 DRM 任务提交（大纲）.md#75-gpuvm-更新后端超时与一次小范围验证>) 展开。

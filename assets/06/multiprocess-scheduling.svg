@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="960" viewBox="0 0 1240 960">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#526477"/></marker></defs>
+<rect width="100%" height="100%" fill="white"/>
+<text x="40" y="53" font-family="Microsoft YaHei, sans-serif" font-size="31" font-weight="700" fill="#172b42">两个进程的一次交错：CPU 和 GPU 分别推进</text>
+<text x="40" y="92" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#526477">本图条件：P / PASID 42 使用 Q0；R / PASID 77 使用 QR；允许并发且资源充足。</text>
+<text x="40" y="126" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#526477">各列是逻辑观察点，不是固定时间片；GPU 动作还需满足各自依赖与映射条件。</text>
+<text x="40" y="187" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#265b8b">某个 Host CPU 核上的线程</text>
+<rect x="40" y="211" width="257" height="140" rx="12" fill="#f1f6fa" stroke="#ccd9e4" stroke-width="1.5"/>
+<text x="58" y="246" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#526477">观察点 1</text>
+<text x="58" y="285" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">P 执行 Runtime</text>
+<text x="58" y="319" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">发布 Packet 37</text>
+<path d="M304 280L334 280" stroke="#526477" stroke-width="2.5" fill="none" marker-end="url(#a)"/>
+<rect x="341" y="211" width="257" height="140" rx="12" fill="#f1f6fa" stroke="#ccd9e4" stroke-width="1.5"/>
+<text x="359" y="246" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#526477">观察点 2</text>
+<text x="359" y="285" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">P 等待 S 后睡眠</text>
+<text x="359" y="319" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">Linux 改为运行 R</text>
+<path d="M605 280L635 280" stroke="#526477" stroke-width="2.5" fill="none" marker-end="url(#a)"/>
+<rect x="642" y="211" width="257" height="140" rx="12" fill="#f1f6fa" stroke="#ccd9e4" stroke-width="1.5"/>
+<text x="660" y="246" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#526477">观察点 3</text>
+<text x="660" y="285" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">R 执行 Runtime</text>
+<text x="660" y="319" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">发布自己的任务</text>
+<path d="M906 280L936 280" stroke="#526477" stroke-width="2.5" fill="none" marker-end="url(#a)"/>
+<rect x="943" y="211" width="257" height="140" rx="12" fill="#f1f6fa" stroke="#ccd9e4" stroke-width="1.5"/>
+<text x="961" y="246" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#526477">观察点 4</text>
+<text x="961" y="285" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">P 获得 CPU 后</text>
+<text x="961" y="319" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">确认完成、读取 C</text>
+<text x="357" y="408" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#236850">MI300X 的设备工作</text>
+<rect x="40" y="447" width="257" height="151" rx="12" fill="#eef6ef" stroke="#ccd9e4" stroke-width="1.5"/>
+<text x="58" y="484" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#526477">对应设备状态 1</text>
+<text x="58" y="527" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#172b42">Q0 已驻留</text>
+<text x="58" y="561" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#172b42">取得 Packet 37</text>
+<path d="M304 522L334 522" stroke="#526477" stroke-width="2.5" fill="none" marker-end="url(#a)"/>
+<rect x="341" y="447" width="257" height="151" rx="12" fill="#eef6ef" stroke="#ccd9e4" stroke-width="1.5"/>
+<text x="359" y="484" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#526477">对应设备状态 2</text>
+<text x="359" y="527" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#172b42">P 的计算继续</text>
+<text x="359" y="561" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#172b42">不因 CPU 换 R 而停止</text>
+<path d="M605 522L635 522" stroke="#526477" stroke-width="2.5" fill="none" marker-end="url(#a)"/>
+<rect x="642" y="447" width="257" height="151" rx="12" fill="#eef6ef" stroke="#ccd9e4" stroke-width="1.5"/>
+<text x="660" y="484" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#526477">对应设备状态 3</text>
+<text x="660" y="527" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#172b42">资源与依赖允许时</text>
+<text x="660" y="561" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#172b42">P / R 的计算可重叠</text>
+<path d="M906 522L936 522" stroke="#526477" stroke-width="2.5" fill="none" marker-end="url(#a)"/>
+<rect x="943" y="447" width="257" height="151" rx="12" fill="#eef6ef" stroke="#ccd9e4" stroke-width="1.5"/>
+<text x="961" y="484" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#526477">对应设备状态 4</text>
+<text x="961" y="527" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#172b42">P 完成并更新 S</text>
+<text x="961" y="561" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#172b42">R 的任务仍可继续</text>
+<path d="M168 354L168 440" stroke="#526477" stroke-width="2.5" fill="none" marker-end="url(#a)"/>
+<text x="189" y="398" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#526477">提交</text>
+<path d="M770 354L770 440" stroke="#526477" stroke-width="2.5" fill="none" marker-end="url(#a)"/>
+<text x="791" y="398" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#526477">提交</text>
+<path d="M1074 442L1074 358" stroke="#526477" stroke-width="2.5" fill="none" marker-end="url(#a)"/>
+<text x="1095" y="399" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#526477">完成通知</text>
+<rect x="40" y="654" width="1160" height="230" rx="12" fill="#fff8eb" stroke="#ccd9e4" stroke-width="1.5"/>
+<text x="63" y="695" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#8a601e">驻留名额不足（另例，CWSR 已启用且保存 / 恢复成功）</text>
+<text x="63" y="742" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">Q0 保存队列与 Wave 状态 → QR 获得本次执行机会 → 以后恢复 Q0</text>
+<text x="63" y="776" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">P 的 Ring、映射、数据和保存区继续有效；任务完成后才正常更新 S。</text>
+<text x="63" y="838" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#526477">这次 GPU 换出 / 恢复不要求与某个 CPU 核上的 P → R 切换同时发生。</text>
+<text x="40" y="929" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#526477">软件对象归属、CPU 线程切换、Queue 驻留、Wave 执行分别观察，再沿同一任务关联。</text>
+</svg>

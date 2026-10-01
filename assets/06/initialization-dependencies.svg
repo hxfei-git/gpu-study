@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1570" viewBox="0 0 1200 1570">
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#52677d"/></marker></defs>
+<rect width="100%" height="100%" fill="#fff"/>
+<text x="48" y="56" font-family="Microsoft YaHei, sans-serif" font-size="31" font-weight="700" fill="#20344c">计算功能就绪：资源怎样一层层准备好</text>
+<text x="48" y="95" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#52677d">资源依赖示意 · 外部 Host CPU + MI300X · PSP 装载 / 传统 HWS-CPSCH</text>
+<rect x="50" y="130" width="1100" height="125" rx="14" fill="#f2f6fa" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="72" y="167" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#285f90">Linux 识别设备，AMDGPU 建立设备记录</text>
+<text x="72" y="207" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">已有 PCIe 设备与 BAR；应用的进程、Queue、数组尚未创建</text>
+<path d="M360 255L360 309" fill="none" stroke="#52677d" stroke-width="2.4" marker-end="url(#arr)"/>
+<text x="380" y="290" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#52677d">准备公共资源</text>
+<path d="M875 255L875 309" fill="none" stroke="#52677d" stroke-width="2.4" marker-end="url(#arr)"/>
+<rect x="50" y="310" width="620" height="178" rx="14" fill="#f2f6fa" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="72" y="347" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#285f90">内存管理先提供设备可用的存储</text>
+<text x="72" y="387" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">BO / GART / GPUVM 公共管理</text>
+<text x="72" y="421" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">前期分配 Ring、KIQ、MQD 与微码存储</text>
+<text x="72" y="455" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">后续应用再建立自己的 GPUVM 和映射</text>
+<rect x="710" y="310" width="440" height="178" rx="14" fill="#f2f6fa" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="732" y="347" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#285f90">Doorbell 设备窗口</text>
+<text x="732" y="387" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">取得 BAR 基址与大小</text>
+<text x="732" y="421" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">保留内部范围及引擎路由范围</text>
+<text x="732" y="455" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">后续再分配进程分片 / Queue 槽</text>
+<path d="M230 488L230 541" fill="none" stroke="#52677d" stroke-width="2.4" marker-end="url(#arr)"/>
+<text x="245" y="525" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#52677d">提供事件缓冲</text>
+<path d="M590 488L590 518L860 518L860 541" fill="none" stroke="#52677d" stroke-width="2.4" marker-end="url(#arr)"/>
+<text x="675" y="508" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#52677d">提供微码与命令存储</text>
+<rect x="50" y="542" width="510" height="180" rx="14" fill="#f2f6fa" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="72" y="579" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#285f90">中断与后台处理入口</text>
+<text x="72" y="619" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">IH Ring + Linux IRQ 入口</text>
+<text x="72" y="653" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">Retry：AMDGPU 后台调用 SVM 恢复</text>
+<text x="72" y="687" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">完成 / 错误：KFD FIFO 与工作队列</text>
+<rect x="610" y="542" width="540" height="180" rx="14" fill="#f2f6fa" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="632" y="579" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#285f90">Firmware 装载与启动</text>
+<text x="632" y="619" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">取得镜像 → PSP 装载 → 等完成与响应</text>
+<text x="632" y="653" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">恢复 RLC / MEC 相关计算控制</text>
+<text x="632" y="687" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">镜像读取成功以后，仍需启动与通道测试</text>
+<path d="M880 722L880 772" fill="none" stroke="#52677d" stroke-width="2.4" marker-end="url(#arr)"/>
+<text x="901" y="755" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#52677d">启动后验证</text>
+<rect x="610" y="773" width="540" height="162" rx="14" fill="#f2f6fa" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="632" y="810" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#285f90">内部 Queue 硬件状态装载与测试</text>
+<text x="632" y="850" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">装载已有 KIQ / 内部 Queue 的配置</text>
+<text x="632" y="884" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">测试命令执行，再由 KFD 建立 HIQ</text>
+<path d="M306 722L306 970L370 970L370 1009" fill="none" stroke="#52677d" stroke-width="2.4" marker-end="url(#arr)"/>
+<path d="M880 935L880 1009" fill="none" stroke="#52677d" stroke-width="2.4" marker-end="url(#arr)"/>
+<path d="M1150 400L1175 400L1175 1100L1150 1100" fill="none" stroke="#52677d" stroke-width="2.4" marker-end="url(#arr)"/>
+<rect x="50" y="1010" width="1100" height="170" rx="14" fill="#eaf4ee" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="72" y="1047" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#247054">amdgpu_amdkfd_device_init()：交出可用范围</text>
+<text x="72" y="1087" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">VMID / 硬件 Queue 集合 + Doorbell 范围 + GPUVM 大小 + render 节点</text>
+<text x="72" y="1121" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">kgd2kfd_shared_resources 保存这些条件，KFD 接收并建立自己的管理状态</text>
+<text x="72" y="1155" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">交接范围和能力；此时还没有为 P 固定分配 VMID 5</text>
+<path d="M600 1180L600 1225" fill="none" stroke="#52677d" stroke-width="2.4" marker-end="url(#arr)"/>
+<rect x="50" y="1226" width="1100" height="164" rx="14" fill="#eaf4ee" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="72" y="1263" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#247054">KFD 完成节点初始化</text>
+<text x="72" y="1303" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">管理内存与 Doorbell → 中断处理环境 → DQM 启动 → 节点加入拓扑</text>
+<text x="72" y="1337" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">成功后设置 init_complete；失败沿已完成步骤回滚</text>
+<text x="60" y="1435" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#285f90">后续使用：Runtime 发现 GPU0 → P 建立上下文 / GPUVM → 创建 Q0 → 提交 Packet 37</text>
+<text x="60" y="1480" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#20344c">每一处都检查：留下什么资源、成功证据是什么、失败会阻断哪项后续请求。</text>
+<text x="60" y="1520" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#52677d">图按依赖组织；实际 IP 的软件与硬件初始化存在交错，不按图中位置机械排序。</text>
+</svg>

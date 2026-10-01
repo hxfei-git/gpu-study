@@ -39,6 +39,7 @@
 | GPUVM   | GPU Virtual Memory                           | GPU 虚拟地址空间及其页表                                      |
 | GTT     | Graphics Translation Tables                  | TTM 管理的 system-resource 内存池                             |
 | HBM     | High Bandwidth Memory                        | 高带宽内存                                                    |
+| HIP     | Heterogeneous-Compute Interface for Portability | AMD GPU 编程接口                                            |
 | HMM     | Heterogeneous Memory Management              | 异构内存管理                                                  |
 | HQD     | Hardware Queue Descriptor                    | 硬件队列描述状态                                              |
 | HSA     | Heterogeneous System Architecture            | 异构系统架构                                                  |
@@ -108,10 +109,10 @@ GPU 内存管理不止申请显存，还要处理存储位置、访问地址、�
 | ------- | ----------------------------- | ------------------------------------ |
 | 第 0 章 | GPU 内存管理到底要解决什么    | 用一段 16 KiB AQL Ring 固定问题背景  |
 | 第 1 章 | CPU 和 GPU 怎样找到真正的数据 | 以 system RAM Ring 为主并对照 VRAM   |
-| 第 2 章 | 内存怎样分配、映射并安全释放  | Ring 只演示 Queue 为什么必须持有引用 |
+| 第 2 章 | 内存怎样分配、映射、搬运并安全释放 | Ring 说明资源持有；输入数组说明拷贝与等待 |
 | 第 3 章 | CPU 和 GPU 怎样看见彼此的写入 | Packet→Doorbell 只演示发布顺序      |
 
-> **[BOUNDARY]** 本文聚焦理解 AQL 内存行为所需的接口和对象关系。完整 AQL Dispatch、MQD/HQD、CP/MEC 调度、通用 DRM/GEM/TTM 框架和普通 IB 提交均不展开，相关内容已登记在 [待补充的知识点](./待补充的知识点.md)。
+> **[BOUNDARY]** 本文聚焦理解 AQL 内存行为所需的接口和对象关系。完整 AQL Dispatch、MQD/HQD 与 CP/MEC 见 03；通用 DRM/GEM/TTM、共享 BO、迁移与普通 IB 提交按 [07 大纲](<./07_AMDGPU 通用内存管理与 DRM 任务提交（大纲）.md>) 展开。
 
 Linux 虚拟地址、物理页、页表和 DMA 的 CPU 侧基础见 [01_Linux 内存管理基础](<./01_Linux 内存管理基础.md>)。本文使用以下源码基线：Linux `248951ddc14de84de3910f9b13f51491a8cd91df`、ROCr `ba56a24c6132c5d195686ae4adf969ca1222fbba`、ROCm CLR `81277d69e3352e7144ced2ee9601484f9b48d950`。
 
@@ -6079,7 +6080,82 @@ flowchart LR
 
 **[BOUNDARY]** 这里讨论的是已按上述流程建立映射的 Ring。其他 CPU 内存仍需满足对应 GPU API 的访问要求；仅有同一个地址数值，不能说明 GPU 已有该地址的映射。其他分配接口也可以分别选择 CPU VA 和 GPUVA，地址是否同值取决于具体接口及映射安排。
 
-前文已经说明数据位置、管理对象和 CPU/GPU 访问通路。下一节讨论这些关系的使用者和删除条件。
+前文已经说明同一份 backing 怎样被 CPU 和 GPU 访问。应用还可能需要把输入复制到另一份 backing，下面沿一次 Host 到 HBM 的拷贝补齐这条数据准备路径，再进入 §2.6 的释放条件。
+
+#### 2.5.1 从 Host 输入到 HBM 中的计算输入
+
+**[DESIGN]** 本节增加一个显式拷贝变体：CPU 已把 1024 个 4 字节元素写入 system RAM 中的 `A_host`，Runtime 已为 `A_gpu` 分配一份 4 KiB 的 HBM 存储并建立 GPU 映射。接下来先复制输入，再让 `vector_add` 读取 `A_gpu`。这个变体与 05 中“A 保留在 RAM，GPU 缺页后恢复其映射”的例子分别阅读。
+
+```text
+CPU 填好 A_host：数据在 system RAM
+    → Runtime 准备拷贝引擎可以访问的源、目的地址
+    → 把 A_host 的内容复制到 HBM 中的 A_gpu
+    → 确认拷贝完成，并满足后续使用所需的同步条件
+    → Kernel 的参数指向 A_gpu，GPU 从 HBM 读取输入
+```
+
+申请 HBM 得到的是目的存储，建立 GPU 映射使设备能够通过 `A_gpu` 到达这份存储；数组内容由后面的拷贝写入。拷贝结束后，`A_host` 与 `A_gpu` 仍是两份独立存储。CPU 后续修改 `A_host[5]`，应用需要再次安排数据交接，GPU 才能使用新值。
+
+如果应用选择让 GPU 直接访问原来的 RAM 页面，则应建立该范围的访问权限与映射，再按共享内存的同步规则交接数据。这条路径沿用 §2.3、§2.5 和第 3 章；它不需要为了“GPU 可访问”而先复制到 HBM。
+
+#### 2.5.2 Pinned 与 Staging：拷贝从哪一组页面读取
+
+当前源地址属于普通 Host 内存。Runtime 要先准备设备能够稳定访问的页面和地址，随后才能让设备搬运数据。Pinned 路径尝试登记、固定原 Host 范围并取得设备可访问地址；原数据继续保存在这组 RAM 页面中。这里的固定与登记服务于 Host 缓冲区传输，与 §2.2.6 中 TTM BO 的放置 pin 分别按各自接口理解。
+
+Staging 是 Runtime 管理的一块中转缓冲区。在本节的上传例子中，Runtime 先用 CPU 把 `A_host` 复制到可供设备访问的中转区，再让设备从中转区复制到 `A_gpu`。两条路径如下；箭头表示数据复制，登记和映射写在括号中。
+
+```text
+原 Host 范围成功登记并取得设备地址：
+    A_host 的原 RAM 页面 ──设备拷贝──→ A_gpu 的 HBM
+
+采用 Staging：
+    A_host 的原 RAM 页面 ──CPU memcpy──→ 中转 RAM
+                                           └──设备拷贝──→ A_gpu 的 HBM
+```
+
+固定源码中的 `getBuffer()` 根据是否允许 pin、传输长度和配置决定是否尝试原范围；成功时返回原范围的设备地址，未尝试或尝试失败时取得 Staging 缓冲区。因此 Pinned 与 Staging 不是“主机内存”和“显存”的两个别名，它们描述设备拷贝从哪一组 Host 页面取数据。
+
+反向下载也要沿数据走完：HBM → 中转 RAM 的设备拷贝完成后，CPU 才能执行中转 RAM → 应用目的缓冲区的 `memcpy`。只完成前一段时，应用目的地址里的结果还未更新。
+
+> **[SOURCE]** CLR `81277d69e3352`，[rocblit.cpp](./2.源码/rocm-clr/rocclr/device/rocm/rocblit.cpp) 第 983～1022 行选择原范围 pin 或 Staging，第 3203～3242 行建立原 Host 范围的 Runtime 内存对象并取得设备内存；第 1032～1103 行展开上传与下载，其中第 1062～1071 行先做上传所需的 CPU 中转复制，第 1081～1088 行等待设备下载后再写应用缓冲区。这些路径证明了复制顺序，不为所有接口固定一个传输长度阈值。
+
+#### 2.5.3 CPU、SDMA 与计算 Kernel 的选择
+
+准备好源、目的存储后，Runtime 还要选择谁来执行复制。Blit 是这里对搬运操作的称呼，BlitManager 是组织这些操作的 Runtime 对象。
+
+当 CPU 能够访问两端，而且当前分支选择 Host 搬运时，Runtime 在处理此前设备使用与可见性之后，由 CPU 执行复制。SDMA 路径把源地址、目的地址和长度交给专用搬运引擎。计算 Kernel 路径则启动一段用于复制数据的 GPU 程序，由 CU 执行读取和写入；这段复制程序与应用的 `vector_add` 是不同任务。
+
+固定实现有两层选择。CLR 的 `KernelBlitManager::copyBuffer()` 先结合内存访问属性、长度、配置和调用方的引擎偏好选择分支；进入 `DmaBlitManager` 后，仍可能选择 Host 搬运或调用 ROCr 的拷贝接口。ROCr 创建搬运后端时，也会检查 SDMA 配置与资源，必要时使用计算 Kernel 后端。判断实际路径应沿调用和分支继续核对，不能只读函数名中的 `Dma`。
+
+> **[SOURCE] 可选源码索引**
+>
+> - CLR `81277d69e3352`，[rocblit.cpp](./2.源码/rocm-clr/rocclr/device/rocm/rocblit.cpp) 第 206～224 行选择 Host 或 HSA 拷贝，第 2796～2873 行选择专用搬运或 `shaderCopyBuffer()`；第 486～594 行收集等待 Signal、创建完成 Signal，并调用 ROCr 异步拷贝接口。
+> - ROCr `ba56a24c6132`，[amd_gpu_agent.cpp](./2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_gpu_agent.cpp) 第 786～836 行根据配置创建 SDMA 或计算 Kernel 搬运后端。本节只取当前 MI300X 所需的选择关系，不展开其他平台条件。
+
+**[BOUNDARY]** 本节没有测量哪种路径更快，也不把上述内部阈值当作应用接口的固定保证。Runtime 的拷贝路径与普通 DRM 的 job/IB 提交要分别追踪；即使都使用 SDMA，也应先确认使用的是哪一种 Queue 和提交接口。
+
+#### 2.5.4 拷贝完成、Kernel 启动与缓冲区释放
+
+沿上传例子，必须先保护源数据，再安排复制，最后让消费者使用目的数据：
+
+```text
+Host 发布输入写入
+    → 拷贝操作等待自己的前置依赖
+    → 搬运数据，完成时更新拷贝 Signal
+    → 后续 Kernel 等到拷贝成功并完成所需 acquire
+    → Kernel 读取 A_gpu
+    → Kernel 自己的完成条件满足后，应用再决定复用或释放 A_gpu
+```
+
+ROCr 的 `hsa_amd_memory_async_copy()` 接收一组依赖 Signal 和一个完成 Signal。依赖全部被观察为 0 后才开始拷贝；完成时递减完成 Signal，异步错误则使用负值报告。若本例把独立拷贝 Signal 初始化为 1，一次成功完成后应观察到 0；观察到负值需要按失败处理，不能直接让 Kernel 消费目的数据。
+
+接口成功返回后，调用者还要检查异步完成和错误，并保证缓冲区在对应使用期间有效。采用原范围 Pinned 上传时，源页面在设备仍读取它们时必须保留；采用 Staging 时，中转区在设备读完前必须保留。内部 CPU 中转复制已结束，可以解释某些调用为什么在返回前做了一部分工作；应用是否能立即复用原缓冲区，仍按所调用 API 的完成约定处理。
+
+拷贝完成 Signal 与 Packet 37 的 Kernel 完成 Signal 分别保护两个任务。应用在拷贝完成后可以结束这次源数据传输，但 `A_gpu` 还要留给 Kernel 读取；释放目的缓冲区要继续满足 §2.6 的使用者与映射条件。缓存可见性则按第 3 章处理，尤其是跨 Agent 搬运所需的 system release/acquire。
+
+> **[SPEC]** ROCr `ba56a24c6132`，[hsa_ext_amd.h](./2.源码/rocr-runtime/runtime/hsa-runtime/inc/hsa_ext_amd.h) 第 1696～1759 行规定异步拷贝接口：发送端在调用前建立 system release，接收端在使用目的数据前执行 system acquire；依赖 Signal、完成递减及负值错误分别见第 1726～1742 行。这里概述的是该接口约定，不将它替代为所有高层拷贝 API 的返回语义。
+>
+> **[SOURCE]** CLR `81277d69e3352`，[rocblit.cpp](./2.源码/rocm-clr/rocclr/device/rocm/rocblit.cpp) 第 1105～1116 行展示一条在归还被 pin 内存前等待当前 Signal 的 HIP 分支。其他缓冲区缓存与复用方式仍需沿对应调用核对。
 
 ### 2.6 引用、映射与最终释放
 

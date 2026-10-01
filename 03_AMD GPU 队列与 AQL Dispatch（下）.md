@@ -156,7 +156,7 @@
 
 ## 4. 一次 Kernel 调用的 AQL Packet 编码
 
-本章先把一次调用拆成 Packet 字段，再把这些字段放回 Runtime 的提交过程。阅读时可以沿下面的顺序看：
+本章先把一次调用拆成 Packet 字段，再把这些字段放回 Runtime 的提交过程。§4.5 还会接上高层 Command 与 Event，说明任务进入后端和发布 Packet 之前怎样处理依赖。阅读时可以沿下面的顺序看：
 
 ```text
 4.0～4.2：用 vector_add 看任务规模、字段位置，以及代码和参数的引用
@@ -166,7 +166,7 @@
     ↓
 4.4：继续 sum_products，从 CPU/GPU 交接扩展到 prepare_A → sum_products
     ↓
-4.5：回到 vector_add，核对 CLR 怎样填好并发布 Packet
+4.5：回到 vector_add，先看 Command 与依赖，再核对 CLR 怎样填好并发布 Packet
 ```
 
 ### 4.0 从 vector_add 的启动参数得到任务描述
@@ -1272,6 +1272,7 @@ CPU 上的应用进程
         │ 将任务交给共用的计算 Runtime
         ▼
     CLR 中的 rocclr
+        接收 Command，处理高层依赖与完成跟踪
         准备 Kernarg、Grid、资源大小和同步设置
         构造 AQL Packet，写入已建立的 Ring，再通知 Doorbell
         │
@@ -1287,6 +1288,68 @@ GPU
 > **[SOURCE]** CLR `81277d69e3352` 的 [`README.md`](./2.源码/rocm-clr/README.md) 第 1～3、21～23 行说明 CLR 的名称及 `hipamd`、`opencl`、`rocclr` 的分工。ROCr `ba56a24c6132` 的 [`what-is-rocr-runtime.rst`](./2.源码/rocr-runtime/runtime/docs/what-is-rocr-runtime.rst) 第 10～29 行说明其 HSA Runtime 定位及 Agent、Signal、Dispatch 和内存接口。
 >
 > CLR 同一版本的 [`rocclr/device/rocm/rocvirtual.cpp`](./2.源码/rocm-clr/rocclr/device/rocm/rocvirtual.cpp) 第 4138～4154 行填写 Kernel Packet，第 1256～1259、1275 行将 Packet 复制到 Ring、发布 Header 并写 Doorbell。后面的可选源码保留调用上下文。
+
+##### 4.5.1.1 Command、Event 与后端提交的关系
+
+当前应用已经取得 Stream，随后提出一次 `vector_add` 调用。CLR 先用 Host 侧的 Command 对象保存任务、参数和依赖；HostQueue 组织这些 Command，VirtualGPU 是它调用的 ROCm 后端对象。AQL Queue 则是后端最终写入 Packet 的底层通路。上篇 §1.1 已建立这些对象之间的关系，这里继续看一次工作怎样向下推进。
+
+Command 表示高层的一项工作。Event 提供这项工作可被查询或等待的完成状态，后续 Command 可以在 `eventWaitList` 中引用它。它们都由 Runtime 在 Host 侧管理，设备取包时读取的是后面生成的 AQL Packet。
+
+```text
+应用提出 Kernel 工作及依赖
+    → CLR 建立 Command，保存 Kernel、参数、所属 HostQueue 和 Event 等待列表
+    → Command::enqueue() 按当前提交模式处理软件排队与依赖
+    → Command::submit() 调用 VirtualGPU::submitKernel()
+    → 后端取得可供设备等待的 Signal，按需发布 Barrier
+    → 填写并发布 Kernel Dispatch Packet
+    → 设备满足依赖与启动条件后执行 Kernel
+```
+
+因此，跟踪一次任务时要分别确认 Command 是否进入 Runtime、是否调用了后端，以及 Packet 是否已经发布。高层调用返回时已经推进到哪一步，要由具体接口和当前提交模式判断；GPU 的执行和完成还在后面。
+
+> **[SOURCE]** CLR `81277d69e3352`，[command.cpp](./2.源码/rocm-clr/rocclr/platform/command.cpp) 第 356～420 行是 `Command::enqueue()` 的两种提交分支；[command.hpp](./2.源码/rocm-clr/rocclr/platform/command.hpp) 第 1313～1342 行定义 `NDRangeKernelCommand`，并将它的 `submit()` 转给设备后端的 `submitKernel()`。这里的 `submit()` 是 Host 软件调用，后续 Packet 发布位置仍见本节已有源码。
+
+##### 4.5.1.2 直接提交与工作线程中的依赖处理
+
+`AMD_DIRECT_DISPATCH` 开启时，`Command::enqueue()` 在当前调用线程中进入后端。对本节选择的普通设备工作依赖，Runtime 先通知生产方 Queue 准备可跟踪的完成点，再在执行锁保护下组织提交批次，调用后端。完成状态的更新可以晚于这个调用，由后续完成跟踪处理。
+
+关闭该开关时，Command 先追加到 HostQueue 的软件队列，由 `HostQueue::loop()` 工作线程取出。固定实现会检查来自其他 Queue 的 Event；尚未完成时，先处理当前批次，再等待依赖。如果依赖等待报告失败，工作线程把当前 Command 设为依赖错误并跳过 `submit()`；正常通过后才把工作交给后端。
+
+```text
+直接提交分支：
+    调用线程 → 处理依赖通知 → 组织批次 → 调用后端
+
+工作线程分支：
+    调用线程 → HostQueue 软件队列
+                    → 工作线程取出 → 检查并等待跨 Queue Event
+                                      ├─ 成功 → 调用后端
+                                      └─ 失败 → 记录依赖错误，结束本次提交
+```
+
+这两个分支解释的是“谁在 Host 上把 Command 交给后端”。直接提交分支仍然可以让设备等待依赖；工作线程分支中的软件排队也发生在 AQL Ring 之外。调试时若尚未进入后端，应先确认 Command 的排队和依赖状态，再寻找对应 Packet。
+
+> **[SOURCE]** CLR `81277d69e3352`，[command.cpp](./2.源码/rocm-clr/rocclr/platform/command.cpp) 第 368～411 行给出直接提交与软件排队；[commandqueue.cpp](./2.源码/rocm-clr/rocclr/platform/commandqueue.cpp) 第 241～305 行依次取出 Command、处理跨 Queue Event、传播依赖失败并调用后端。本段的失败顺序限定于这里核对的工作线程分支。
+
+**[BOUNDARY]** 上述直接提交例子采用能形成设备完成点的普通工作依赖。OpenCL UserEvent 是由软件更新的事件，`Command::enqueue()` 另有登记依赖和错误分支，不能把所有 Event 都直接解释成 HSA Signal。本节不展开完整 OpenCL 调度；实际调试先确认 `AMD_DIRECT_DISPATCH`、接口类型和所走分支。
+
+##### 4.5.1.3 高层依赖怎样变成 AQL Barrier
+
+继续沿 §7.3 的 Q0/Q1 场景：生产任务 K0 最终由 Q0 的 Packet 37 计算 C；消费者 K1 要在 Q1 上使用 C。现在把问题向上移一步：应用先把生产端 Event 放进 K1 的等待列表，Runtime 才能安排这项跨 Queue 依赖。
+
+后端开始处理 Command 时，会从 Event 本身或其关联的通知 Event 取得硬件完成记录，加入外部 Signal 等待集合。普通、非 Graph Capture 的 Kernel 发布路径随后先调用 `dispatchBlockingWait()`：把等待 Signal 填入 Barrier 的 `dep_signal`，按需发布一个或多个 Barrier，再发布 Kernel Dispatch Packet。设备据此等待生产者，而 Host 不必为这个设备依赖阻塞到生产 Kernel 结束。
+
+```text
+K0 的高层完成 Event
+    → Runtime 取得用于跟踪该完成点的 Signal S
+    → K1 所属后端把 S 放入待发布 Barrier 的依赖字段
+    → Q1 发布 Barrier 100，再发布消费者 Packet 101
+    → 生产端完成使 S 满足条件
+    → Barrier 按规定结束等待和同步，101 才能使用 C
+```
+
+上图沿用 §7.3 的编号和同步条件。实际高层完成记录可能由 Marker 或一批工作共同跟踪，因此不能据此为每个 Command 强行分配一个独立 Signal；具体对应关系见 [§7.4](#74-runtime-对一批-packet-完成状态的跟踪)。本节补充的是“依赖从哪里来、在何时转为设备工作”，Barrier 的字段、执行顺序和可见性仍在 §7.3 展开。
+
+> **[SOURCE]** CLR `81277d69e3352`，[rocvirtual.cpp](./2.源码/rocm-clr/rocclr/device/rocm/rocvirtual.cpp) 第 2130～2161 行从 Event 或通知 Event 取得硬件记录并收集外部 Signal；第 1296～1321 行在普通 Kernel 发布前处理等待 Signal 并发布 Barrier。函数名中的 `BlockingWait` 在这段实现中对应生成设备等待 Packet，应按函数体解释，不能直接读成 Host 线程等待 Kernel 完成。
 
 #### 4.5.2 从 CLR 的提交对象到临时 Packet
 
@@ -5133,6 +5196,7 @@ Doorbell 槽位复用还存在迟到通知问题。假设 Q0 曾使用 Doorbell 
 | Kernel 句柄、参数地址、多种运算与重复调用         | [4.2.4 引用总图](#424-代码与本次参数在-packet-中的引用)、[4.2.5 多种运算与复用](#425-多种运算kernel-入口与多次调用的组织)、[4.2.6 可选核对](#426-可选核对编译工具与源码依据)                                                            |
 | Grid、Work-group 与 segment 大小                  | [4.0 启动参数](#40-从-vector_add-的启动参数得到任务描述)、[4.3 资源需求](#43-private-segment-与-group-segment-的资源需求)                                                                                                              |
 | Header、barrier 与 fence scope                    | [4.4 Header 约束](#44-header-中的类型执行顺序与可见性设置)                                                                                                                                                                            |
+| Command、Event 与 Packet 发布前的依赖 | [4.5.1.1 高层工作](#4511-commandevent-与后端提交的关系)、[4.5.1.2 提交分支](#4512-直接提交与工作线程中的依赖处理)、[4.5.1.3 设备等待](#4513-高层依赖怎样变成-aql-barrier) |
 | CLR 临时 Packet、普通发布与 Graph Capture 返回    | [4.5 CLR 调用](#45-clr-构造临时-packet-并调用发布函数)                                                                                                                                                                                |
 | Packet ID、rptr/wptr、容量与回绕                  | [5.1 索引与槽位](#51-packet-id物理槽位与容量约束)                                                                                                                                                                                     |
 | SINGLE/MULTI、atomic-add 与 CAS                   | [5.2 预留实现](#52-producer-预留编号与等待槽位)                                                                                                                                                                                       |

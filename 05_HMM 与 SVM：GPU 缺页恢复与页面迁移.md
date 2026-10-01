@@ -1,77 +1,122 @@
 # HMM 与 SVM：GPU 缺页恢复与页面迁移
 
-| 缩写    | 英文全称                                         | 中文含义                                            |
-| ------- | ------------------------------------------------ | --------------------------------------------------- |
-| AIP     | Access In Place                                  | 按页面当前位置访问；对应`ACCESS_IN_PLACE` 属性    |
-| AMDGPU  | AMD GPU Linux Kernel Driver                      | AMD GPU Linux 内核驱动                              |
-| API     | Application Programming Interface                | 应用程序编程接口                                    |
-| AQL     | Architected Queuing Language                     | HSA 队列包格式与提交协议                            |
-| Arm64   | Arm 64-bit Architecture                          | 64 位 Arm 架构                                      |
-| BAR     | Base Address Register                            | PCIe 基址寄存器及其描述的设备地址窗口               |
-| BO      | Buffer Object                                    | 驱动管理的缓冲对象                                  |
-| CDNA    | Compute DNA                                      | AMD 数据中心计算 GPU 架构系列                       |
-| CLR     | Common Language Runtime                          | ROCm 中承接上层计算接口的运行时层                   |
-| COW     | Copy-on-Write                                    | 写时复制                                            |
-| CP      | Command Processor                                | GPU 命令处理器                                      |
-| CPU     | Central Processing Unit                          | 中央处理器                                          |
-| CU      | Compute Unit                                     | GPU 计算单元                                        |
-| DMA     | Direct Memory Access                             | 直接内存访问                                        |
-| DRM     | Direct Rendering Manager                         | Linux 图形设备内核框架                              |
-| ESR     | Exception Syndrome Register                      | 异常综合信息寄存器；正文实例使用 ESR_EL1            |
-| ESR_EL1 | Exception Syndrome Register at Exception Level 1 | Arm 异常级别 1 的异常综合信息寄存器                 |
-| FAR     | Fault Address Register                           | 故障地址寄存器；正文实例使用 FAR_EL1                |
-| FAR_EL1 | Fault Address Register at Exception Level 1      | Arm 异常级别 1 的故障地址寄存器                     |
-| GEM     | Graphics Execution Manager                       | DRM 缓冲对象管理框架                                |
-| GPU     | Graphics Processing Unit                         | 图形处理器                                          |
-| GPUVA   | GPU Virtual Address                              | GPU 虚拟地址                                        |
-| GPUVM   | GPU Virtual Memory                               | GPU 虚拟地址空间及其页表管理                        |
-| HBM     | High Bandwidth Memory                            | 高带宽内存；本文为 MI300X 本地显存                  |
-| HDP     | Host Data Path                                   | AMD GPU 主机数据通路                                |
-| HMM     | Heterogeneous Memory Management                  | Linux 异构内存管理支持                              |
-| HSA     | Heterogeneous System Architecture                | 异构系统架构                                        |
-| HSAKMT  | HSA Kernel Mode Thunk                            | 用户态与 KFD 交互的接口库                           |
-| IB      | Indirect Buffer                                  | GPU 间接命令缓冲区                                  |
-| ID      | Identifier                                       | 标识符                                              |
-| IH      | Interrupt Handler                                | AMD GPU 中断记录与处理设施                          |
-| I/O     | Input/Output                                     | 输入与输出                                          |
-| ioctl   | Input/Output Control                             | 用户态向内核驱动发送控制请求的接口                  |
-| IOMMU   | Input/Output Memory Management Unit              | 设备访问主机内存时的地址转换与隔离单元              |
-| IOVA    | I/O Virtual Address                              | 设备 DMA 使用的 I/O 虚拟地址                        |
-| ISA     | Instruction Set Architecture                     | 指令集架构                                          |
-| IV      | Interrupt Vector                                 | 中断向量；本文也指承载故障字段的记录                |
-| KFD     | Kernel Fusion Driver                             | AMD GPU 计算内核驱动组件                            |
-| KIQ     | Kernel Interface Queue                           | 驱动提交控制命令所用的内核接口队列                  |
-| LDS     | Local Data Share                                 | CU 内按 Work-group 分配的片上共享存储               |
-| MEC     | Micro Engine Compute                             | AMD GPU 计算命令处理引擎                            |
-| MMU     | Memory Management Unit                           | 内存管理单元                                        |
-| PASID   | Process Address Space ID                         | 进程地址空间标识                                    |
-| PCIe    | Peripheral Component Interconnect Express        | 主机与独立 GPU 之间的高速互连                       |
-| PDE     | Page Directory Entry                             | 页目录项                                            |
-| PDD     | Process Device Data                              | 本文对`kfd_process_device` 进程设备对象的简称     |
-| PFN     | Page Frame Number                                | 页框编号                                            |
-| PTE     | Page Table Entry                                 | 页表项                                              |
-| RAM     | Random-Access Memory                             | 随机访问存储器；system RAM 指主机内存               |
-| ROCm    | Radeon Open Compute                              | AMD GPU 计算软件平台                                |
-| ROCr    | ROCm Runtime                                     | ROCm 的 HSA 用户态运行时                            |
-| SDMA    | System Direct Memory Access                      | AMD GPU 的专用数据搬运与内存写入引擎                |
-| SIGBUS  | Bus Error Signal                                 | Linux 总线错误信号；也用于某些无法完成的映射访问    |
-| SIGSEGV | Segmentation Violation Signal                    | Linux 地址或权限访问异常信号                        |
-| SVM     | Shared Virtual Memory                            | 共享虚拟内存                                        |
-| TLB     | Translation Lookaside Buffer                     | 地址翻译缓存                                        |
-| TTM     | Translation Table Maps                           | DRM 内存资源管理框架                                |
-| VA      | Virtual Address                                  | 虚拟地址                                            |
-| VM      | Virtual Memory                                   | 虚拟内存                                            |
-| VMA     | Virtual Memory Area                              | Linux 进程虚拟内存区域                              |
-| VMID    | Virtual Memory ID                                | GPU 当前硬件地址空间上下文编号                      |
-| VRAM    | Video Random-Access Memory                       | 驱动中的设备本地显存域；本文实际存储为 HBM          |
-| XCC     | Accelerator Complex                              | MI300 中包含计算单元等部件的计算复合体              |
-| XNACK   | XNACK（AMD 功能名称）                            | 本文指与 GPU 可恢复访存故障相关的重试能力及进程模式 |
+| 缩写    | 英文全称                                         | 中文含义                                           |
+| ------- | ------------------------------------------------ | -------------------------------------------------- |
+| AIP     | Access In Place                                  | 按页面当前位置访问；对应`ACCESS_IN_PLACE` 属性   |
+| AMDGPU  | AMD GPU Linux Kernel Driver                      | AMD GPU Linux 内核驱动                             |
+| API     | Application Programming Interface                | 应用程序编程接口                                   |
+| AQL     | Architected Queuing Language                     | HSA 队列包格式与提交协议                           |
+| Arm64   | Arm 64-bit Architecture                          | 64 位 Arm 架构                                     |
+| BAR     | Base Address Register                            | PCIe 基址寄存器及其描述的设备地址窗口              |
+| BO      | Buffer Object                                    | 驱动管理的缓冲对象                                 |
+| CDNA    | Compute DNA                                      | AMD 数据中心计算 GPU 架构系列                      |
+| CLR     | Common Language Runtime                          | ROCm 中承接上层计算接口的运行时层                  |
+| COW     | Copy-on-Write                                    | 写时复制                                           |
+| CP      | Command Processor                                | GPU 命令处理器                                     |
+| CPU     | Central Processing Unit                          | 中央处理器                                         |
+| CU      | Compute Unit                                     | GPU 计算单元                                       |
+| DMA     | Direct Memory Access                             | 直接内存访问                                       |
+| DRM     | Direct Rendering Manager                         | Linux 图形设备内核框架                             |
+| ESR     | Exception Syndrome Register                      | 异常综合信息寄存器；正文实例使用 ESR_EL1           |
+| ESR_EL1 | Exception Syndrome Register at Exception Level 1 | Arm 异常级别 1 的异常综合信息寄存器                |
+| FAR     | Fault Address Register                           | 故障地址寄存器；正文实例使用 FAR_EL1               |
+| FAR_EL1 | Fault Address Register at Exception Level 1      | Arm 异常级别 1 的故障地址寄存器                    |
+| GEM     | Graphics Execution Manager                       | DRM 缓冲对象管理框架                               |
+| GPU     | Graphics Processing Unit                         | 图形处理器                                         |
+| GPUVA   | GPU Virtual Address                              | GPU 虚拟地址                                       |
+| GPUVM   | GPU Virtual Memory                               | GPU 虚拟地址空间及其页表管理                       |
+| HBM     | High Bandwidth Memory                            | 高带宽内存；本文为 MI300X 本地显存                 |
+| HDP     | Host Data Path                                   | AMD GPU 主机数据通路                               |
+| HMM     | Heterogeneous Memory Management                  | Linux 异构内存管理支持                             |
+| HSA     | Heterogeneous System Architecture                | 异构系统架构                                       |
+| HSAKMT  | HSA Kernel Mode Thunk                            | 用户态与 KFD 交互的接口库                          |
+| IB      | Indirect Buffer                                  | GPU 间接命令缓冲区                                 |
+| ID      | Identifier                                       | 标识符                                             |
+| IH      | Interrupt Handler                                | AMD GPU 中断记录与处理设施                         |
+| I/O     | Input/Output                                     | 输入与输出                                         |
+| ioctl   | Input/Output Control                             | 用户态向内核驱动发送控制请求的接口                 |
+| IOMMU   | Input/Output Memory Management Unit              | 设备访问主机内存时的地址转换与隔离单元             |
+| IOVA    | I/O Virtual Address                              | 设备 DMA 使用的 I/O 虚拟地址                       |
+| ISA     | Instruction Set Architecture                     | 指令集架构                                         |
+| IV      | Interrupt Vector                                 | 中断向量；本文也指承载故障字段的记录               |
+| KFD     | Kernel Fusion Driver                             | AMD GPU 计算内核驱动组件                           |
+| KIQ     | Kernel Interface Queue                           | 驱动提交控制命令所用的内核接口队列                 |
+| LDS     | Local Data Share                                 | CU 内按 Work-group 分配的片上共享存储              |
+| MEC     | Micro Engine Compute                             | AMD GPU 计算命令处理引擎                           |
+| MMU     | Memory Management Unit                           | 内存管理单元                                       |
+| PASID   | Process Address Space ID                         | 进程地址空间标识                                   |
+| PCIe    | Peripheral Component Interconnect Express        | 主机与独立 GPU 之间的高速互连                      |
+| PDE     | Page Directory Entry                             | 页目录项                                           |
+| PDD     | Process Device Data                              | 本文对`kfd_process_device` 进程设备对象的简称    |
+| PFN     | Page Frame Number                                | 页框编号                                           |
+| PQM     | Process Queue Manager                            | KFD 进程队列管理器                                 |
+| PTE     | Page Table Entry                                 | 页表项                                             |
+| RAM     | Random-Access Memory                             | 随机访问存储器；system RAM 指主机内存              |
+| ROCm    | Radeon Open Compute                              | AMD GPU 计算软件平台                               |
+| ROCr    | ROCm Runtime                                     | ROCm 的 HSA 用户态运行时                           |
+| SDMA    | System Direct Memory Access                      | AMD GPU 的专用数据搬运与内存写入引擎               |
+| SIGBUS  | Bus Error Signal                                 | Linux 总线错误信号；也用于某些无法完成的映射访问   |
+| SIGSEGV | Segmentation Violation Signal                    | Linux 地址或权限访问异常信号                       |
+| SVM     | Shared Virtual Memory                            | 共享虚拟内存                                       |
+| SRCU    | Sleepable Read-Copy Update                       | 允许读侧睡眠的读复制更新机制                       |
+| TLB     | Translation Lookaside Buffer                     | 地址翻译缓存                                       |
+| TTM     | Translation Table Maps                           | DRM 内存资源管理框架                               |
+| VA      | Virtual Address                                  | 虚拟地址                                           |
+| VM      | Virtual Memory                                   | 虚拟内存                                           |
+| VMA     | Virtual Memory Area                              | Linux 进程虚拟内存区域                             |
+| VMID    | Virtual Memory ID                                | GPU 当前硬件地址空间上下文编号                     |
+| VRAM    | Video Random-Access Memory                       | 驱动中的设备本地显存域；本文实际存储为 HBM         |
+| XCC     | Accelerator Complex                              | MI300 中包含计算单元等部件的计算复合体             |
+| XNACK   | XNACK（AMD 功能名称）                            | GPU 缺页后重试访存的能力；软件可为进程选择相应模式 |
 
 ## 0. 学习起点与贯穿案例
 
+### 0.0 XNACK 与 GPU 缺页后的访问重试
+
+**[DESIGN]** 沿用 Packet 37 执行 `C[i] = A[i] + B[i]` 的任务。A 是输入数组，CPU 已将数据写入 system RAM；A 的地址仍有效，目标 GPU 也获准读取。但 GPU 页表暂时没有 A 的可用映射。Kernel 已经开始执行，CU 现在读取第六个元素 `A[5]`，地址为 `0x3000_0014`。
+
+这次读取会因缺少映射而失败。本篇要解释的是：系统怎样处理这次故障，让 GPU 随后读到 A，并继续原来的计算。下面先看启用 XNACK、故障允许重试且驱动恢复成功时的完整过程：
+
+```text
+GPU 执行读取 A[5] 的指令，使用地址 0x3000_0014
+    → 地址翻译发现 A 缺少可用映射，这次读取尚未取得数据
+    → GPU 报告可重试故障，相关执行等待访问恢复
+        ↓ Host CPU 上的 AMDGPU / KFD 处理故障
+      检查 A 的地址与读取权限，找到当前页面
+        → 准备设备访问地址，补上 GPU 映射
+        → 完成所需的页表更新与翻译失效
+        ↓ 映射满足访问条件
+GPU 后续重试对 A 的访问
+    → 读取 A[5] 成功，原 Kernel 继续计算
+```
+
+**XNACK 描述 GPU 在访存因缺页失败后，能够重试该访问的能力。** 它使图中的“先遇到缺页，经过软件处理后再继续访问”成为可能。Host CPU 运行驱动检查故障原因、恢复映射，GPU 再完成后续访问。在这条正常恢复路径中，应用无需重新提交 Packet 37，也无需将整个 Kernel 从头运行。
+
+可以联系已学过的 CPU 缺页过程：CPU 执行读取时缺页，Linux 处理成功后，CPU 重试原访问。上图中，发起读取和后续重试的是 GPU，运行内存管理与驱动代码的是 Host CPU。包含失败访问的 Wave 会受到访存停顿影响；其他就绪 Wave 能否继续执行，取决于依赖和执行资源，详见 [§4.0](#40-缺页期间的-wave-等待与其他工作执行)。
+
+> **[SPEC]** ROCm 6.3.3 文档 [《Unified memory management》“XNACK”小节](https://rocm.docs.amd.com/projects/HIP/en/docs-6.3.3/how-to/hip_runtime_api/memory_management/unified_memory.html#xnack)说明缺页后的 GPU 访存重试能力，同页系统要求包含 CDNA 3；[MI300 / CDNA 3 ISA](./amd-instinct-mi300-cdna3-instruction-set-architecture.pdf#page=68)（封面日期 `2025-08-05`）§8.2，原文第 60 页，也说明标量访存指令可能因 XNACK 重放，并据此约束源寄存器的使用。Wave 停顿与其他就绪工作的执行条件沿用 §4.0 的直接证据。
+
+沿准备与执行顺序，需要分别确认三个条件：
+
+1. **GPU 支持 XNACK**：硬件具备相关的访存重试能力。
+2. **进程启用 XNACK**：运行时与驱动为这个进程采用该模式。本篇主例在创建用户 Queue 前已经完成设置；启用方式和代码兼容性见 [§1.5](#15-可恢复访问的前置条件)。
+3. **本次故障记录的 Retry 位为 1**：它描述已经发生的这一次故障，驱动据此进入可重试处理分支，随后仍要检查进程模式、地址、权限和页面状态。
+
+因此，**启用 XNACK 是本篇 GPU 按需缺页恢复主线的必要条件，恢复成功还需要合法地址、访问权限和可用资源。** 例如，A 的地址合法，只是 GPU 映射暂时缺失，驱动可以尝试补映射；如果这段地址已经被解除映射，或本次写入没有权限，就不能靠重试补回旧映射或绕过权限检查。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`gmc_v9_0.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gmc_v9_0.c) 第 547～550、585～589 行读取本次故障的 Retry 位并分发处理；[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 3099～3103 行在进程未启用 XNACK 时退出 SVM 故障恢复，第 3182～3201 行继续检查 VMA、权限和恢复位置。
+
+XNACK 提供重试能力，恢复期间的页面工作仍由 Linux 与驱动完成。主例借助 HMM 找到 A 当前的 RAM 页，再为它建立 GPU 映射，数据可以继续留在 RAM。若位置策略选择 HBM，则由驱动先安排迁移，再恢复映射；GPU 随后的重试才能使用迁移后的页面。第 3～5 章分别展开页面取得、建表和迁移。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 3211～3245 行按当前位置与恢复目标决定是否迁移，然后进入页面验证与映射；本例的 RAM 查询与设备地址准备见 §3.2、§4.2。
+
+**[BOUNDARY]** 这里的前提限定于上图的 GPU 按需缺页恢复。CPU 自己的缺页仍由 Linux 的 CPU 缺页路径处理；未启用 XNACK 的 GPU 进程也可以使用提前准备好的映射。已有页面需要变化时，驱动可先暂停队列，主动恢复映射后再恢复队列，详见 [§6.4](#64-暂停队列后主动恢复映射可选)。这些流程各有自己的条件，不能把 XNACK 扩大成所有缺页处理和页面迁移的共同开关。
+
+上图给出的是访问与恢复的先后关系，不规定 MI300X 内部怎样保存待恢复请求、采用什么重放粒度或重试间隔。下面接回故障记录，沿同一个 A 查看驱动实际处理的对象与步骤。
+
 ### 0.1 从故障记录接到页面恢复
 
-在 [04 第 6 章](<./04_AMD GPU MMU 与地址翻译.md#6-硬件访存故障的检测与上报>)，CU 读取 `A[5]` 失败。A 是应用提供的输入数组，GPU Kernel 按 `C[i] = A[i] + B[i]` 读取其中的元素；`A[5]` 是第六个元素。
+§0.0 已说明这次读取可以在恢复后重试。现在接上 [04 第 6 章](<./04_AMD GPU MMU 与地址翻译.md#6-硬件访存故障的检测与上报>)的处理结果：CU 读取 `A[5]` 失败后，硬件已经形成对应的故障记录。
 
 硬件报告故障后，驱动取得故障页、PASID、VMID、来源和访问类型。04 已说明记录怎样被解码和分发；本篇继续查清 A 的地址是否仍有效、数据页在哪里，以及怎样让 GPU 再次访问这页。
 
@@ -84,12 +129,7 @@ GPU 读取 A[5]：地址 0x3000_0014 → GPU 页表 → 映射缺失 → 本次�
 
 A 的数据仍在 RAM。驱动要找到这页数据，再补上 GPU 访问它所需的映射。
 
-本例还约定：
-
-1. 进程在创建 Queue 前已启用 XNACK
-2. 本次故障记录的 Retry 位为 1
-
-XNACK 表示进程启用了可重试访存能力；Retry 位表示这条故障先走可重试处理入口。驱动仍要检查地址、权限和页面状态，才能决定能否恢复。§1.5 再讲这些设置的来源。
+本例采用 [§0.0](#00-xnack-与-gpu-缺页后的访问重试) 的配置：进程在创建 Queue 前已启用 XNACK，本次故障记录的 Retry 位为 1。驱动接下来检查实际地址、权限和页面，确定本次访问能否恢复。
 
 驱动接下来要先找到进程和 A 的范围，再决定数据是否需要搬动，并为当前页面建立 GPU 映射。页表更新、所需翻译失效、GPU 后续访问和整个 Kernel 完成各有自己的完成条件。§0.2 沿同一组地址画出处理路径。
 
@@ -195,19 +235,19 @@ GPU 页表：A 的 GPUVA 0x3000_0000 → IOVA 0x1234_5000
 2. GPU 使用结束且应用完成同步后，CPU 再次读取 A，进入从 HBM 迁回 system RAM 的路径。
 3. 第 6、7 章加入地址空间修改或进程退出，检查旧页面结果、迟到的故障记录和资源清理。
 
-后文章节按恢复所需的前提展开：
+读过 [§0.0 的 XNACK 与访问重试](#00-xnack-与-gpu-缺页后的访问重试) 后，后文章节按恢复所需的对象与步骤展开：
 
 - [第 1 章：同一进程指针的 CPU 与 GPU 访问](#1-同一进程指针的-cpu-与-gpu-访问)。建立指针、两套页表、后备页面的关系。
 - [第 2 章：KFD 范围登记与状态跟踪](#2-kfd-范围登记与状态跟踪)。沿 A 的登记、访问和位置选择，理解 `svm_range` 怎样跟踪地址范围，以及迁入 HBM 时怎样关联 BO。
 - [第 3 章：CPU 故障处理与 HMM 页面取得](#3-cpu-故障处理与-hmm-页面取得)。接着第二章选定的 RAM 位置，说明 HMM 怎样取得当前页面，以及何时需要借用 Linux 通用缺页处理。
 - [第 4 章：GPU 故障处理与映射恢复](#4-gpu-故障处理与映射恢复)。先看缺页期间 Wave 的等待与其他工作的执行，再把 HMM 页面结果变成设备地址和 GPU 映射，区分更新提交与完成。
 - [第 5 章：system RAM 与 HBM 之间的页面迁移](#5-system-ram-与-hbm-之间的页面迁移)。在第二章的 HBM BO 关系上，展开实际复制、页面状态变化和 CPU 迁回。
-- [第 6 章：地址空间失效与并发恢复](#6-地址空间失效与并发恢复)。展开 notifier 撤销旧映射、并发查询重试和范围拆分时序。
+- [第 6 章：地址空间失效与并发恢复](#6-地址空间失效与并发恢复)。沿 RAM 页 P → Q 的变化，说明页面为何仍在 RAM 却需要迁移、Linux 怎样通过 notifier 通知 KFD，以及 KFD 怎样处理旧映射和过期查询结果；随后展开地址删除与暂停队列的分支。
 - [第 7 章：故障结果、资源回收与全篇复盘](#7-故障结果资源回收与全篇复盘)。解释返回值、错误通知和退出清理，最后用访问流程与自检题回查全篇。
 
 ### 0.4 固定配置、源码版本与证据边界
 
-**[DESIGN]** 平台采用外部 Host CPU + MI300X 独立 GPU，通过 PCIe 连接。A 选用匿名内存；其页面来源在第 3 章解释。地址计算固定 CPU 基本页和 GPU 基本页均为 4 KiB，Host IOMMU 启用翻译。应用的数据交接遵守 02、03 已说明的同步规则。未启用 XNACK 的情况只在 §6.4 单独推演。
+**[DESIGN]** 平台采用外部 Host CPU + MI300X 独立 GPU，通过 PCIe 连接。A 选用匿名内存；其页面来源在第 3 章解释。地址计算固定 CPU 基本页和 GPU 基本页均为 4 KiB，Host IOMMU 启用翻译。应用的数据交接遵守 02、03 已说明的同步规则。未启用 XNACK 时的完整队列保护流程在 §6.4 展开。
 
 第 3 章以 Arm64 异常入口帮助理解 HMM 所借用的 Linux 通用缺页处理；这个例子不指定目标机器的 Host CPU 型号。§4.4 再说明 CPU/SDMA 两种页表更新方式及其选择条件。
 
@@ -320,7 +360,7 @@ CPU 若在 Kernel 读取 A 的同时无协议地修改 A，即使两侧 PTE 都�
 
 ### 1.5 可恢复访问的前置条件
 
-§0.1 已固定进程启用 XNACK、本次故障的 Retry 位为 1。运行前的模式、代码兼容性和故障时的检查分别发生在三个阶段：
+[§0.0](#00-xnack-与-gpu-缺页后的访问重试) 已说明 XNACK 让 GPU 能在缺页恢复后重试访问，§0.1 采用了进程启用 XNACK、本次故障 Retry 位为 1 的配置。本节接着说明：运行前怎样采用这个模式，以及代码装载和故障处理还要检查什么。
 
 ```text
 准备阶段：内核与设备支持 SVM → 进程在创建 Queue 前采用 XNACK 模式
@@ -330,6 +370,8 @@ CPU 若在 Kernel 读取 A 的同时无协议地修改 A，即使两侧 PTE 都�
 
 KFD 在进程创建时选择默认 XNACK 模式。应用若要显式切换，必须在创建用户 Queue 前完成；已有用户 Queue 时，ioctl 会拒绝模式切换。启用请求还会检查设备支持，故障入口则再次检查 `p->xnack_enabled`。
 
+应用启动时可以设置环境变量 `HSA_XNACK=1`，让 ROCr 请求启用 XNACK；`HSA_XNACK=0` 表示请求关闭。ROCr 将请求交给 KFD，请求未指定或设置失败时会查询驱动当前模式。因此，应以运行时最终取得的模式为准，不能只根据环境变量已经写成 1 判断设置成功。
+
 内核须编入 SVM 支持，设备也须支持。ROCr 将所用 XNACK 模式反映到 Agent ISA；加载器检查代码对象与 Agent 是否相容。若代码对象明确要求相反的 XNACK 特征，加载器会拒绝它。
 
 普通 `malloc()` 地址还需满足运行时的系统内存访问条件、目标 Agent 能力、进程模式、VMA 权限和 KFD 范围检查。§2.4 会说明 KFD 怎样在 GPU 缺页时为未登记的地址创建范围记录；创建记录仍以地址有效为前提。
@@ -338,6 +380,7 @@ KFD 在进程创建时选择默认 XNACK 模式。应用若要显式切换，必
 >
 > - 构建与设备支持：Linux `248951ddc14d`，[`amdkfd/Kconfig`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/Kconfig) 第 15～26 行定义构建条件；[`kfd_svm.h`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.h) 第 203～204 行定义运行时 SVM 支持判断。
 > - 默认模式与显式切换：[`kfd_process.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_process.c) 第 1501～1555、1609～1610 行选择并设置默认模式；[`kfd_chardev.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) 第 1708～1738 行检查显式切换请求与 Queue 状态。
+> - 环境变量与实际模式：ROCr `ba56a24c6132`，[`flag.h`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/util/flag.h) 第 212～215 行读取 `HSA_XNACK`；[`amd_kfd_driver.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/driver/kfd/amd_kfd_driver.cpp) 第 542～567 行请求设置，必要时查询驱动模式。
 > - 故障入口：[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 3065～3103 行检查设备 SVM 支持与进程 XNACK 模式。
 > - Agent ISA 与代码对象：ROCr `ba56a24c6132`，[`amd_kfd_driver.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/driver/kfd/amd_kfd_driver.cpp) 第 542～567 行取得或设置 XNACK 模式；[`amd_gpu_agent.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_gpu_agent.cpp) 第 166～181 行形成 Agent ISA 特征；[`executable.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/loader/executable.cpp) 第 1287～1296 行在装载时检查目标 Agent，[`isa.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/isa.cpp) 第 96～100 行拒绝不匹配的 XNACK 特征。
 
@@ -2204,101 +2247,411 @@ A 的往返迁移中，Linux 页表变化都需要通知 KFD 处理旧 GPU 映�
 
 ## 6. 地址空间失效与并发恢复
 
-第五章已走完 A 从 RAM 到 HBM、再迁回 RAM 的过程。本章回到迁回前的准备阶段，展开其中的“通知 KFD，撤销旧 GPU 映射”，再检查它与正在进行的建表怎样配合。
+前面已经说明 KFD 怎样找到 A 的页面、建立 GPU 映射，以及按需迁移数据。现在要解决后续使用中的一个问题：**Linux 改变了承载 A 的物理页，GPU 怎样避免继续使用旧页面？** 只更新 CPU 页表还不够，GPU 有自己的页表，正在进行的 HMM 查询也可能已经取得旧页面信息。
 
-先沿启用 XNACK、A 未设置 `GPU_ALWAYS_MAPPED` 的主例学习：
+本章先让 A 始终留在 system RAM，用 RAM 页 P → RAM 页 Q 的迁移例子贯穿 §6.0～§6.2，依次解释变化的起因、通知与撤销、并发建表检查。§6.3 再看应用删除地址的情况；另一种配置下的队列保护放在 §6.4。第五章 HBM → RAM 的迁回也需要通知，§6.1 会接回那条路径。
+
+### 6.0 RAM 页面变化与 GPU 访问保护
+
+**[DESIGN]** 沿用第二至四章的 RAM 主例：A 覆盖 `[0x3000_0000, 0x3000_1000)`，`preferred_loc=0`、`actual_loc=0`，数据由 RAM 页 P 承载。应用仍保留这段地址及其读写权限，目标 GPU 获准访问。下面假设 Linux 为整理 RAM 中的空闲空间，准备把 A 搬到另一张 RAM 页 Q，且迁移最终成功。
+
+RAM 内部也可能需要搬页。例如，内存规整会移动可迁移的页面，使分散的空闲空间有机会组成较大的连续区域。这里的触发者是 Linux 内存管理路径；GPU 本次是否缺页，并不决定 Linux 是否需要规整内存。
 
 ```text
-A 的页面即将变化
-    → 撤销已经存在的旧 GPU 映射（§6.1）
-    → 同时阻止正在查询页面的路径用过期结果建表（§6.2）
+迁移前：
+  A 的虚拟页地址 0x3000_0000 → CPU 页表指向 RAM 页 P
+  preferred_loc = 0：希望放在 RAM
+  actual_loc    = 0：当前就在 RAM
 
-如果应用直接删除一段地址
-    → 还要拆分、清理相应的范围记录（§6.3）
+  Linux 准备将 A 的数据从 P 搬到 Q
+      → 先通知 KFD 处理旧 GPU 映射及旧查询结果
+      → 再继续数据搬运和 CPU 映射更新
 
-未启用重试等配置
-    → 改用暂停队列、主动恢复映射的流程（§6.4，可选）
+迁移完成后：
+  A 的虚拟页地址 0x3000_0000 → CPU 页表指向 RAM 页 Q
+  preferred_loc = 0：期望位置没变
+  actual_loc    = 0：当前仍在 RAM
+
+  GPU 后续访问 A → 需要使用依据 Q 建立的新映射
 ```
+
+`preferred_loc=0` 指定的是 system RAM，没有指定必须一直使用物理页 P；`actual_loc=0` 也只把当前位置概括为 RAM。P、Q 都是 RAM 页，因此迁移前后这两个成员都为 0。应用仍通过 `A[5]` 的地址 `0x3000_0014` 访问同一份数据，改变的是具体承载页面。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_ioctl.h`](./2.源码/linux/include/uapi/linux/kfd_ioctl.h) 第 777～795 行定义位置编码；[`mm/compaction.c`](./2.源码/linux/mm/compaction.c) 第 5～7 行说明规整通过页面迁移减少外部碎片，第 2667～2670 行调用 `migrate_pages()`。这里只借规整说明 RAM 内部搬页的起因，不展开页面选择算法。
+
+#### 已有映射和正在建表都要受到保护
+
+如果 GPU 已有访问 P 的映射，Linux 只把 CPU 页表改成 Q，GPU 仍可能访问 P。P 以后被释放或用于其他数据时，旧 GPU 映射就会造成错误访问。§6.1 先解释怎样撤销这份映射。
+
+还有一种交错：GPU 的映射尚未建好，故障恢复路径已经通过 HMM 查到 P，正准备建表。通知即使撤销了已有映射，也必须防止这条路径随后又把 P 写回 GPU 页表。§6.2 继续解释怎样发现查询结果过期。
+
+本章主例沿用 [§0.0](#00-xnack-与-gpu-缺页后的访问重试) 的 XNACK 模式，并且 A 未设置 `GPU_ALWAYS_MAPPED`。这两个条件允许 KFD 先撤销旧映射，让后续合法的 GPU 访问通过缺页重新取得当前页面：
+
+```text
+Linux 通知页面即将变化
+  → KFD 撤销旧 GPU 映射，并使旧查询结果能被检查出来
+  → Linux 继续迁移；假设 P → Q 已完成
+  → GPU 后续访问 A 时因缺少映射而报告可重试故障
+  → KFD 重新通过 HMM 取得 Q，按第三、四章恢复映射
+  → 满足更新与翻译失效条件后，GPU 重试并读到 Q 中的 A
+```
+
+`GPU_ALWAYS_MAPPED` 是保存在 `svm_range.flags` 中的一项范围要求，完整名称为 `KFD_IOCTL_SVM_FLAG_GPU_ALWAYS_MAPPED`。设置后，KFD 会先暂停队列，在恢复执行前主动补好映射；即使启用了 XNACK，也采用这种保护方式。§2.2 的 A 只登记了 `ACCESS` 和 `PREFERRED_LOC`，默认标志也不包含这一位，因此本章先沿上图学习，完整的另一分支放在 [§6.4](#64-暂停队列后主动恢复映射可选)。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_ioctl.h`](./2.源码/linux/include/uapi/linux/kfd_ioctl.h) 第 761～762 行定义保持映射的要求；[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 313～321 行初始化默认标志，第 2024～2085 行按 XNACK 与范围标志选择暂停队列或撤销映射。
 
 ### 6.1 页面变化通知与 GPU 映射撤销
 
-回到 §5.4 第五步：A 仍在 HBM 页 D，GPU 还有指向它的映射；CPU 读取 A 触发迁回，驱动准备把数据搬到 RAM 页 Q。下面只展开复制前的通知过程，页面收集与复制继续沿用第五章。
+先看 GPU 已有访问 RAM 页 P 的映射这一种状态。Linux 准备迁移 A 时，必须让 KFD 有机会处理旧 GPU 映射。第二章登记的 `svm_range.notifier` 就用于接收这类变化通知。
+
+#### 从 A 的地址范围找到 KFD 回调
+
+KFD 在登记 A 时，已经把“进程地址空间、关注的虚拟地址区间、失效回调函数”关联起来。Linux 迁移路径知道当前要处理哪个进程的哪段映射，通知框架便能根据这些信息找到订阅者，并调用 KFD 事先提供的函数。
+
+沿用 A 的一页范围 `[0x3000_0000, 0x3000_1000)`，登记完成后的对象关系如下。`itree` 是 Linux 通知框架维护的区间树，用来查找与变化区间相交的订阅；箭头表示成员引用或函数指针。
 
 ```text
-KFD 调用 migrate_vma_setup，准备 A 的迁移
-    ↓ Linux 在收集页面前发出迁移通知
-Linux 找到覆盖 A 的已登记 notifier，调用 KFD 回调
-    ↓ 传入变化区间、迁移事件和本次失效序号
-KFD 从 notifier 找到 A 的 svm_range，并取得范围锁
-    ↓ 记录失效序号，将变化区间与 A 的范围求交
-撤销相交部分指向 HBM 页 D 的 GPU 映射
-    ↓ 等待非空的页表更新 Fence，执行 GPU TLB 失效处理
-回调释放范围锁并返回，Linux 继续迁移准备
-    ↓ 按第五章完成 D → Q 的复制与收尾
-CPU 映射指向 RAM 页 Q；GPU 原来指向 D 的映射已失效
+事先登记：
+  应用进程的 mm
+    └─ notifier_subscriptions：本地址空间的通知订阅记录
+         └─ itree：按虚拟地址范围组织的区间树
+              └─ A 的 notifier.interval_tree 节点
+                   区间：[0x3000_0000, 0x3000_0FFF]，包含末地址
+
+  A 的 svm_range
+    └─ 内嵌 notifier
+         ├─ interval_tree：上面插入区间树的那个节点
+         ├─ mm → 应用进程的 mm
+         └─ ops → svm_range_mn_ops：KFD 提供的回调操作表
+                    └─ invalidate → svm_range_cpu_invalidate_pagetables
+
+本次通知：
+  Linux 迁移路径取得受影响的 VMA 和虚拟地址
+    → 从 vma->vm_mm 取得该映射所属的进程地址空间
+    → 向通知框架提交 mm 和即将变化的虚拟地址区间
+    → 在这个 mm 的 itree 中查找相交节点，找到 A 的 notifier
+    → 调用 notifier->ops->invalidate(...)，进入已登记的 KFD 函数
+    → KFD 根据内嵌 notifier 找回 A 的 svm_range
 ```
 
-这里的调用都由 Host CPU 上的内核代码执行。`notifier` 已在第二章登记到进程地址空间；Linux 按变化区间找到它，KFD 再通过这个内嵌成员找回 `svm_range`，无需等一次新的 GPU 缺页才发现旧页面要变化。
+区间树使用包含末地址的表示，因此 A 的末地址保存为 `0x3000_0FFF`。这与平时写的半开区间 `[0x3000_0000, 0x3000_1000)` 覆盖同一页。第二章 KFD 用于按故障地址查找范围的树，通过 `svm_range.it_node` 挂接范围；这里的 Linux 通知树使用 `notifier.interval_tree`，服务于地址变化通知。
+
+**[DESIGN]** 为对照图中的成员，下面只保留 `mmu_interval_notifier` 中参与本次查找的部分；这是教学简化定义，实际结构还包含失效序号等成员。
+
+```c
+struct mmu_interval_notifier {
+    struct interval_tree_node interval_tree;  /* 订阅区间及通知树节点 */
+    const struct mmu_interval_notifier_ops *ops; /* 驱动提供的回调操作表 */
+    struct mm_struct *mm;                     /* 订阅所属的进程地址空间 */
+};
+```
+
+> **[SOURCE]** Linux `248951ddc14d`，[`mm_types.h`](./2.源码/linux/include/linux/mm_types.h) 第 1330 行在 `mm_struct` 中保存订阅入口；[`mm/mmu_notifier.c`](./2.源码/linux/mm/mmu_notifier.c) 第 39～48 行定义订阅管理对象及区间树；[`mmu_notifier.h`](./2.源码/linux/include/linux/mmu_notifier.h) 第 279～296 行定义回调操作表和 notifier。KFD 自己的范围树插入见 [`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 129～137 行。
+
+沿图看三个连续动作。首先，KFD 用 `svm_range_add_notifier_locked()` 登记 A：传入 `&prange->notifier`、本进程的 `mm`、起始地址 `0x3000_0000`、长度 `0x1000`，以及操作表 `&svm_range_mn_ops`。Linux 保存 notifier 的 `mm`、`ops` 和区间，并把节点纳入该 `mm` 的通知树。多个范围可以共用同一个回调函数，实际命中了哪段范围，由回调收到的 notifier 指针区分。
+
+随后，Linux 准备迁移 RAM 页 P，通过反向映射找到使用 P 的 VMA 和虚拟地址。“反向映射”在这里就是从物理页找回哪些虚拟地址映射了它。迁移函数从 `vma->vm_mm` 取得进程地址空间，构造变化区间，再显式调用 `mmu_notifier_invalidate_range_start()`。
+
+最后，通知框架沿 `range->mm->notifier_subscriptions` 找到订阅记录，在 `itree` 中遍历与变化区间相交的 notifier，并调用保存的 `ops->invalidate`。A 的操作表将这个函数指针设为 `svm_range_cpu_invalidate_pagetables()`；KFD 进入回调后，通过 `container_of(mni, struct svm_range, notifier)` 找回 A 的范围记录，继续下一段的 GPU 映射撤销。
+
+这些调用都由 Host CPU 上的内核代码执行。Linux 通知框架根据登记的区间和函数指针分发，无需在通用迁移代码中写入 KFD 的函数名。如果这个 `mm` 中没有 KFD 为相交范围登记的 notifier，本次范围通知就不会调用对应的 KFD 回调。
+
+`notifier` 订阅的是 A 的虚拟地址范围。A 从 P 换到 Q 后，范围保持不变，通知关系可以继续使用。通知传达“这个范围的旧映射信息正在失效”，新页面的位置由后续 HMM 查询取得；实际数据复制仍由页面迁移流程完成。
+
+<details>
+<summary>源码核对：登记回调、查找订阅与调用 KFD</summary>
+
+**登记阶段：操作表保存函数地址，范围登记传入操作表。**
+
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 80～82 行定义回调操作表，第 109～119 行登记一个范围。下面是同一文件中两个不连续的完整定义。
+
+```c
+80: static const struct mmu_interval_notifier_ops svm_range_mn_ops = {
+81:     .invalidate = svm_range_cpu_invalidate_pagetables,
+82: };
+```
+
+这份操作表把 `.invalidate` 指向 KFD 的失效处理函数。KFD 随后将操作表与具体范围一起登记：
+
+```c
+109: static void
+110: svm_range_add_notifier_locked(struct mm_struct *mm, struct svm_range *prange)
+111: {
+112:     pr_debug("svms 0x%p prange 0x%p [0x%lx 0x%lx]\n", prange->svms,
+113:          prange, prange->start, prange->last);
+114:
+115:     mmu_interval_notifier_insert_locked(&prange->notifier, mm,
+116:                      prange->start << PAGE_SHIFT,
+117:                      prange->npages << PAGE_SHIFT,
+118:                      &svm_range_mn_ops);
+119: }
+```
+
+第 112～113 行是调试日志，输出范围对象及页号。第 115～118 行完成登记调用：`prange->start` 是页号，左移 `PAGE_SHIFT` 得到字节地址；`npages` 同样换算为字节长度。本例分别得到 `0x3000_0000` 和 `0x1000`。注册对象是 `prange` 内嵌的 notifier，操作表是刚才定义的 `svm_range_mn_ops`。
+
+应用通过属性接口登记新范围时，`svm_range_set_attr()` 会先把范围加入 KFD 集合，再调用这里的登记函数。进入 Linux 后，`mmu_interval_notifier_insert_locked()` 取得 `mm->notifier_subscriptions`，必要时初始化订阅管理对象，再进入内部插入函数，保存 `mm`、`ops` 和区间。没有并发失效时直接插入区间树；并发登记还要经过相应的延后处理。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 3759～3763 行给出范围加入集合与 notifier 登记的顺序；[`mm/mmu_notifier.c`](./2.源码/linux/mm/mmu_notifier.c) 第 1041～1059 行取得或初始化订阅管理对象，第 936～952 行保存关联信息，第 974～998 行处理区间树插入及并发登记。
+
+**迁移阶段：从受影响的 VMA 取得 mm，再发出范围通知。**
+
+普通 RAM 页面迁移通过 `try_to_migrate()` 遍历页面的反向映射。其回调 `try_to_migrate_one()` 已经拿到受影响的 `vma` 和 `address`，因此能够确定这次变化属于哪个地址空间。下面保留构造变化区间到发出通知的连续片段。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`mm/rmap.c`](./2.源码/linux/mm/rmap.c) 第 2739～2775 行设置并调用反向映射遍历；第 2415～2418 行是 `try_to_migrate_one()` 入口及 `mm` 的来源；下列第 2445～2459 行位于该函数内。`mmu_notifier_range_init()` 对通知成员的赋值见 [`mmu_notifier.h`](./2.源码/linux/include/linux/mmu_notifier.h) 第 533～545 行。
+
+```c
+2445:     range.end = vma_address_end(&pvmw);
+2446:     mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, vma->vm_mm,
+2447:                 address, range.end);
+2448:     if (folio_test_hugetlb(folio)) {
+2449:         /*
+2450:          * If sharing is possible, start and end will be adjusted
+2451:          * accordingly.
+2452:          */
+2453:         adjust_range_if_pmd_sharing_possible(vma, &range.start,
+2454:                              &range.end);
+2455:
+2456:         /* We need the huge page size for set_huge_pte_at() */
+2457:         hsz = huge_page_size(hstate_vma(vma));
+2458:     }
+2459:     mmu_notifier_invalidate_range_start(&range);
+```
+
+英文注释说明：可能存在大页页表共享时，需要调整通知区间；设置大页表项还需要取得大页大小。本例采用普通 4 KiB RAM 页，不进入这个大页分支。
+
+第 2446～2447 行把 `vma->vm_mm`、起始地址和结束地址填入 `range`；第 2459 行显式发出通知。本条普通 RAM 迁移路径使用的事件是 `MMU_NOTIFY_CLEAR`。第五章设备页面迁移入口使用的 `MMU_NOTIFY_MIGRATE` 会在本节末尾接回，不应仅根据“发生迁移”就推定事件名相同。
+
+**通知分发：先选中这个 mm 的区间树，再查相交订阅。**
+
+外层 `mmu_notifier_invalidate_range_start()` 检查 `range->mm` 是否存在订阅，然后进入下列内部函数。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`mmu_notifier.h`](./2.源码/linux/include/linux/mmu_notifier.h) 第 470～481 行是外层入口；下列完整函数来自 [`mm/mmu_notifier.c`](./2.源码/linux/mm/mmu_notifier.c) 第 568～582 行。
+
+```c
+568: int __mmu_notifier_invalidate_range_start(struct mmu_notifier_range *range)
+569: {
+570:     struct mmu_notifier_subscriptions *subscriptions =
+571:         range->mm->notifier_subscriptions;
+572:     int ret;
+573:
+574:     if (subscriptions->has_itree) {
+575:         ret = mn_itree_invalidate(subscriptions, range);
+576:         if (ret)
+577:             return ret;
+578:     }
+579:     if (!hlist_empty(&subscriptions->list))
+580:         return mn_hlist_invalidate_range_start(subscriptions, range);
+581:     return 0;
+582: }
+```
+
+第 570～575 行根据通知携带的 `mm` 找到订阅记录，并进入区间树分发。KFD 的 `mmu_interval_notifier` 走这个分支；第 579～580 行是另一类通知订阅的列表分发，本例不沿该路径展开。
+
+`mn_itree_invalidate()` 遍历相交订阅，先调用下面的函数寻找第一个命中项，再通过 `mn_itree_inv_next()` 取得后续命中项。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`mm/mmu_notifier.c`](./2.源码/linux/mm/mmu_notifier.c) 第 464～467 行给出遍历循环；下列完整函数位于第 95～116 行，后续节点的查找位于第 118～129 行。
+
+```c
+95: static struct mmu_interval_notifier *
+96: mn_itree_inv_start_range(struct mmu_notifier_subscriptions *subscriptions,
+97:              const struct mmu_notifier_range *range,
+98:              unsigned long *seq)
+99: {
+100:     struct interval_tree_node *node;
+101:     struct mmu_interval_notifier *res = NULL;
+102:
+103:     spin_lock(&subscriptions->lock);
+104:     subscriptions->active_invalidate_ranges++;
+105:     node = interval_tree_iter_first(&subscriptions->itree, range->start,
+106:                     range->end - 1);
+107:     if (node) {
+108:         subscriptions->invalidate_seq |= 1;
+109:         res = container_of(node, struct mmu_interval_notifier,
+110:                    interval_tree);
+111:     }
+112:
+113:     *seq = subscriptions->invalidate_seq;
+114:     spin_unlock(&subscriptions->lock);
+115:     return res;
+116: }
+```
+
+第 105～106 行用本次变化区间搜索区间树，`range->end - 1` 将半开区间转换为包含末地址的区间。第 109～110 行从命中的树节点找回 notifier；函数同时取得本次失效序号，并返回命中的订阅对象。这里得到的是 A 的 notifier，还没有进入 KFD 回调。
+
+**回调调用：通过订阅保存的函数指针进入 KFD。**
+
+遍历函数对每个命中的 notifier 选择回调形式。KFD 的 `svm_range_mn_ops` 只设置了 `.invalidate`，静态操作表中未指定的 `.invalidate_start` 为 NULL，所以进入下面的 `else` 分支。保留整个判断，便于对照调用条件。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`mm/mmu_notifier.c`](./2.源码/linux/mm/mmu_notifier.c) 第 470～486 行，位于 `mn_itree_invalidate()` 的相交订阅遍历循环内。
+
+```c
+470:         if (interval_sub->ops->invalidate_start) {
+471:             struct mmu_interval_notifier_finish *finish = NULL;
+472:
+473:             ret = interval_sub->ops->invalidate_start(interval_sub,
+474:                                   range,
+475:                                   cur_seq,
+476:                                   &finish);
+477:             if (ret && finish) {
+478:                 finish->notifier = interval_sub;
+479:                 __llist_add(&finish->link, &finish_passes);
+480:             }
+481:
+482:         } else {
+483:             ret = interval_sub->ops->invalidate(interval_sub,
+484:                                 range,
+485:                                 cur_seq);
+486:         }
+```
+
+第 483～485 行传入命中的 notifier、变化区间及事件、当前失效序号。代入 A 的登记结果，`interval_sub` 就是 `&prange->notifier`，`interval_sub->ops` 指向 `svm_range_mn_ops`，实际调用的函数就是 `svm_range_cpu_invalidate_pagetables()`。
+
+KFD 回调收到的参数 `mni` 指向这个内嵌成员。第 2681 行的 `container_of(mni, struct svm_range, notifier)` 根据成员位置找回整个 `svm_range`，因此多个范围共用回调时，仍能准确找到本次需要处理的 A。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_svm.h`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.h) 第 132 行定义内嵌 notifier；[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 2660～2662 行定义回调入参，第 2681～2695 行找回范围、加锁、记录序号并分发事件。GPU 映射的实际撤销继续沿下面的流程学习。
+
+</details>
+
+#### 先撤销旧 GPU 映射，再让迁移继续
+
+收到通知时，P 仍处在迁移流程的保护下。KFD 要先阻止 GPU 继续通过旧映射访问 P，完成所需处理后，才把控制交回 Linux 迁移路径。下面沿各步成功的情况展开：
+
+```text
+Linux 准备改变 A 的页面映射，发出失效通知
+    ↓ 调用 KFD 回调
+KFD 取得 A 的范围锁 prange->lock
+    → 记录本次失效序号 cur_seq
+    → 求变化区间与 A 的交集，确定需要处理哪些地址
+    → 撤销交集内已有的 GPU 映射
+    → 等待非空的页表更新 Fence，执行 GPU TLB 失效处理
+    → 释放范围锁，回调返回
+    ↓ Linux 继续迁移流程
+完成 P → Q 的数据搬运和 CPU 映射更新
+    ↓ 假设迁移已经结束
+GPU 后续缺页恢复：HMM 查到 Q → 准备 Q 的设备访问地址 → 重建映射
+```
+
+撤销 GPU 映射后，A 的虚拟地址和访问权限仍然有效。因此 GPU 以后读取 `A[5]` 时，可以按第三、四章重新取得页面并恢复访问。本例 `preferred_loc=0`、Q 也在 RAM，恢复时直接为 Q 建立映射，无需再把 A 迁入 HBM。如果恢复与迁移仍有交错，就需要下一节的检查。
 
 撤销路径使用 `svm_range_unmap_from_gpus()` 更新 GPU 表项，并等待返回的非空 Fence、处理旧翻译。Linux 返回迁移流程后，才能继续本次受保护的页面处理。§4.4 中恢复映射时的 `wait=false` 属于另一个调用分支，不能用它推断这里也跳过等待。
 
-回调还记录 `cur_seq`，也就是 Linux 传入的本次失效序号。这份记录供正在查询 A 的建表路径检查：即使旧映射已经撤销，另一条路径也可能还拿着旧页面信息，准备把旧映射重新写回来。下一节处理这种交错。
+图中的 `cur_seq` 是 Linux 通知框架传入的失效序号。KFD 将它记录到 `notifier` 中，供正在查询 A 的路径检查是否发生了交错。这样既能撤销已经存在的旧映射，也能阻止尚未完成的查询重新建立旧映射。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`mm/migrate_device.c`](./2.源码/linux/mm/migrate_device.c) 第 502～519 行发出迁移通知；[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 2660～2695 行找回范围、记录序号并分发事件，第 2063～2085 行选择撤销区间，第 1356～1427 行更新 GPU 表项、等待并处理 TLB。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 2660～2695 行找回范围、记录序号并分发事件，第 2063～2085 行选择撤销区间，第 1356～1427 行更新 GPU 表项、等待并处理 TLB。
+
+接回 §5.4 的 HBM 迁回：CPU 读取 A 触发 KFD 将 HBM 页 D 迁到 RAM 页 Q，KFD 调用 `migrate_vma_setup()` 进入迁移准备。该路径也会通过 Linux 通知框架调用同一个 KFD 回调，先撤销访问 D 的 GPU 映射，再继续第五章的数据复制与收尾。这里改变的是迁移的发起路径和源页面，通知与 GPU 映射保护的关系仍然相同。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`mm/migrate_device.c`](./2.源码/linux/mm/migrate_device.c) 第 502～519 行在收集页面前发出迁移通知。本节 RAM → RAM 的通知来自 `mm/rmap.c`，HBM 迁回则经过这里；两者不能因作用相似就写成同一个迁移入口。
 
 ### 6.2 并发查询与建表结果的有效性
 
-**[DESIGN]** 为单独观察并发，回到 A 仍在 RAM、`preferred_loc=0` 的阶段。T1 是 GPU 故障恢复线程，HMM 已为它查到 RAM 页 P；T2 是 Linux 内存管理的另一条执行路径，准备将 P 迁到另一张 RAM 页 Q。A 的 VMA 与读写权限保持不变，两条路径都能在 Host CPU 上推进。
+上一节解释怎样撤销已经存在的 GPU 映射。本节把起始状态改为“映射尚未建好”：GPU 读取 `A[5]` 已经缺页，KFD 正在查询页面、准备建表。要解决的问题是：**KFD 刚查到 A 在 RAM 页 P，还没有提交映射，Linux 就准备把 A 搬到 Q，怎样避免继续用过期的 P 建表？**
 
-T1 保存的查询序号记为 `seq_old`。它表示这次查询所依据的变化记录，与 Packet 37 的 Completion Signal 无关。下面分别看谁先取得 A 的范围锁 `prange->lock`：
+**[DESIGN]** A 仍覆盖 `[0x3000_0000, 0x3000_1000)`，`preferred_loc=0`、`actual_loc=0`，地址和读写权限保持有效。进程启用 XNACK，A 未设置 `GPU_ALWAYS_MAPPED`。P、Q 都是 RAM 页；Linux 因 §6.0 的内存规整需求准备迁移 A。下面只观察同一段 A 上的查询、通知与建表。
+
+#### 两条路径的起因与执行位置
+
+参与这次交错的是两条在 Host CPU 上执行的内核软件路径。先看各自从哪里开始、准备完成什么：
+
+```text
+GPU 故障恢复路径：
+  MI300X 读取 A[5] 缺页，报告故障
+    → Host CPU 上的 AMDGPU / KFD 处理故障
+    → KFD 调用 HMM，查询 A 当前对应的页面
+    → 根据有效的查询结果，准备设备访问地址并提交 GPU 映射
+
+Linux 页面迁移路径：
+  Linux 为整理 RAM，准备将 A 从 P 搬到 Q
+    → Host CPU 上的迁移代码通过 notifier 发出通知
+    → 在这次通知调用中执行 KFD 失效回调，保护 GPU 映射
+    → 回调返回后，迁移路径继续搬页及更新 CPU 映射
+```
+
+故障恢复路径由 GPU 的失败访问触发，建表工作由 Host CPU 上的驱动完成。页面迁移路径则有自己的内存管理起因；它调用 KFD 回调时，仍在这条迁移路径的调用过程中，回调处理结束后才返回迁移代码。
+
+两条路径可能交错推进。HMM 是故障恢复路径调用的页面查询代码，CPU 页表是查询和迁移涉及的数据结构，因此下面只画“故障恢复”和“页面迁移”两列，不把 HMM 或页表单独画成一条执行路径。
+
+#### 查询结果的变化记录与范围锁
+
+故障恢复路径在查询前保存一份通知序号，本文仍记作 `seq_old`；实际保存在 HMM 查询对象的 `notifier_seq` 成员中。随后 HMM 查到 P。准备使用 P 建表时，驱动检查这份序号是否仍有效。如果通知回调已经记录了新的失效序号，就说明查询期间已经收到映射即将变化的通知，本次取得的 P 不能继续用于建表。
+
+两条路径还会使用 **A 同一个 `svm_range` 中的范围锁 `prange->lock`**。故障恢复路径拿着这把锁检查结果并提交映射；迁移路径中的 KFD 回调也要拿到这把锁，才能记录序号并处理失效。一侧持锁期间，另一侧申请同一把锁就必须等待。
+
+下面两幅图分别展示谁先取得锁。每幅图都从故障恢复路径查询页面开始，表示两种独立的可能顺序。每幅图的步骤编号独立，从上向下按编号阅读；自指箭头表示该路径正在执行的操作。
+
+#### 通知先取得锁：放弃本次查询结果
+
+故障恢复路径已经通过 HMM 查到 P，但尚未取得范围锁。这时，迁移路径先进入 KFD 失效回调并拿到锁，将本次失效序号记录下来。
 
 ```mermaid
 sequenceDiagram
-    participant T as T1：GPU 建表
-    participant H as HMM / CPU 页表
-    participant N as T2：页面迁移与通知
-    T->>H: 保存查询序号，查询 A 的页面
-    H-->>T: 返回 RAM 页 P 的信息
-    alt T2 的通知先取得范围锁
-        N->>N: 记录新序号，撤销旧 GPU 映射，释放锁
-        N->>H: 继续将 P 迁到 Q
-        T->>T: 准备设备地址后加范围锁，检查查询序号
-        T->>T: 发现结果过期，释放锁，本次返回 -EAGAIN
-        Note over T,H: 后续恢复重新查询；迁移完成后取得 Q 并建表
-    else T1 先取得范围锁并通过检查
-        T->>T: 在同一把锁内提交指向 P 的 GPU 映射
-        N->>N: 通知等待 T1 释放范围锁
-        T->>T: 释放范围锁
-        N->>N: 取得锁，记录新序号，撤销指向 P 的映射
-        N->>H: 完成旧映射处理后，继续页面迁移
-    end
+    participant F as GPU 故障恢复路径<br/>Host CPU 执行 KFD
+    participant M as Linux 页面迁移路径<br/>Host CPU 执行迁移及通知回调
+    autonumber
+    F->>F: 保存查询序号<br/>调用 HMM，查到 P，尚未建表
+    M->>M: 准备 P → Q 迁移<br/>进入 KFD 失效回调
+    M->>M: 取得 A 的范围锁<br/>记录新的失效序号
+    M->>M: 释放锁，回调返回<br/>迁移流程可以继续
+    F->>F: 准备设备地址后取得范围锁<br/>检查发现查询序号已过期
+    F->>F: 放弃本次建表，释放锁<br/>内层返回 -EAGAIN
 ```
 
-#### 页面变化先到达：放弃旧查询，后续再取 Q
+本例的 A 映射尚未建立，因此通知到来时，没有现成的 A 映射需要撤销；这里起作用的是记录新序号。故障恢复路径随后检查时发现结果过期，便放弃 P，本次不提交映射。
 
-第一种顺序中，T1 查到 P 时结果还可用；到准备建表时，通知已更新序号。`mmu_interval_read_retry()` 因而发现这次查询与失效发生交错，KFD 返回 `-EAGAIN`，本次不提交指向 P 的映射。
+发现过期时，P → Q 的迁移可能尚未完成，也可能已经完成。序号检查只判断旧查询结果还能否使用，并没有返回 Q。当前调用先结束，后续恢复再重新查询；假设迁移已完成且没有新的变化，才会取得 Q、准备设备访问地址并建表。`-EAGAIN` 如何交给外层，见 §7.1。
 
-这里的“重试”发生在后续恢复中：当前调用先结束，后续请求有机会重新进入页面查询。假设 P → Q 迁移已完成、期间没有新的变化，HMM 取得 Q，KFD 为 Q 准备设备地址并恢复 GPU 映射。若页面还在变化，仍要重新检查。返回值如何交给外层，见 §7.1。
+#### 建表先取得锁：通知随后撤销新映射
 
-#### 建表先通过检查：通知随后撤销它
+这次改由故障恢复路径先取得范围锁。它检查时尚未发生使查询结果过期的通知，因此可以继续使用 P。迁移路径随后进入 KFD 回调，申请同一把锁时就需要等待。
 
-第二种顺序中，T1 在范围锁内确认查询有效，并使用结果提交 GPU 映射。T2 的通知处理也要取得同一把锁，因此必须等 T1 离开这段处理，再记录新序号并撤销映射。撤销所需的更新等待与 TLB 处理沿用 §6.1。
+```mermaid
+sequenceDiagram
+    participant F as GPU 故障恢复路径<br/>Host CPU 执行 KFD
+    participant M as Linux 页面迁移路径<br/>Host CPU 执行迁移及通知回调
+    autonumber
+    F->>F: 保存查询序号<br/>调用 HMM，查到 P
+    F->>F: 取得 A 的范围锁<br/>检查查询结果仍然有效
+    M->>M: 进入 KFD 失效回调<br/>申请同一把范围锁，等待
+    F->>F: KFD 持锁提交供 GPU 访问 P 的映射<br/>随后释放范围锁
+    M->>M: 取得范围锁并记录新序号<br/>撤销 KFD 刚提交的、供 GPU 访问 P 的映射
+    M->>M: 完成页表更新等待与 TLB 失效<br/>释放锁，回调返回
+    M->>M: 继续 P → Q 的迁移
+```
 
-**序号检查和建表使用必须放在同一段锁保护中。** 如果检查后立即解锁，通知可能在“检查通过”和“写表”之间完成撤销，随后 T1 又用旧 P 建表。现有的加锁范围正是为了封住这个间隙。
+迁移路径等待的是范围锁：故障恢复路径还持有它，KFD 回调就不能继续处理失效。这次迁移也不能越过尚未返回的回调，直接继续后面的受保护页面处理。
 
-#### VMA 稳定以后，页面仍可能变化
+这里允许“KFD 先提交 GPU 映射，通知回调随后撤销”。KFD 提交时，P 仍是有效的页面；迁移路径中的 KFD 失效回调取得锁后，先撤销故障恢复路径刚刚提交的、供 GPU 访问 P 的映射，再让迁移继续。撤销所需的页表更新等待与 TLB 处理沿用 §6.1，避免 GPU 在页面变化后仍使用旧映射。
 
-T1 持有的 `mmap_lock` 读锁让 VMA 等地址空间结构在当前处理期间保持稳定；Linux 仍可能通过允许并发的页面迁移路径改变 PTE，所以还需要刚才的序号检查与范围锁。本例 T2 是 Linux 的 RAM 页面迁移路径；KFD 自己对同一范围的迁移、验证另受 `migrate_mutex` 串行化。
+#### 检查与建表必须放在同一段锁保护中
 
-如果 T2 改为执行 `munmap()`，删除 VMA 所需的写锁会等待 T1 释放读锁。此时应沿下一节的解除映射流程推演。
+序号能够发现已经记录的失效通知，锁还要保护检查之后的动作。如果故障恢复路径刚检查完就解锁，提交映射之前便会出现下面的错误顺序：
 
-> **[SOURCE]** Linux `248951ddc14d`，[`include/linux/mmu_notifier.h`](./2.源码/linux/include/linux/mmu_notifier.h) 第 352～390 行要求记录序号与最终检查使用同一把调用方锁；[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 1818～1859 行在准备设备地址后加锁、检查并建表，第 2683～2695 行在同一把锁下处理通知。Linux 普通页面迁移的通知入口见 [`mm/rmap.c`](./2.源码/linux/mm/rmap.c) 第 2415～2459 行；HMM 查询序号的保存与检查见 [`amdgpu_hmm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_hmm.c) 第 195、239～246 行。
+```text
+故障恢复路径：检查通过，提前释放范围锁
+    ↓ 此时尚未提交 GPU 映射
+迁移路径：取得锁，记录失效序号，处理旧映射后释放锁
+    ↓ 返回迁移流程，继续改变页面
+故障恢复路径：仍用先前查到的 P，提交访问 P 的 GPU 映射
+    → 失效回调已经处理完，旧映射却又被建了回来
+```
+
+所以，故障恢复路径必须持锁完成“检查查询结果 → 使用结果提交映射”，通知回调则持同一把锁完成“记录失效序号 → 处理旧映射”。前两幅图展示的两种顺序，正是这两段处理互相排斥后的结果。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`amdgpu_hmm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_hmm.c) 第 195 行保存查询序号，第 239～246 行检查有效性；[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 1818～1859 行在准备设备地址后加锁、检查并建表，第 2683～2695 行在同一把锁下处理通知；[`include/linux/mmu_notifier.h`](./2.源码/linux/include/linux/mmu_notifier.h) 第 352～390 行要求记录序号与最终检查使用同一把调用方锁。
+
+#### VMA 稳定时，具体 RAM 页面仍可能变化
+
+故障恢复路径还持有 `mmap_lock` 读锁，保护本次处理中使用的 VMA 等地址空间结构。A 的虚拟地址可以持续有效，而承载数据的 RAM 页从 P 换成 Q；普通 RAM 页面迁移仍可能改变具体页表映射，所以需要刚才的通知、序号和范围锁。
+
+本例采用 Linux 的普通 RAM 页面迁移路径。KFD 自己对同一范围的迁移、验证还受 `migrate_mutex` 串行化，不能直接套用为图中的两条独立路径。如果应用改为调用 `munmap()` 删除 A 的地址范围，则需要取得 `mmap_lock` 写锁，先等待持有读锁的处理结束；删除后的地址也不能按普通迁移那样补回映射，下一节单独展开。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 3115、3162 行分别取得 `mmap_lock` 读锁与范围的 `migrate_mutex`；[`mm/vma.c`](./2.源码/linux/mm/vma.c) 第 3278～3292 行在 `__vm_munmap()` 中取得地址空间写锁，再处理解除映射。
 
 ### 6.3 解除映射后的范围拆分与清理
 
-页面迁移保留 A 的用途，后续可以按新页面恢复映射。现在换成 `munmap()`：应用明确删除一段地址，KFD 除了撤销 GPU 映射，还要让范围记录反映这次删除。
+前两节中，A 的地址一直有效，换成 Q 后仍可以恢复访问。现在改变操作：应用调用 `munmap()`，明确删除一段虚拟地址。KFD 收到 `UNMAP` 通知后，除了撤销 GPU 映射，还要删除相应的范围登记；被删除的部分不能按 P → Q 的例子重新补回。
 
-**[DESIGN]** 沿用 §2.5 的 R，另取尚未拆分的状态。本节设 R 的 16 页已经迁入 HBM，引用同一个 `svm_range_bo`，初始 `offset=0`。应用已结束对待删除部分的 GPU 使用，随后解除中间四页。下图中的范围名称用于教学，表示拆分后的地址区间：
+**[DESIGN]** A 只有一页，无法演示“只删除中间四页”，因此本节改用 §2.5 的 16 页范围 R，并明确取另一个起始状态：R 尚未拆分，16 页已迁入 HBM，引用同一个 `svm_range_bo`，初始 `offset=0`。应用已结束对待删除部分的 GPU 使用，随后解除中间四页。下面要保留两侧地址及其数据，只清理被删除的中段；图中的范围名称用于教学。
 
 ```text
 原范围 R：[0x6000_0000, 0x6001_0000)，16 页
@@ -2337,26 +2690,35 @@ Linux 解除 R 的中段映射，调用 KFD 的 UNMAP 回调
     → 处理结束，释放入队时取得的 mm 引用
 ```
 
-入队时先取得引用，是为了让后台工作尚未开始时，所需的 `mm` 仍然有效。这里的 `deferred_list_work` 负责完成范围登记与清理；它没有在本流程中执行“排空全部 Retry 记录”。进程退出时的显式排空放在 §7.3。
+入队时先取得引用，是为了让后台工作尚未开始时，所需的 `mm` 仍然有效。这里的 `deferred_list_work` 负责完成范围登记与清理。
+
+<details>
+<summary>可选源码细节：过渡范围与已进入处理通路的故障记录</summary>
 
 短暂存在的 `child_list` 保存已经拆出、尚待完成登记或清理的子范围。故障恢复如果遇到这些过渡状态，会按 `skip_recover` 或 `-EAGAIN` 分支暂缓。后段仍合法时，可以在登记完成后恢复；中段已删除时，必须结合当前 VMA 与故障记录判断，不能把旧中段映射补回来。
 
 若另一条恢复路径已经持有 `mmap_lock` 读锁，`munmap()` 要先等待写锁。普通解除映射路径还记录故障时间戳检查点，并由后续故障处理检查，以协调已进入处理通路的旧记录；这些记录的判断不应写成后台清理线程统一排空。
 
+`deferred_list_work` 没有在本流程中执行“排空全部 Retry 记录”。进程退出时的显式排空放在 §7.3。
+
+</details>
+
 > **[SOURCE]** Linux `248951ddc14d`，[`mm/mmu_notifier.c`](./2.源码/linux/mm/mmu_notifier.c) 第 1076～1083 行说明移除 notifier 的限制；[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 2480～2505 行在入队时调用 `mmget_not_zero()`，第 2417～2477 行处理工作并调用 `mmput_async()`，第 2338～2377 行执行范围操作。解除映射、时间戳检查和暂缓恢复分别见第 2550～2637、3119～3132、2968～3005 行。
 
-### 6.4 未启用重试时的队列保护（可选）
+### 6.4 暂停队列后主动恢复映射（可选）
 
-主例已经在前三节讲完。本节保留另一种配置的处理方式，首次阅读可直接进入第七章。
+前面按“撤销旧映射，后续 GPU 缺页再恢复”的方式保护访问。本节只改变保护方式：当进程未启用 XNACK，或某段范围要求始终保持 GPU 映射时，KFD 要先暂停队列，再主动恢复映射。首次阅读可直接进入第七章。
 
 <details>
 <summary>展开：暂停队列、恢复映射与恢复队列</summary>
 
-**[DESIGN]** 本节切换到未启用 XNACK、已经建立 GPU 映射的进程配置。这里只观察保留地址用途的页面变化。GPU 无法通过主例的 Retry 路径按需补建映射，因此 KFD 先暂停该进程的队列，再主动重建映射，最后恢复队列。下面假设各步成功。
+**[DESIGN]** 仍取 [§6.0](#60-ram-页面变化与-gpu-访问保护) 的 RAM 页 P → Q，A 的地址和权限保留，GPU 已有访问 P 的映射；本节改为进程未启用 XNACK，并假设各步成功。KFD 不能撤销映射后就让队列继续运行、等待主例的 Retry 恢复，而要先暂停该进程的队列，待当前页面的映射恢复后再继续执行。
+
+已启用 XNACK 的进程也可以对某段范围设置 `GPU_ALWAYS_MAPPED`。这项要求保存在 `svm_range.flags` 中，应用通过 SVM 属性接口设置或清除相应位。设置后，KFD 按未启用 XNACK 时的方式维护该范围的 GPU 映射，也采用下面的流程。因此，“保持映射”允许页面迁移期间暂停队列，但要求恢复队列前先恢复所需映射。
 
 ```mermaid
 sequenceDiagram
-    participant M as Linux 页面变化
+    participant M as Linux 的 P → Q 迁移
     participant K as KFD 失效回调
     participant Q as 进程队列
     participant W as restore_work
@@ -2365,7 +2727,7 @@ sequenceDiagram
     K->>Q: 首次驱逐时 quiesce，暂停访存
     K->>W: 安排恢复工作
     K-->>M: 返回，允许页面变化继续
-    M->>M: 完成页面变化
+    M->>M: 完成 P → Q 的迁移
     W->>W: 取得所需引用与锁，查询当前页面
     W->>W: 重新建立 GPU 映射，wait=true
     W->>W: 确认处理期间没有遗漏新的失效
@@ -2376,9 +2738,12 @@ sequenceDiagram
 
 恢复工作用 `prange->invalid` 记录该范围的失效，用 `svms->evicted_ranges` 跟踪进程级驱逐状态。假设开始处理时范围计数为 1，建表期间又变为 2，工作线程就不能按旧值 1 清零并恢复队列，而要另行安排恢复。映射恢复且范围、进程计数检查通过后，才调用 `kgd2kfd_resume_mm()`。
 
-设置 `GPU_ALWAYS_MAPPED` 的范围也进入这类保护分支，即使进程启用了 XNACK。读到这里后，后文重新沿用启用 XNACK、未设置该标志的主例。
+读到这里后，后文重新沿用启用 XNACK、范围未设置 `GPU_ALWAYS_MAPPED` 的主例。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 2024～2062 行判断配置、暂停队列并安排工作；第 1898～1990 行重新建表、比较并清零计数、恢复队列或重新安排工作。
+> **[SOURCE] 可选源码索引**
+>
+> - 范围要求的定义和保存：Linux `248951ddc14d`，[`kfd_ioctl.h`](./2.源码/linux/include/uapi/linux/kfd_ioctl.h) 第 761～762 行定义标志，第 800～802 行说明设置、清除标志的属性；[`kfd_svm.h`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.h) 第 88、125 行说明并定义 `flags` 成员；[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 797～803 行设置或清除相应位。
+> - 通知后的保护与恢复：[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 2024～2062 行判断配置、暂停队列并安排工作；第 1898～1990 行重新建表、比较并清零计数、恢复队列或重新安排工作。
 
 </details>
 
@@ -2481,31 +2846,81 @@ KFD 返回无法恢复的错误
 
 ### 7.2 故障通知与任务完成等待
 
-上一节的失败发生在内核恢复路径。应用要获知这次 GPU 内存访问失败，还需要 KFD 形成错误事件，再交给 ROCr 的用户态处理函数。
+#### 进入错误通知路径的前提
 
-**[DESIGN]** 下面沿普通内存异常路径，假设调试器等没有接管异常。图中以没有成功处理错误的自定义回调为默认结果：
+本节承接 §7.1 中需要向用户态报告内存错误的分支。先沿启用 XNACK 的主例，区分 KFD 处理 A 的一条缺页记录后可能出现的结果：
+
+```text
+内核 KFD 处理 A 的一条 GPU 缺页记录
+    ├─ 恢复成功
+    │    → 满足页表更新与翻译失效条件后，GPU 可以继续访问
+    │    → 不因这次成功恢复调用 VMFaultHandler()
+    ├─ 暂缓恢复，例如 HMM 查询结果过期
+    │    → 本次放弃建表，后续可以重新尝试
+    │    → 不因这次暂缓调用 VMFaultHandler()
+    ├─ 跳过过期或重复记录
+    │    → 结束本条记录的处理，不因此通知用户态内存错误
+    └─ 无法正常恢复，进入错误报告路径
+         → 按实际故障记录形成 KFD 内存错误事件
+         → ROCr 收到事件，执行 VMFaultHandler()
+```
+
+`VMFaultHandler()` 是 ROCr 在用户态处理 GPU 内存错误事件的函数，不是所有缺页的总入口。前几章的 HMM 查询、页面迁移与 GPU 建表由内核恢复路径完成，正常恢复不需要经过这个用户态函数。非重试内存异常也可以直接进入错误通知路径，无需先完整尝试一次缺页恢复。
+
+第六章的“暂缓恢复”需要单独看清。KFD 查到页面 P 后，若发现失效序号已经改变，就放弃使用本次查询结果，内层返回 `-EAGAIN`。随后发生的是：
+
+```text
+svm_range_restore_pages() 将 -EAGAIN 转为 0 后返回
+    → amdgpu_vm_handle_fault() 收到 0，返回 true
+    → 外层 Retry 故障处理据此提前返回
+    → 本条记录不再进入后面的 KFD 内存错误上报路径
+```
+
+这里允许本条记录以“暂缓”结束，后续恢复仍需重新查询页面并完成建表。如果后来重新尝试时发现权限错误等无法恢复的问题，错误通知由后来的故障触发；前一次暂缓本身不会调用 `VMFaultHandler()`。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 3267～3272 行将 `-EAGAIN` 转为 0；[`amdgpu_vm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_vm.c) 第 3020～3022 行据此返回 `true`；[`amdgpu_gmc.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_gmc.c) 第 554～588 行向外返回已处理结果；[`gmc_v9_0.c`](./2.源码/linux/drivers/gpu/drm/amd/amdgpu/gmc_v9_0.c) 第 585～592 行提前结束本条记录的处理。[`kfd_device.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device.c) 第 1702～1732 行说明恢复失败与非重试故障进入 KFD 错误通知的路径。
+
+#### 从 KFD 内存事件到用户态回调
+
+进入错误报告路径后，需要把故障信息从内核交给用户态。ROCr 事先创建内存错误事件，并把自己的 `VMFaultHandler()` 注册为异步处理函数；应用还可以向 ROCr 注册系统事件回调，接收运行时整理后的错误信息。
+
+**[DESIGN]** 下面沿普通内存异常路径，假设调试器等没有接管异常。内核处理和用户态处理都由 Host CPU 执行：
 
 ```mermaid
 flowchart TD
     H["GPU 上报内存异常记录"]
-    K["KFD 取得故障地址、GPU 和原因"]
-    E["驱逐该设备上的进程队列<br/>设置 KFD 内存错误事件"]
-    R["ROCr VMFaultHandler<br/>读取 MemoryAccessFault，通知已注册回调"]
-    D{"有回调报告已处理"}
-    A["默认失败路径<br/>按配置输出诊断，最终 abort"]
-    C["交由自定义错误处理<br/>后续能否恢复需另行判断"]
-    H --> K --> E --> R --> D
+    subgraph KERNEL["Host CPU：内核态 KFD"]
+        K["取得故障地址、GPU 和原因"]
+        E["驱逐该设备上的进程队列<br/>保存故障信息，设置内存错误事件并唤醒等待者"]
+        K --> E
+    end
+    subgraph USER["Host CPU：用户态"]
+        R["ROCr 执行 VMFaultHandler()<br/>读取事件中的 MemoryAccessFault"]
+        U["ROCr 整理 GPU、虚拟地址和原因<br/>若应用注册了系统事件回调，则调用回调"]
+        D{"有应用回调返回已处理"}
+        A["没有回调或回调未处理<br/>默认失败路径最终 abort"]
+        C["应用回调已报告处理<br/>原 Kernel 能否继续仍需另行确认"]
+        R --> U --> D
+    end
+    H --> K
+    E -->|事件通知| R
     D -->|否| A
     D -->|是| C
 ```
 
-KFD 的内存事件携带故障信息，并通知等待该事件的用户态处理。ROCr 的 `VMFaultHandler()` 读取 `MemoryAccessFault`，把 GPU Agent、虚拟地址和原因交给已注册的系统事件回调。没有回调成功处理时，固定默认路径最终调用 `abort()`；回调报告已处理时，Runtime 将后续处置交给相应处理逻辑，原 Kernel 是否还能继续需要另行确认。
+KFD 先把故障信息保存在内存错误事件中，再设置事件并唤醒等待者。ROCr 收到事件后，在用户态执行 `VMFaultHandler()`。跨越内核态与用户态边界的是事件通知，KFD 不会直接调用应用提供的用户态函数。
 
-回到 Packet 37：假设它读取 A 最终失败，C 可能只写了一部分，Completion Signal 也可能仍未达到完成值，依赖它的后续任务可能继续等待。内存错误事件负责报告失败，正常完成 Signal 需要 Kernel 走到相应完成阶段才更新。应用应按运行时的错误协议结束等待或执行上层恢复，不能把错误通知当成 C 已计算完。
+`VMFaultHandler()` 随后读取 `MemoryAccessFault`，把 GPU Agent、虚拟地址和原因交给应用已注册的系统事件回调。因此，ROCr 的处理函数和应用回调是先后执行的两层用户态函数。没有应用回调，或没有回调返回 `HSA_STATUS_SUCCESS` 时，固定默认路径按配置输出诊断，最终调用 `abort()`；有回调报告已处理时，ROCr 跳过这条默认终止路径，原 Kernel 是否还能继续需要另行确认。
+
+第六章的 `svm_range.notifier` 回调发生在内核中，用来通知 KFD 页面或地址范围即将变化；这里的应用回调发生在用户态，用来接收 GPU 内存访问错误。
 
 调试器或启用的 Runtime 异常处理也可能在 KFD 分发阶段接管事件；这属于上图之前的分支。首次阅读先掌握普通错误事件路径即可。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_int_process_v9.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_int_process_v9.c) 第 540～572、578～599 行形成异常并适配 GFX9.4.3 分发；[`kfd_debug.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_debug.c) 第 199～245 行选择接管或普通内存事件路径；[`kfd_events.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_events.c) 第 1207～1256 行设置事件。ROCr `ba56a24c6132`，[`runtime.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/runtime.cpp) 第 1826～1943 行实现 `VMFaultHandler()`。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_int_process_v9.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_int_process_v9.c) 第 540～572、578～599 行形成异常并适配 GFX9.4.3 分发；[`kfd_debug.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_debug.c) 第 199～245 行选择接管或普通内存事件路径；[`kfd_events.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_events.c) 第 1207～1256 行保存信息并设置事件，第 641～660 行更新事件状态并唤醒等待者。ROCr `ba56a24c6132`，[`runtime.cpp`](./2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/runtime.cpp) 第 1743～1758 行创建内存事件并注册异步处理函数，第 1826～1943 行实现 `VMFaultHandler()`。
+
+#### 错误通知与任务完成等待
+
+回到 Packet 37：假设它读取 A 最终失败，C 可能只写了一部分，Completion Signal 也可能仍未达到完成值，依赖它的后续任务可能继续等待。内存错误事件负责报告失败，正常完成 Signal 需要 Kernel 走到相应完成阶段才更新。应用应按运行时的错误协议结束等待或执行上层恢复，不能把错误通知当成 C 已计算完。
 
 ### 7.3 进程退出与范围释放
 
@@ -2544,6 +2959,197 @@ flowchart TD
 
 **[BOUNDARY]** 退出流程以结束资源使用为目标，不保证未完成的 Kernel 已算出有效结果。异常停机或 Reset 时的设备停止条件，仍按 03 的退出边界判断。
 
+#### 7.3.1 缺页恢复与退出的竞争点
+
+当前 GPU 因访问 `A[5]` 产生 Retry 故障，Host 上的处理已经进入 `svm_range_restore_pages()`，并按 PASID 42 找到了 P 的 `kfd_process`。就在这之后，P 开始退出。要判断恢复路径能否继续使用 A，需要核对它是否还取得了地址空间使用引用。
+
+**[DESIGN]** 本节只分析正常主上下文的进程退出：P 在这个例子里只有一个用户线程，该线程也是 `lead_thread`；设备存在，未发生 Reset，停止 Queue 的正常路径成功。A 已有合法 SVM 范围，采用本篇的 RAM 就地恢复条件。计数图只计入该线程和本次恢复的 `mm_users` 引用，没有其他临时使用者。这样可以把同一个竞争点的两种结果写清楚，无需引入范围首次创建、迁移或第二个并发案例。
+
+**[INFERENCE]** 下图的两条分支互斥，分别表示谁先在任务锁保护下完成对 `task->mm` 的操作。图中 `mm_users` 的变化是上述条件下的推演；进程对象引用的总数取决于文件、notifier 等实际持有者，不假定为一个固定值。
+
+![缺页恢复与退出竞争地址空间引用的两种合法时序](./assets/05/fault-exit-lifetime.png)
+
+图中“最终拆除被推迟”表示 `mm_users` 尚未归零；退出线程可以继续自己的其他退出步骤，并非必定睡眠等待恢复线程。若恢复路径的 `mmput()` 归还的是最后一个地址空间使用引用，退出通知就在这次 `mmput()` 的调用上下文中触发。[可编辑源图](./assets/05/fault-exit-lifetime.svg)。
+
+##### 7.3.1.1 进程引用、任务引用和地址空间引用分别保护什么
+
+沿本次访问看，恢复函数需要三个层次的对象：先根据 PASID 找到 P，再从 P 保存的主线程取得可使用的地址空间，最后在地址空间和 SVM 范围保护下恢复 A。
+
+```text
+PASID 42
+    → 在 KFD 进程表中找到 PDD，取得 p 的 kref
+    → p->lead_thread：P 的主线程 task_struct
+    → get_task_mm(p->lead_thread)：尝试取得 mm_users 引用
+    → mmap_read_lock(mm)：保护本段地址空间查询
+    → svms->lock：保护 SVM 范围集合操作
+    → prange->migrate_mutex：协调当前范围的恢复／迁移操作
+    → 查 A 的 VMA 和权限，继续本篇的页面与映射恢复
+```
+
+第一层是 `p` 的引用。`kfd_lookup_process_by_pasid()` 在 KFD 进程表的 SRCU 读侧保护内遍历 PDD，找到匹配 PASID 后执行 `kref_get()`，然后退出 SRCU 临界区并返回。恢复函数因而可以在离开查找临界区后继续持有 `p`，直到调用 `kfd_unref_process()`。
+
+第二层是主线程的 `task_struct`。创建 `p` 时，KFD 保存 `thread->group_leader`，并取得任务对象引用；最终释放 `p` 的工作才归还它。因此恢复路径持有 `p` 时，保存的任务对象仍可用于安全调用 `get_task_mm()`。任务对象可以保留到线程已停止执行之后，其中的 `task->mm` 则可能已经被清空。
+
+第三层是本次恢复自己的地址空间使用引用。`get_task_mm()` 在任务锁保护下读取 `task->mm`，非空时执行 `mmget()`。这个引用作用于 `mm_users`，必须用 `mmput()` 归还。恢复路径从这里拿到局部变量 `mm`，后续使用它，而不是仅凭 `p->mm` 保存过一个地址就直接查询 A。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_process.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_process.c) 第 1882～1926 行在 SRCU 内按 PASID 查找并增加进程引用，第 1580～1584、1647～1648、1281～1283 行保存并管理任务对象引用；[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 3070～3117 行先取得 `p`，再通过主线程取得 `mm` 并加锁。
+
+可以用下面的短函数确认第三层引用是怎样取得的。它同时说明：决定结果的是受任务锁保护的 `task->mm`，并非“进程退出”这个描述出现的早晚。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`kernel/fork.c`](./2.源码/linux/kernel/fork.c) 第 1378～1391 行，`get_task_mm()` 的完整函数体。任务没有可用 `mm` 时返回 `NULL`；成功时增加地址空间使用引用。
+
+```c
+1378: struct mm_struct *get_task_mm(struct task_struct *task)
+1379: {
+1380: 	struct mm_struct *mm;
+1381:
+1382: 	if (task->flags & PF_KTHREAD)
+1383: 		return NULL;
+1384:
+1385: 	task_lock(task);
+1386: 	mm = task->mm;
+1387: 	if (mm)
+1388: 		mmget(mm);
+1389: 	task_unlock(task);
+1390: 	return mm;
+1391: }
+```
+
+第 1382～1383 行排除相应内核线程情形，本例是普通用户线程。第 1385～1389 行把“读取 `task->mm`”和“增加其使用引用”放在同一任务锁保护下。退出路径也在持有这把任务锁时清除 `current->mm`，所以恢复方得到的是已成功取得引用的地址空间，或明确的 `NULL`。
+
+还要保留一个范围区别：`mm_struct` 描述对象的内存寿命，与其中用户地址空间仍可使用的时间不同。notifier 等引用可以让描述对象继续存在；当 `mm_users` 归零，Linux 仍会进入用户地址空间拆除。`p` 的 kref 只保护 `p` 的最终回收，无法单独替代本次 `mmget()`。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`kernel/exit.c`](./2.源码/linux/kernel/exit.c) 第 581～615 行在任务锁内清除 `current->mm`，之后归还地址空间使用引用；[`kernel/fork.c`](./2.源码/linux/kernel/fork.c) 第 1179～1211 行在 `mm_users` 归零后调用 `exit_mmap()`，再归还描述对象引用；[`mm/mmu_notifier.c`](./2.源码/linux/mm/mmu_notifier.c) 第 704～705、885～893 行展示 notifier 对描述对象的取得与归还。本节对引用和释放顺序的判断均以这些固定源码为准。
+
+##### 7.3.1.2 分支 A：恢复路径先取得地址空间引用
+
+假设恢复路径已经取得 `p`，并且 `get_task_mm()` 在退出线程清空 `task->mm` 之前成功。按本例简化计数，`mm_users` 从 1 增为 2：一个引用来自用户线程，一个来自本次恢复。
+
+接着退出线程执行 `exit_mm()`，清除自己的 `task->mm`，再调用 `mmput()`。计数从 2 减为 1，因此这次调用还不会进入 `__mmput()` 和 `exit_mmap()`。P 的用户线程正在退出，但用户地址空间的最终拆除要等现有恢复引用归还后才能继续。
+
+恢复路径仍使用局部变量 `mm`。它依次取得 `mmap_read_lock(mm)`、SVM 集合锁和当前范围的 `migrate_mutex`，检查 A 的 VMA、访问权限与恢复位置，再进入页面验证与映射。这些锁和 前文已说明的 notifier 重试条件负责处理范围和映射变化；`mm_users` 引用本身只推迟最终地址空间拆除，不会冻结所有 PTE 或替代页面有效性检查。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 3108～3117、3135～3162、3182～3201、3244～3245 行连接地址空间取得、锁、范围检查和映射调用。本例已有范围，直接沿该分支读取；范围不存在时的锁升级与创建流程回查 [§2.4](#24-gpu-缺页时按需创建-a-的范围记录)。页面失效并发回查 [§6.2](#62-并发查询与建表结果的有效性)。
+
+恢复成功或决定结束处理后，先解除范围锁、SVM 集合锁和 `mmap` 读锁，再 `mmput(mm)`，最后归还 `p` 引用。这个顺序决定了一种容易漏掉的执行上下文：如果恢复引用是最后一个 `mm_users` 引用，这次 `mmput()` 会在恢复处理的调用栈上进入 `exit_mmap()`，并调用 KFD 的释放通知。
+
+因此，不能把时序固定画成“退出线程一定执行 KFD 释放通知，恢复线程在另一边等它”。本分支中，恢复线程可以成为触发最终地址空间拆除的那个执行者。恢复函数在调用 `mmput()` 前已经释放上述锁，调用之后仍持有 `p` 的 kref，直至走到最后的 `kfd_unref_process()`。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 3254～3265 行的实际收尾顺序如下。它与 [`kernel/fork.c`](./2.源码/linux/kernel/fork.c) 第 1205～1211 行、[`mm/mmap.c`](./2.源码/linux/mm/mmap.c) 第 1273～1285 行一起，证明最后一个 `mmput()` 可以同步进入地址空间释放通知。
+
+```c
+3254: out_unlock_range:
+3255: 	mutex_unlock(&prange->migrate_mutex);
+3256: out_unlock_svms:
+3257: 	mutex_unlock(&svms->lock);
+3258: 	mmap_read_unlock(mm);
+3259:
+3260: 	if (r != -EAGAIN)
+3261: 		svm_range_count_fault(node, p, gpuidx);
+3262:
+3263: 	mmput(mm);
+3264: out:
+3265: 	kfd_unref_process(p);
+```
+
+本段处在 `svm_range_restore_pages()` 的函数尾部。第 3255～3258 行先解锁；第 3263 行归还地址空间使用引用，必要时触发上面说明的拆除；第 3265 行再归还进程对象引用。计数之外若还有其他地址空间使用者，拆除会继续推迟，不能照搬本例的“1 减到 0”。
+
+恢复处理能够继续完成，只说明当前引用允许它检查并处理地址空间。进程既已退出，后续 Queue 停止和清理仍会进行；即使本次补映射成功，也不构成向应用保证 C 已算完或 S 已正常更新的承诺。
+
+##### 7.3.1.3 分支 B：退出路径先清除任务的地址空间
+
+另一种合法顺序是：恢复路径已经拿到 `p` 的 kref，但还没调用 `get_task_mm()`；退出线程先在任务锁内把 `task->mm` 清空。恢复路径后来读取这个字段，得到 `NULL`，于是结束本次处理，归还 `p` 引用。
+
+固定函数确实有这条早退路径，而且返回 0。这里的 0 表示这条退出相关处理分支不再继续恢复，不能在观察记录中写成“A 的映射已经修复”。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 3105～3117 行如下；`out` 标签对应上一节展示的第 3264～3265 行。两个源码块在同一函数中，早退直接跳到进程引用归还，跳过 `mmput()`，因为本分支没有取得 `mm` 引用。
+
+```c
+3105: 	/* p->lead_thread is available as kfd_process_wq_release flush the work
+3106: 	 * before releasing task ref.
+3107: 	 */
+3108: 	mm = get_task_mm(p->lead_thread);
+3109: 	if (!mm) {
+3110: 		pr_debug("svms 0x%p failed to get mm\n", svms);
+3111: 		r = 0;
+3112: 		goto out;
+3113: 	}
+3114:
+3115: 	mmap_read_lock(mm);
+3116: retry_write_locked:
+3117: 	mutex_lock(&svms->lock);
+```
+
+注释的中文含义是：最终进程释放路径在归还任务引用前处理相关工作，因此这里的 `lead_thread` 对象仍可用；日志表示“无法取得 mm”。第 3108～3113 行控制本分支：任务对象可用，但已无法从该任务取得地址空间使用引用，随后不进入 VMA 查询或映射恢复。
+
+在图示选择的顺序中，退出方还可以先完成释放通知、移除进程查找入口并拆除 CPU 地址空间，恢复方才执行这个失败的 `get_task_mm()`。此前取得的 `p` kref 让进程描述对象继续存在，恢复方仍能安全执行末尾的引用归还。
+
+**[BOUNDARY]** `get_task_mm(p->lead_thread)` 检查的是保存的主线程。复杂多线程退出中，主线程与其他线程持有地址空间的状态可能不同；因此仅凭这里返回 `NULL`，不能概括为“所有线程的 `mm_users` 一定为零”。本节的单线程条件用于明确两条时序，通用代码结论仍是“本恢复路径未取得可使用的 mm，必须退出”。
+
+##### 7.3.1.4 退出通知先阻止后续查找，再停止设备使用
+
+地址空间最后一个使用引用归还后，`exit_mmap()` 首先调用 `mmu_notifier_release(mm)`，随后才继续解除 CPU 映射。KFD 的进程释放回调在这个位置处理仍使用该进程内存的 Queue。
+
+本例的顺序如下，普通 Queue 停止与范围释放细节分别回查 [03 下篇 §8.5](<./03_AMD GPU 队列与 AQL Dispatch（下）.md#85-进程退出时的-queue-停止与地址空间释放>)和 [§7.3](#73-进程退出与范围释放)：
+
+```text
+exit_mmap(mm)
+  → MMU notifier 调用 KFD 的 release
+  → 从 KFD 进程表摘除 p，等待进程表 SRCU 读侧结束
+  → 取消并等待 p 的 eviction_work / restore_work
+  → 停止该进程在各设备上的 Queue，清理 PQM
+  → p->mm = NULL
+  → 归还主上下文的 notifier 引用
+  → 回调返回，Linux 继续拆除 CPU 映射
+```
+
+进程表删除使后续按 PASID 查找无法再从表中取得 `p`。删除时等待的 SRCU 读侧，是 `kfd_lookup_process_by_pasid()` 这类查找仍在访问表项的短临界区。已经完成查找、带着 kref 离开临界区的恢复函数，不由这次 `synchronize_srcu()` 等待到函数末尾；它的长期使用通过自身引用，以及是否取得 `mm` 来协调。
+
+回到两条分支：A 中的有效 `mm_users` 引用把正常地址空间释放通知推迟到恢复归还引用之后；B 中的恢复方只有 `p` 引用，取不到 `mm` 就结束。正常退出要等 A 中这份 `mm_users` 引用归还后，才能完成 `exit_mmap()` 和用户地址空间拆除；这个先后关系由引用计数约束。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_process.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_process.c) 第 1307～1324 行从表中删除并等待 SRCU，第 1326～1352、1372～1395 行给出释放通知中的取消工作、Queue 停止、PQM 清理与 `p->mm` 失效；第 1908～1920 行说明 PASID 查找在增加 kref 后就离开 SRCU。[`mm/mmap.c`](./2.源码/linux/mm/mmap.c) 第 1281～1300 行把 notifier release 放在 CPU 映射拆除之前。
+
+这里取消的 `p->restore_work` 是进程队列恢复工作；本次 Retry 故障处理则直接进入 `svm_range_restore_pages()`，通过刚才分析的进程引用与地址空间条件收尾。SVM 自己的 `p->svms.restore_work` 在后面的范围最终清理中处理。三个执行入口处理的对象和取消时机分别由对应代码决定。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_process.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_process.c) 第 1587～1588、1331～1332 行初始化并取消进程级工作；[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 3046～3050 行定义当前故障恢复入口，第 3341～3344 行在最终范围清理阶段取消 SVM 恢复工作并等待范围清理工作。
+
+##### 7.3.1.5 最后一个进程引用触发最终释放
+
+退出通知完成后，`p` 可能仍被已打开的 KFD 文件、尚未归还的查找引用或 notifier 的异步释放持有。各使用者都归还自己的引用，最后一次 `kref_put()` 才调用 `kfd_process_ref_release()`，把释放工作排入 `kfd_process_wq`。
+
+因此不能固定说“缺页线程一定是最后释放者”，也不能固定说“退出回调返回时就释放 p”。在分支 A 中，恢复方在 `mmput()` 之后还会归还一次 `p` 引用；在分支 B 中，这个引用可能晚于地址空间拆除才归还。到底哪次归还使计数变为零，要看其他使用者是否已经结束。
+
+```text
+KFD 文件归还引用 ─┐
+恢复路径归还引用 ─┼→ 最后一次 kref_put
+notifier 归还引用 ┘      → kfd_process_ref_release()
+                         → 排入 kfd_process_wq
+                         → kfd_process_wq_release()
+```
+
+notifier 也分成两个动作：release 回调在地址空间拆除前处理设备使用；`mmu_notifier_put()` 触发的异步 `free_notifier` 再归还它持有的进程引用。前一个回调执行结束，并不要求后一个异步释放已经完成。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_process.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_process.c) 第 1016～1019 行归还 kref，第 1286～1305 行连接零引用回调、释放工作和 notifier 引用归还；[`kfd_chardev.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) 第 183～193 行归还文件持有的引用；[`mm/mmu_notifier.c`](./2.源码/linux/mm/mmu_notifier.c) 第 885～893、918～928 行通过 SRCU 安排 notifier 的异步释放。
+
+释放工作再按顺序结束剩余资源使用：处理所需的设备停止条件，清理进程内存相关资源，调用 `svm_range_list_fini()` 结束 SVM 后台工作并清理范围，然后释放 PDD、事件和任务引用，最后释放 `p`。SVM 清理会设置 `drain_pagefaults` 并排空相应 Retry 记录，但这个标志是在最终释放阶段设置的；不能把它提前画成“收到退出请求的第一步”。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_process.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_process.c) 第 1236～1283 行给出最终释放顺序；[`kfd_svm.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c) 第 3333～3363 行先结束 SVM 工作，再设置 `drain_pagefaults`、排空故障并清理范围。范围与映射的释放展开见 [§7.3](#73-进程退出与范围释放)。
+
+##### 7.3.1.6 可以发生的交错与必须推迟的动作
+
+沿图复述时，应把四个条件分别说清：
+
+- **`p` 已被引用，而地址空间已不可取得，可以发生。** 查找引用延长 `p` 的寿命；`get_task_mm()` 可以随后返回 `NULL`，恢复方按早退路径归还引用。
+- **退出线程已清空自己的 `task->mm`，恢复仍使用局部 `mm`，可以发生。** 前提是恢复方先成功取得了 `mm_users` 引用。最终用户地址空间拆除因此延后。
+- **正常 `exit_mmap()` 与仍有效的本次 `mm_users` 使用引用不能按任意顺序交错。** 最后一个使用引用归还才触发地址空间拆除；任务退出的意图不能绕过这个条件。
+- **`p` 已从表中删除，先前的引用仍未归还，可以发生。** 后续查找失去入口，已有使用者通过自己的引用收尾；最终释放工作等到全部 `p` 引用归还后才被安排。
+
+本案例中真实的等待包括：进程表删除等待 SRCU 查找临界区结束；取消工作接口等待正在执行的对应工作结束；最终 SVM 清理等待已有后台工作与故障记录处理完成。`mm_users` 引用则通过“尚未满足零引用条件”推迟最终拆除，不要求退出线程用某个等待队列等待恢复函数。
+
+**[BOUNDARY]** Reset 只改变本例之外的设备停止条件。固定源码的 `kfd_process_wq_release()` 在继续释放前会等待 GPU Reset 完成；不能在 Queue 停止异常时照搬本例的正常释放结论。KFD eviction fence 在此仅作为“设备使用已经结束后，后续内存释放可以继续”的接口条件，其内部实现见 [07 大纲 §7.4](<./07_AMDGPU 通用内存管理与 DRM 任务提交（大纲）.md#74-ttm-放置驱逐迁移与-kfd-队列协调>)。本节也不由对象回收推断未完成 Kernel 的结果有效。
+
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_process.c`](./2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_process.c) 第 1223～1254 行在最终释放工作中等待相关 Reset 完成，并在 Queue 已销毁的前提下处理 eviction fence。正常进程退出之外的停止失败边界，回查 [03 下篇 §8.4](<./03_AMD GPU 队列与 AQL Dispatch（下）.md#84-异常清理与错误隔离的边界>)。
+
 ### 7.4 访问过程复盘与学习自检
 
 先用两条短流程复盘正常访问。第一条沿第二至第四章的 RAM 主例，A 的页面不发生变化：
@@ -2572,9 +3178,9 @@ CPU 初始化 A：数据在 RAM 页 P
 
 上面任一阶段遇到页面并发变化，都要按第六章重新确认映射依据；恢复失败则进入本章的错误处理。一次访存成功后，Packet 37 仍须完成余下计算，CPU 才能按 Completion Signal 的规则使用完整结果。
 
-用下面四组问题检查是否掌握主线。能沿具体过程回答即可，无需背诵全部函数名；链接也作为全篇的回查索引，各节保留了对应源码证据。
+开始自检前，先根据 [§0.0](#00-xnack-与-gpu-缺页后的访问重试) 说明本篇 GPU 按需缺页恢复为何需要 XNACK，以及启用它以后还要检查什么。再用下面四组问题检查后续主线。能沿具体过程回答即可，无需背诵全部函数名；链接也作为全篇的回查索引，各节保留了对应源码证据。
 
 1. **已有范围记录，为什么还要查页面？** 说出 `svm_range`、临时 HMM 查询对象和 GPU 页表各自保存的内容，再沿 PFN → IOVA → GPU 映射说明 A 留在 RAM 时是否需要数据 BO。回查 [§2.1](#21-a-的-svm_range-与关联对象)、[§3.2](#32-从-a-的范围记录取得当前页面)、[§4.2～§4.4](#42-从-ram-页面取得设备访问地址)。页面缺失或 COW 分支见 [§3.3](#33-页面未就绪时借用通用缺页处理)。
 2. **页面搬到 HBM、再迁回后，两侧怎样访问？** 说明 `struct page`、device-private 条目、BO 与 `dev_pagemap` 怎样参与，并指出复制完成、CPU 映射恢复和 GPU 旧映射撤销的先后。回查 [§5.1～§5.4](#51-迁移目标处理范围与设备页)；部分迁移的逐页结果见 [§5.3](#53-部分迁移与失败回退)。
-3. **查询后页面变化，或只删除中间四页，会发生什么？** 分别走一遍并发建表的两种顺序，再画出 R 保留范围及共享 BO 的偏移。回查 [§6.1](#61-页面变化通知与-gpu-映射撤销)、[§6.2](#62-并发查询与建表结果的有效性)、[§6.3](#63-解除映射后的范围拆分与清理)；非重试配置另见 [§6.4](#64-未启用重试时的队列保护可选)。
-4. **本条故障处理结束后，还能判断什么？** 分清返回 0 的几种原因、错误事件和任务完成 Signal；再解释退出时为什么先停止设备使用，后清理范围。回查 [§7.1](#71-故障返回结果与恢复失败)、[§7.2](#72-故障通知与任务完成等待)、[§7.3](#73-进程退出与范围释放)。
+3. **A 一直在 RAM，物理页变化后 GPU 怎样继续访问？** 先按 [§6.0](#60-ram-页面变化与-gpu-访问保护) 说明 `preferred_loc=0` 时 P → Q 仍可能发生的原因和主例条件，再沿 [§6.1](#61-页面变化通知与-gpu-映射撤销) 找到迁移发起者、notifier 和 KFD 回调，按 [§6.2](#62-并发查询与建表结果的有效性) 推演查询与通知的两种顺序。应用删除地址时，按 [§6.3](#63-解除映射后的范围拆分与清理) 画出 R 保留范围及共享 BO 的偏移；暂停队列的保护流程另见 [§6.4](#64-暂停队列后主动恢复映射可选)。
+4. **本条故障处理结束后，还能判断什么？** 分清返回 0 的几种原因、错误事件和任务完成 Signal；再解释退出时为什么先停止设备使用，后清理范围；沿 [§7.3.1](#731-缺页恢复与退出的竞争点) 分别推演恢复先取得 mm 引用和退出先清空 task->mm 的结果。回查 [§7.1](#71-故障返回结果与恢复失败)、[§7.2](#72-故障通知与任务完成等待)、[§7.3](#73-进程退出与范围释放)。

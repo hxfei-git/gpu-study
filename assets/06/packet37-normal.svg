@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="1240" viewBox="0 0 1100 1240">
+<rect width="100%" height="100%" fill="white"/>
+<text x="550.0" y="27" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="30" font-weight="700" fill="#172b42">Packet 37 产生 C，CPU 与 Q1 分别取得使用条件</text>
+<text x="550.0" y="75" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="19" font-weight="400" fill="#54677a">地址合法、资源保留；本图沿正常映射路径；S 不提前重置</text>
+<rect x="100" y="126" width="900" height="102" rx="12" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="118" y="141" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#285b8f">CPU 准备代码、参数、A / B / C 和完成 Signal</text>
+<text x="118" y="176" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">按发布协议填写 Packet → release 发布有效 Header → 写 Doorbell</text>
+<polyline points="550,228 550,258 290,258 290,293" fill="none" stroke="#285b8f" stroke-width="3"/>
+<polygon points="290,293 284.78041359066526,282.1946347717679 295.21958640933474,282.1946347717679" fill="#285b8f"/>
+<polyline points="550,258 810,258 810,293" fill="none" stroke="#087a78" stroke-width="3"/>
+<polygon points="810,293 804.7804135906653,282.1946347717679 815.2195864093347,282.1946347717679" fill="#087a78"/>
+<rect x="45" y="294" width="500" height="129" rx="12" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="63" y="309" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#285b8f">Q0 / Packet 37：启动 vector_add</text>
+<text x="63" y="344" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">SYSTEM acquire 后访问输入</text>
+<text x="63" y="374" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">GPU 读取 A、B，执行 C[i] = A[i] + B[i]</text>
+<rect x="595" y="294" width="460" height="129" rx="12" fill="#edf8f6" stroke="#087a78" stroke-width="2"/>
+<text x="613" y="309" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#087a78">Q1 / Packet 100：Barrier-AND</text>
+<text x="613" y="344" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">dep_signal[0] = S；等待 S.value = 0</text>
+<text x="613" y="374" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">Packet 101 已排在 100 后面</text>
+<polyline points="295,423 295,462" fill="none" stroke="#285b8f" stroke-width="3"/>
+<polygon points="295,462 289.78041359066526,451.1946347717679 300.21958640933474,451.1946347717679" fill="#285b8f"/>
+<rect x="45" y="463" width="500" height="157" rx="12" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="63" y="478" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#285b8f">访问 A[5]：0x3000_0014</text>
+<text x="63" y="513" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">按 P 的 GPUVM 翻译，访问 RAM</text>
+<text x="63" y="543" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">取得 A[5] 的内容，继续 Kernel 计算</text>
+<text x="63" y="573" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">本例映射稳定；恢复过程见 6.5</text>
+<polyline points="295,620 295,658" fill="none" stroke="#285b8f" stroke-width="3"/>
+<polygon points="295,658 289.78041359066526,647.1946347717678 300.21958640933474,647.1946347717678" fill="#285b8f"/>
+<rect x="45" y="659" width="500" height="128" rx="12" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="63" y="674" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#285b8f">Q0 写 C，全部 Work-group 完成</text>
+<text x="63" y="709" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">SYSTEM release → 完成路径更新 S</text>
+<text x="63" y="739" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">S.value：1 → 0；本例 C[0] = 11</text>
+<polyline points="825,423 825,810" fill="none" stroke="#087a78" stroke-width="3" stroke-dasharray="7 7"/>
+<polygon points="825,810 819.7804135906653,799.1946347717678 830.2195864093347,799.1946347717678" fill="#087a78"/>
+<rect x="650" y="570" width="355" height="45" rx="0" fill="#ffffff" stroke="#ffffff" stroke-width="2"/>
+<text x="825" y="580" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="19" font-weight="400" fill="#087a78">依赖未满足期间，100 保持等待</text>
+<polyline points="545,741 580,741 580,842 596,842" fill="none" stroke="#087a78" stroke-width="3"/>
+<polygon points="596,842 585.1946347717678,847.2195864093347 585.1946347717678,836.7804135906653" fill="#087a78"/>
+<text x="583" y="767" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#087a78">S = 0</text>
+<polyline points="295,787 295,836" fill="none" stroke="#285b8f" stroke-width="3"/>
+<polygon points="295,836 289.78041359066526,825.1946347717678 300.21958640933474,825.1946347717678" fill="#285b8f"/>
+<rect x="45" y="837" width="500" height="129" rx="12" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="63" y="852" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#285b8f">CPU：acquire 等待 S 的完成值</text>
+<text x="63" y="887" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">确认等待条件满足 → 读取并校验 C</text>
+<text x="63" y="917" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">CPU 的唤醒与调度不是 Q1 推进前提</text>
+<rect x="596" y="813" width="459" height="128" rx="12" fill="#edf8f6" stroke="#087a78" stroke-width="2"/>
+<text x="614" y="828" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#087a78">100 在依赖满足后完成收尾</text>
+<text x="614" y="863" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">AGENT acquire → AGENT release</text>
+<text x="614" y="893" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">Barrier 完成，才允许 101 启动</text>
+<polyline points="825,941 825,975" fill="none" stroke="#087a78" stroke-width="3"/>
+<polygon points="825,975 819.7804135906653,964.1946347717678 830.2195864093347,964.1946347717678" fill="#087a78"/>
+<rect x="596" y="976" width="459" height="188" rx="12" fill="#edf8f6" stroke="#087a78" stroke-width="2"/>
+<text x="614" y="991" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#087a78">Q1 / Packet 101：计算 D</text>
+<text x="614" y="1026" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">SYSTEM acquire → 读取 C</text>
+<text x="614" y="1056" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">D[i] = 2*C[i]；本例 D[0] = 22</text>
+<text x="614" y="1086" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">SYSTEM release → S_101：1 → 0</text>
+<text x="614" y="1116" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">CPU 读 D 另需等待 S_101</text>
+<text x="550" y="1197" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#54677a">S 是 37 的完成对象，也是 100 的依赖；100 的 completion_signal 仍为空。</text>
+</svg>

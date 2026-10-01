@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1360" height="1540" viewBox="0 0 1360 1540">
+<rect width="100%" height="100%" fill="white"/>
+<defs><marker id="blue" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="#285b8f"/></marker><marker id="teal" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="#087a78"/></marker></defs>
+<text x="680.0" y="32" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="32" font-weight="700" fill="#172b42">同一进程的管理关系与 Packet 的对象引用</text>
+<text x="680.0" y="86" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#54677a">本例地址均为 GPUVA；管理对象、后备存储和硬件上下文分别解释</text>
+<rect x="45" y="150" width="350" height="135" rx="14" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="65" y="166" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#285b8f">进程 P 的 KFD 上下文</text>
+<text x="65" y="206" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">kfd_process：组织进程资源</text>
+<text x="65" y="238" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">关联 P 的 CPU 地址空间</text>
+<rect x="485" y="150" width="370" height="135" rx="14" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="505" y="166" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#285b8f">PDD(P, GPU0)</text>
+<text x="505" y="206" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">进程在 GPU0 上的记录</text>
+<text x="505" y="238" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">QPD 管理 Queue；持有 VM 关联</text>
+<rect x="945" y="150" width="370" height="135" rx="14" fill="#eef9f7" stroke="#087a78" stroke-width="2"/>
+<text x="965" y="166" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#087a78">P 的 GPUVM</text>
+<text x="965" y="206" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">解释 P 的 GPUVA</text>
+<text x="965" y="238" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">本次驻留上下文：VMID 5</text>
+<polyline points="395,216 485,216" fill="none" stroke="#285b8f" stroke-width="3" marker-end="url(#blue)"/>
+<polyline points="855,216 945,216" fill="none" stroke="#285b8f" stroke-width="3" marker-end="url(#blue)"/>
+<polyline points="670,285 670,330 330,330 330,385" fill="none" stroke="#285b8f" stroke-width="3" marker-end="url(#blue)"/>
+<polyline points="670,330 1010,330 1010,385" fill="none" stroke="#285b8f" stroke-width="3" marker-end="url(#blue)"/>
+<rect x="65" y="385" width="535" height="155" rx="14" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="85" y="401" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#285b8f">Q0：生产 C</text>
+<text x="85" y="441" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">Ring、索引、MQD、Doorbell 槽位</text>
+<text x="85" y="473" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">Ring 基址 0x1000_0000</text>
+<rect x="750" y="385" width="535" height="155" rx="14" fill="#eef9f7" stroke="#087a78" stroke-width="2"/>
+<text x="770" y="401" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#087a78">Q1：6.4 加入的消费者</text>
+<text x="770" y="441" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">独立 Ring / MQD / Doorbell 槽位</text>
+<text x="770" y="473" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">100 等 S；101 通过参数引用 C</text>
+<polyline points="330,540 330,635" fill="none" stroke="#285b8f" stroke-width="3" marker-end="url(#blue)"/>
+<rect x="261.0" y="572" width="138.0" height="32" rx="4" fill="white" stroke="white" stroke-width="2"/>
+<text x="330" y="575" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#285b8f">定位本次槽位</text>
+<rect x="65" y="635" width="1220" height="180" rx="14" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="85" y="651" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#285b8f">Packet 37：GPUVA 0x1000_0940</text>
+<text x="85" y="691" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">kernel_object 引用执行描述；kernarg_address 引用参数块；completion_signal 保存句柄 S</text>
+<text x="85" y="723" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">Grid = 1024；Work-group = 256；一个 Packet 描述这一次 Dispatch</text>
+<polyline points="245,815 245,920" fill="none" stroke="#285b8f" stroke-width="3" marker-end="url(#blue)"/>
+<polyline points="675,815 675,920" fill="none" stroke="#285b8f" stroke-width="3" marker-end="url(#blue)"/>
+<polyline points="1120,815 1120,920" fill="none" stroke="#285b8f" stroke-width="3" marker-end="url(#blue)"/>
+<rect x="173.0" y="858" width="144.0" height="32" rx="4" fill="white" stroke="white" stroke-width="2"/>
+<text x="245" y="861" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#285b8f">kernel_object</text>
+<rect x="587.5" y="858" width="175.0" height="32" rx="4" fill="white" stroke="white" stroke-width="2"/>
+<text x="675" y="861" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#285b8f">kernarg_address</text>
+<rect x="1062.0" y="858" width="116.0" height="32" rx="4" fill="white" stroke="white" stroke-width="2"/>
+<text x="1120" y="861" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#285b8f">完成句柄 S</text>
+<rect x="45" y="920" width="405" height="190" rx="14" fill="#eef9f7" stroke="#087a78" stroke-width="2"/>
+<text x="65" y="936" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#087a78">代码对象（本例后备在 HBM）</text>
+<text x="65" y="976" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">Descriptor 0x7000_0000</text>
+<text x="65" y="1008" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">入口偏移 +0x100</text>
+<text x="65" y="1040" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">机器码 0x7000_0100</text>
+<rect x="490" y="920" width="375" height="190" rx="14" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="510" y="936" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#285b8f">Kernarg（system RAM）</text>
+<text x="510" y="976" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">参数块 0x6000_0000</text>
+<text x="510" y="1008" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">保存 A/B/C 的 GPUVA</text>
+<text x="510" y="1040" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">以及 N = 1024</text>
+<rect x="925" y="920" width="390" height="190" rx="14" fill="#fff7e9" stroke="#a5671b" stroke-width="2"/>
+<text x="945" y="936" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#a5671b">Signal 对象（system RAM）</text>
+<text x="945" y="976" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">Packet 保存 S 句柄</text>
+<text x="945" y="1008" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">正常完成：value 从 1 到 0</text>
+<text x="945" y="1040" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">Host 和 Q1 可分别观察</text>
+<polyline points="675,1110 675,1210" fill="none" stroke="#285b8f" stroke-width="3" marker-end="url(#blue)"/>
+<rect x="566.0" y="1146" width="218.0" height="32" rx="4" fill="white" stroke="white" stroke-width="2"/>
+<text x="675" y="1149" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#285b8f">参数中的地址找到数组</text>
+<rect x="435" y="1210" width="485" height="200" rx="14" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="455" y="1226" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#285b8f">数组后备在 system RAM</text>
+<text x="455" y="1266" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">A：0x3000_0000</text>
+<text x="455" y="1298" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">B：0x4000_0000</text>
+<text x="455" y="1330" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">C：0x5000_0000</text>
+<text x="680" y="1456" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#54677a">所有 GPUVA 按 P 的 GPUVM 解释；C、参数和 S 的保留条件由各自使用者决定。</text>
+<text x="440" y="181" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="20" fill="#285b8f">管理</text>
+<text x="900" y="181" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="20" fill="#285b8f">关联</text>
+<polyline points="1285,470 1338,470 1338,1015 1315,1015" fill="none" stroke="#087a78" stroke-width="2" stroke-dasharray="8 6" marker-end="url(#teal)"/>
+<polyline points="1338,1015 1338,1320 920,1320" fill="none" stroke="#087a78" stroke-width="2" stroke-dasharray="8 6" marker-end="url(#teal)"/>
+<text x="1140" y="1232" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" fill="#087a78">Q1 的 Packet 引用</text>
+<text x="1140" y="1270" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="20" fill="#087a78">100 观察 S；101 读取 C</text>
+</svg>

@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1390" viewBox="0 0 1400 1390">
+<rect width="100%" height="100%" fill="white"/>
+<defs><marker id="blue" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="#285b8f"/></marker><marker id="teal" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="#087a78"/></marker></defs>
+<text x="700.0" y="32" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="32" font-weight="700" fill="#172b42">同一个应用：准备资源 → 发布任务 → 使用结果</text>
+<text x="700.0" y="86" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#54677a">逻辑关系图；箭头标明发起的动作，内存框表示本例后备位置</text>
+<rect x="35" y="137" width="1330" height="245" rx="14" fill="#f7f9fc" stroke="#c6d3df" stroke-width="2"/>
+<text x="60" y="150" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#172b42">T0  可复用的准备条件</text>
+<rect x="60" y="205" width="360" height="145" rx="14" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="80" y="221" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#285b8f">Host 用户态</text>
+<text x="80" y="261" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">Runtime / HSAKMT</text>
+<text x="80" y="293" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">申请进程、Queue 与内存</text>
+<rect x="490" y="205" width="420" height="145" rx="14" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="510" y="221" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#285b8f">Host 内核态</text>
+<text x="510" y="261" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">KFD / AMDGPU</text>
+<text x="510" y="293" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">GPUVM、Queue、Doorbell、IH</text>
+<rect x="990" y="205" width="345" height="145" rx="14" fill="#eef9f7" stroke="#087a78" stroke-width="2"/>
+<text x="1010" y="221" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#087a78">设备控制部分</text>
+<text x="1010" y="261" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">Firmware 与硬件配置</text>
+<text x="1010" y="293" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">准备驻留和访问条件</text>
+<polyline points="420,280 490,280" fill="none" stroke="#285b8f" stroke-width="3" marker-end="url(#blue)" stroke-dasharray="8 6"/>
+<polyline points="910,280 990,280" fill="none" stroke="#285b8f" stroke-width="3" marker-end="url(#blue)" stroke-dasharray="8 6"/>
+<rect x="35" y="457" width="505" height="640" rx="14" fill="#fbfdff" stroke="#c6d3df" stroke-width="2"/>
+<rect x="825" y="457" width="540" height="640" rx="14" fill="#fbfefd" stroke="#c6d3df" stroke-width="2"/>
+<text x="60" y="471" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#172b42">外部 Host CPU / system RAM</text>
+<text x="850" y="471" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#087a78">MI300X / 设备本地 HBM</text>
+<rect x="60" y="530" width="455" height="165" rx="14" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="80" y="546" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#285b8f">应用与 Runtime</text>
+<text x="80" y="586" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">T1 准备 A/B、Kernarg、S</text>
+<text x="80" y="618" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">T2 写 Ring，发布 Packet 37</text>
+<rect x="60" y="825" width="455" height="220" rx="14" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="80" y="841" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#285b8f">system RAM 中的任务存储</text>
+<text x="80" y="881" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">Ring：Packet 37</text>
+<text x="80" y="913" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">Kernarg、A/B/C、Signal S</text>
+<text x="80" y="945" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">Host 管理对象也在主机内存</text>
+<polyline points="285,695 285,825" fill="none" stroke="#285b8f" stroke-width="3" marker-end="url(#blue)"/>
+<rect x="166.0" y="743" width="238.0" height="32" rx="4" fill="white" stroke="white" stroke-width="2"/>
+<text x="285" y="746" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#285b8f">写入本次数据和任务描述</text>
+<rect x="850" y="530" width="490" height="230" rx="14" fill="#eef9f7" stroke="#087a78" stroke-width="2"/>
+<text x="870" y="546" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#087a78">命令处理、执行与地址翻译</text>
+<text x="870" y="586" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">CP/MEC：读取 Packet，建立 Dispatch</text>
+<text x="870" y="618" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">CU：取指、读参数、计算 C</text>
+<text x="870" y="650" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">MMU：按进程地址空间检查与翻译</text>
+<rect x="850" y="865" width="490" height="180" rx="14" fill="#eef9f7" stroke="#087a78" stroke-width="2"/>
+<text x="870" y="881" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#087a78">本例 HBM 中的存储</text>
+<text x="870" y="921" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">Descriptor 与已装载机器码</text>
+<text x="870" y="953" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">GPU 页表；管理对象仍在 Host</text>
+<polyline points="1162,350 1162,530" fill="none" stroke="#087a78" stroke-width="3" marker-end="url(#teal)" stroke-dasharray="8 6"/>
+<rect x="1083.0" y="403" width="158.0" height="32" rx="4" fill="white" stroke="white" stroke-width="2"/>
+<text x="1162" y="406" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#087a78">驻留与执行条件</text>
+<polyline points="515,594 850,594" fill="none" stroke="#285b8f" stroke-width="3" marker-end="url(#blue)"/>
+<rect x="558.0" y="557" width="244.0" height="32" rx="4" fill="white" stroke="white" stroke-width="2"/>
+<text x="680" y="560" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#285b8f">T2 写 Doorbell，经 PCIe</text>
+<polyline points="850,704 685,704 685,922 515,922" fill="none" stroke="#087a78" stroke-width="3" marker-end="url(#teal)"/>
+<rect x="619.5" y="780" width="129.0" height="32" rx="4" fill="white" stroke="white" stroke-width="2"/>
+<text x="684" y="783" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#087a78">T3 / T4 / T5</text>
+<rect x="594.0" y="813" width="180.0" height="30" rx="4" fill="white" stroke="white" stroke-width="2"/>
+<text x="684" y="816" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#087a78">取包、读参数、访存</text>
+<rect x="603.0" y="844" width="162.0" height="30" rx="4" fill="white" stroke="white" stroke-width="2"/>
+<text x="684" y="847" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="18" font-weight="400" fill="#087a78">写结果与完成状态</text>
+<polyline points="1095,760 1095,865" fill="none" stroke="#087a78" stroke-width="3" marker-end="url(#teal)"/>
+<rect x="958.5" y="794" width="273.0" height="32" rx="4" fill="white" stroke="white" stroke-width="2"/>
+<text x="1095" y="797" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#087a78">取代码 / 按需读取 GPU 页表</text>
+<rect x="60" y="1170" width="1280" height="150" rx="14" fill="#fff7e9" stroke="#a5671b" stroke-width="2"/>
+<text x="80" y="1186" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#a5671b">T5 → T6  完成与接收</text>
+<text x="80" y="1226" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">设备：规定的完成同步 → 更新 S；Host：acquire 等待条件满足 → 读取 C</text>
+<text x="80" y="1258" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">T0 的资源准备被重复使用；普通 AQL Packet 直接经 Ring 与 Doorbell 提交。</text>
+</svg>

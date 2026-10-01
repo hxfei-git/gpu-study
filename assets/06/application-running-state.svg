@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="1060" viewBox="0 0 1240 1060">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#526477"/></marker></defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="42" y="55.0" font-family="Microsoft YaHei, sans-serif" font-size="31" font-weight="700" fill="#172b42">Packet 37 运行时：谁保存什么，谁继续推进</text>
+<text x="42" y="91.0" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#526477">逻辑状态示意 · 外部 Host CPU + MI300X · 本例 HWS/CPSCH · 不表示物理布局</text>
+<rect x="40" y="118" width="1160" height="245" rx="14" fill="#f2f6fa" stroke="#cdd9e3" stroke-width="1.5"/>
+<text x="64" y="154.0" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#265b8b">Host CPU：Linux 让提交、等待和驱动处理线程获得执行机会</text>
+<rect x="62" y="176" width="532" height="164" rx="14" fill="#ffffff" stroke="#cdd9e3" stroke-width="1.5"/>
+<text x="82" y="207.0" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#265b8b">用户态应用 / Runtime</text>
+<text x="82" y="242" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">管理请求、依赖、代码与完成记录</text>
+<text x="82" y="275" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">本次发布 Packet，或等待 S</text>
+<text x="82" y="308" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">高层提交可由调用线程或工作线程推进</text>
+<rect x="620" y="176" width="558" height="164" rx="14" fill="#ffffff" stroke="#cdd9e3" stroke-width="1.5"/>
+<text x="642" y="207.0" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#265b8b">内核 KFD / AMDGPU</text>
+<text x="642" y="242" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">保留进程、PDD、GPUVM、Queue / MQD</text>
+<text x="642" y="275" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">DQM 在 Queue 变化时组织运行列表</text>
+<text x="642" y="308" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">处理映射、故障、通知和资源收尾</text>
+<path d="M245 364L245 411" fill="none" stroke="#526477" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="266" y="395.0" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#526477">写入任务与数据</text>
+<path d="M1098 364L1098 684" fill="none" stroke="#526477" stroke-width="2.5" marker-end="url(#arrow)" stroke-dasharray="7 5"/>
+<text x="895" y="389.0" font-family="Microsoft YaHei, sans-serif" font-size="19" font-weight="400" fill="#526477">改变设备控制状态</text>
+<rect x="40" y="425" width="1005" height="215" rx="14" fill="#f5f8f3" stroke="#cdd9e3" stroke-width="1.5"/>
+<text x="64" y="462.0" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="700" fill="#236850">设备可访问的存储：仍保存在所选后备位置</text>
+<text x="66" y="501.0" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#236850">system RAM</text>
+<text x="66" y="536" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">Q0 Ring、Kernarg、S</text>
+<text x="66" y="570" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">A/B/C 的页面</text>
+<text x="603" y="501.0" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#236850">HBM</text>
+<text x="603" y="536" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">本例代码与 Descriptor</text>
+<text x="603" y="570" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">本例 GPU 页表</text>
+<text x="66" y="613.0" font-family="Microsoft YaHei, sans-serif" font-size="19" font-weight="400" fill="#526477">GPUVA 通过已建立的映射找到这些存储；Host 管理对象也保留在主机中。</text>
+<path d="M330 684L330 646" fill="none" stroke="#526477" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="350" y="671.0" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#526477">取包、读参数、访问数据与代码</text>
+<rect x="40" y="698" width="1160" height="283" rx="14" fill="#edf3fa" stroke="#cdd9e3" stroke-width="1.5"/>
+<text x="64" y="737.0" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#265b8b">设备中的活动状态</text>
+<rect x="63" y="763" width="329" height="147" rx="14" fill="#ffffff" stroke="#cdd9e3" stroke-width="1.5"/>
+<text x="82" y="799.0" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#265b8b">Queue / 地址空间</text>
+<text x="82" y="836" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#172b42">固件管理与 HQD 等配置</text>
+<text x="82" y="870" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#172b42">本次 VMID / 翻译上下文</text>
+<path d="M399 836L429 836" fill="none" stroke="#526477" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="440" y="763" width="342" height="147" rx="14" fill="#ffffff" stroke="#cdd9e3" stroke-width="1.5"/>
+<text x="460" y="799.0" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#265b8b">Dispatch / Work-group</text>
+<text x="460" y="836" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#172b42">设备读取 Packet，建立工作</text>
+<text x="460" y="870" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#172b42">按执行资源条件安排 Wave</text>
+<path d="M790 836L820 836" fill="none" stroke="#526477" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="829" y="763" width="348" height="147" rx="14" fill="#ffffff" stroke="#cdd9e3" stroke-width="1.5"/>
+<text x="849" y="799.0" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#265b8b">CU 上的 Wave</text>
+<text x="849" y="836" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#172b42">PC、寄存器、执行掩码</text>
+<text x="849" y="870" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#172b42">取指、运算、访存与写 C</text>
+<text x="65" y="948.0" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#526477">完成后：同步并更新 S → Host 接收结果；应用资源继续保留，直到各自使用者结束。</text>
+<text x="42" y="1020.0" font-family="Microsoft YaHei, sans-serif" font-size="19" font-weight="400" fill="#526477">实线：提交或访问关系；虚线：Queue / 资源控制。未绘制固件内部算法和芯粒连接。</text>
+</svg>

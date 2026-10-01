@@ -1325,7 +1325,7 @@ mm_struct
 内存块由哪个线程申请               	→ 内核通常不区分
 ```
 
-> **[BOUNDARY]** `malloc()` 的 arena（分配区）、线程缓存、跨线程释放等分配器内部机制留到用户态内存申请阶段，已登记在 [待补充的知识点](./待补充的知识点.md)。
+> **[BOUNDARY]** `malloc()` 的 arena（分配区）、线程缓存和跨线程释放，将在 [07 大纲 §7.1](<./07_AMDGPU 通用内存管理与 DRM 任务提交（大纲）.md#71-drm-文件bo地址映射与跨进程共享>) 的 Host 线程与对象归属场景中说明，本节先讲清共享地址空间。
 
 > **[SOURCE]** 本地 Linux `248951ddc14d`：[kernel/fork.c](./2.源码/linux/kernel/fork.c) 第 1568～1601 行说明 `mm_struct` 的共享；[arch/arm64/kernel/process.c](./2.源码/linux/arch/arm64/kernel/process.c) 第 413～452 行设置新任务的用户 SP。
 

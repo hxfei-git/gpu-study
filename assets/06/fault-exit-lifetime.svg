@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="1920" viewBox="0 0 1120 1920">
+<rect width="100%" height="100%" fill="white"/>
+<text x="560.0" y="27" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="30" font-weight="700" fill="#172b42">缺页恢复与退出：p 的引用与 mm 的使用引用分开判断</text>
+<text x="560.0" y="75" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="19" font-weight="400" fill="#54677a">同一个竞争点的两种互斥分支 · 单线程 P · 无其他 mm_users 临时引用 · 正常停止 Queue</text>
+<rect x="50" y="116" width="1020" height="94" rx="12" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="68" y="131" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#285b8f">共同起点：恢复已按 PASID 42 找到 p，并取得 kref</text>
+<text x="68" y="166" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">查找的 SRCU 临界区已结束；p 的最终回收仍受本次引用约束</text>
+<text x="300" y="230" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#285b8f">缺页恢复执行者</text>
+<text x="820" y="230" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#087a78">退出线程</text>
+<rect x="30" y="275" width="1060" height="785" rx="12" fill="#f9fbfe" stroke="#c6d4e3" stroke-width="2"/>
+<text x="53" y="294" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#285b8f">分支 A：get_task_mm() 先成功</text>
+<polyline points="300,346 300,1020" fill="none" stroke="#b4c4d6" stroke-width="3" stroke-dasharray="7 7"/>
+<polyline points="820,346 820,1020" fill="none" stroke="#b4c4d6" stroke-width="3" stroke-dasharray="7 7"/>
+<rect x="55" y="347" width="490" height="126" rx="12" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="73" y="362" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#285b8f">① 取得地址空间使用引用</text>
+<text x="73" y="397" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">task_lock 下读取 task-&gt;mm 并 mmget</text>
+<text x="73" y="427" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">mm_users：1 → 2</text>
+<polyline points="545,416 575,416 575,493" fill="none" stroke="#54677a" stroke-width="3" stroke-dasharray="7 7"/>
+<polygon points="575,493 569.7804135906653,482.1946347717679 580.2195864093347,482.1946347717679" fill="#54677a"/>
+<rect x="588" y="494" width="477" height="153" rx="12" fill="#edf8f6" stroke="#087a78" stroke-width="2"/>
+<text x="606" y="509" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#087a78">② exit_mm() 清除 task-&gt;mm</text>
+<text x="606" y="544" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">退出线程 mmput：2 → 1</text>
+<text x="606" y="574" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">还有恢复引用，尚未进入 exit_mmap</text>
+<text x="606" y="604" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">退出线程可以继续其他退出步骤</text>
+<rect x="55" y="526" width="490" height="125" rx="12" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="73" y="541" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#285b8f">③ 使用局部 mm 恢复 A</text>
+<text x="73" y="576" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">取得地址空间与范围的相应锁</text>
+<text x="73" y="606" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">完成或终止处理，再依次解锁</text>
+<polyline points="300,651 300,685" fill="none" stroke="#285b8f" stroke-width="3"/>
+<polygon points="300,685 294.78041359066526,674.1946347717678 305.21958640933474,674.1946347717678" fill="#285b8f"/>
+<rect x="55" y="686" width="490" height="186" rx="12" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="73" y="701" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#285b8f">④ 恢复方 mmput：1 → 0</text>
+<text x="73" y="736" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">本调用栈进入 exit_mmap</text>
+<text x="73" y="766" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">KFD release：移表并等 SRCU 读侧</text>
+<text x="73" y="796" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">停止 Queue 后，继续拆除 CPU 映射</text>
+<text x="73" y="826" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">这时仍持有本次 p 的 kref</text>
+<polyline points="300,872 300,906" fill="none" stroke="#285b8f" stroke-width="3"/>
+<polygon points="300,906 294.78041359066526,895.1946347717678 305.21958640933474,895.1946347717678" fill="#285b8f"/>
+<rect x="55" y="907" width="490" height="102" rx="12" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="73" y="922" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#285b8f">⑤ mmput 返回，再归还 p 引用</text>
+<text x="73" y="957" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">kfd_unref_process(p)</text>
+<text x="817" y="736" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#087a78">推迟的是最终地址空间拆除；</text>
+<text x="817" y="772" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#087a78">不要求退出线程睡眠等待恢复方。</text>
+<rect x="30" y="1081" width="1060" height="524" rx="12" fill="#f7fcfb" stroke="#b9d8d4" stroke-width="2"/>
+<text x="53" y="1102" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="25" font-weight="700" fill="#087a78">分支 B：退出线程先清空 task-&gt;mm</text>
+<polyline points="300,1151 300,1568" fill="none" stroke="#b4c4d6" stroke-width="3" stroke-dasharray="7 7"/>
+<polyline points="820,1151 820,1568" fill="none" stroke="#b4c4d6" stroke-width="3" stroke-dasharray="7 7"/>
+<rect x="588" y="1157" width="477" height="185" rx="12" fill="#edf8f6" stroke="#087a78" stroke-width="2"/>
+<text x="606" y="1172" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#087a78">① task-&gt;mm = NULL；mmput：1 → 0</text>
+<text x="606" y="1207" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">本图选定：退出方先执行 KFD release</text>
+<text x="606" y="1237" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">移除查找入口、停止 Queue、p-&gt;mm=NULL</text>
+<text x="606" y="1267" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">回调返回，继续拆除 CPU 映射</text>
+<text x="606" y="1297" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">此前的 p 引用仍阻止 p 最终回收</text>
+<polyline points="588,1320 558,1320 558,1387 545,1387" fill="none" stroke="#54677a" stroke-width="3" stroke-dasharray="7 7"/>
+<polygon points="545,1387 555.8053652282322,1381.7804135906651 555.8053652282322,1392.2195864093349" fill="#54677a"/>
+<rect x="55" y="1360" width="490" height="185" rx="12" fill="#eff5fb" stroke="#285b8f" stroke-width="2"/>
+<text x="73" y="1375" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="700" fill="#285b8f">② get_task_mm() 返回 NULL</text>
+<text x="73" y="1410" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">不进入 VMA 查询和恢复建表</text>
+<text x="73" y="1440" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">r = 0 → goto out</text>
+<text x="73" y="1470" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">只归还已取得的 p 引用</text>
+<text x="73" y="1500" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400" fill="#172b42">这个返回 0 不证明映射已恢复</text>
+<rect x="55" y="1640" width="1010" height="175" rx="12" fill="#fff7e9" stroke="#9b6723" stroke-width="2"/>
+<text x="73" y="1655" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="700" fill="#9b6723">两条分支最终都要满足：所有 p 引用已经归还</text>
+<text x="73" y="1690" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">文件、已有处理、notifier 等分别归还引用；最后归还者由实际顺序决定</text>
+<text x="73" y="1720" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">最后一次 kref_put → 排入 kfd_process_wq → 执行最终释放工作</text>
+<text x="73" y="1750" text-anchor="start" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="400" fill="#172b42">等待 SVM 后台使用结束 → 清理范围 / PDD / 事件 / 任务引用 → 释放 p</text>
+<text x="560" y="1855" text-anchor="middle" dominant-baseline="text-before-edge" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400" fill="#54677a">纵向表示时间推进；跨列虚线只标本图选择的先后，不表示跨线程函数调用。</text>
+</svg>
