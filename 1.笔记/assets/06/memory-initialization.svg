@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1220" viewBox="0 0 1200 1220">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#52677d"/></marker></defs>
+<rect width="1200" height="1220" fill="#ffffff"/>
+<g font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif">
+<text x="48" y="57" font-size="31" fill="#20344c" font-weight="700">驱动先准备内存，再把存储和地址交给内部使用者</text>
+<text x="48" y="98" font-size="21" fill="#52677d" font-weight="400">资源准备与分配的依赖图 · 外部 Host CPU + MI300X · 此时应用 P 尚未运行</text>
+<rect x="50" y="130" width="1100" height="195" rx="14" fill="#f2f6fa" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="74" y="171" font-size="26" fill="#285f90" font-weight="700">① AMDGPU / GMC：建立公共分配与访问条件</text>
+<text x="74" y="212" font-size="23" fill="#20344c" font-weight="400">取得 HBM 容量、BAR0 的 CPU 可见窗口，安排 VRAM / GART 地址范围</text>
+<text x="74" y="251" font-size="23" fill="#20344c" font-weight="400">建立 BO / TTM 管理；准备内核系统页表和硬件翻译配置</text>
+<text x="74" y="290" font-size="23" fill="#20344c" font-weight="400">GPUVM 公共管理先记录能力；应用 P 的 GPUVM 和 A/B/C 在第 2 节建立</text>
+<path d="M600 325L600 377" fill="none" stroke="#52677d" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="620" y="358" font-size="21" fill="#52677d" font-weight="400">公共准备就绪，进入 KFD 初始化</text>
+<rect x="50" y="379" width="1100" height="160" rx="14" fill="#f2f6fa" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="74" y="420" font-size="26" fill="#285f90" font-weight="700">② KFD：按管理需求申请一块 GTT 内存池</text>
+<text x="74" y="460" font-size="23" fill="#20344c" font-weight="400">统计 MQD、运行列表、内部 Queue、完成记录等所需空间</text>
+<text x="74" y="499" font-size="23" fill="#20344c" font-weight="400">请求 size 字节，存储域取 GTT：本例后备数据位于 system RAM</text>
+<path d="M600 539L600 587" fill="none" stroke="#52677d" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="620" y="571" font-size="21" fill="#52677d" font-weight="400">交给 AMDGPU 的内核内存分配接口</text>
+<rect x="50" y="588" width="1100" height="144" rx="14" fill="#f2f6fa" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="74" y="628" font-size="26" fill="#285f90" font-weight="700">③ AMDGPU：为这份存储建立 CPU 和 GPU 访问地址</text>
+<text x="74" y="668" font-size="23" fill="#20344c" font-weight="400">创建 BO → 取得 RAM 后备 → pin → 绑定 GART → 建立 CPU 内核映射</text>
+<text x="74" y="706" font-size="23" fill="#20344c" font-weight="400">返回 BO 管理对象，以及同一份存储的两种基地址</text>
+<path d="M230 732L230 769" fill="none" stroke="#52677d" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M600 732L600 769" fill="none" stroke="#52677d" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M970 732L970 769" fill="none" stroke="#52677d" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="50" y="770" width="340" height="150" rx="14" fill="#eaf4ee" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="73" y="807" font-size="25" fill="#247054" font-weight="700">BO：Host 管理记录</text>
+<text x="73" y="845" font-size="22" fill="#20344c" font-weight="400">记录大小、位置与引用</text>
+<text x="73" y="879" font-size="22" fill="#20344c" font-weight="400">管理下面这份 RAM 存储</text>
+<rect x="430" y="770" width="340" height="150" rx="14" fill="#eaf4ee" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="453" y="807" font-size="25" fill="#247054" font-weight="700">CPU 内核指针</text>
+<text x="453" y="845" font-size="24" fill="#20344c" font-weight="400">cpu_base</text>
+<text x="453" y="879" font-size="22" fill="#20344c" font-weight="400">Host CPU 据此填写内容</text>
+<rect x="810" y="770" width="340" height="150" rx="14" fill="#eaf4ee" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="833" y="807" font-size="25" fill="#247054" font-weight="700">内核系统 GPU 地址</text>
+<text x="833" y="845" font-size="24" fill="#20344c" font-weight="400">gpu_base</text>
+<text x="833" y="879" font-size="22" fill="#20344c" font-weight="400">GPU 据此读取内容</text>
+<path d="M230 920L230 947L600 947L600 974" fill="none" stroke="#52677d" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M600 920L600 974" fill="none" stroke="#52677d" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M970 920L970 947L600 947" fill="none" stroke="#52677d" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="50" y="975" width="1100" height="145" rx="14" fill="#eaf4ee" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="74" y="1016" font-size="26" fill="#247054" font-weight="700">④ KFD 子分配器：从池中划出一段给具体管理对象</text>
+<text x="74" y="1056" font-size="23" fill="#20344c" font-weight="400">Host 填写管理块，按内部提交协议交付；设备随后按地址读取</text>
+<text x="74" y="1094" font-size="23" fill="#20344c" font-weight="400">整块池、BO 和访问地址继续保留，直到相应设备使用结束</text>
+<text x="52" y="1170" font-size="21" fill="#52677d" font-weight="400">图按资源依赖展开；其他 IP 的准备、固件装载等步骤在相应小节说明。</text>
+</g>
+</svg>

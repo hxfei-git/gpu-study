@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="670" viewBox="0 0 1200 670">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#52677d"/></marker></defs>
+<rect width="1200" height="670" fill="#ffffff"/>
+<g font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif">
+<text x="48" y="57" font-size="31" fill="#20344c" font-weight="700">从管理池划出 1 KiB：两种地址加上同一偏移</text>
+<text x="48" y="98" font-size="21" fill="#52677d" font-weight="400">教学取值：每块 512 字节；第 0～11 块已占用，第 12、13 块分给管理块 M</text>
+<rect x="50" y="135" width="1100" height="188" rx="14" fill="#f8fafc" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="74" y="171" font-size="25" fill="#285f90" font-weight="700">管理池中的 M：第 12、13 块，共 1024 字节</text>
+<text x="850" y="171" font-size="18" fill="#52677d" font-weight="400">横条不按容量比例</text>
+<rect x="75" y="201" width="365" height="88" fill="#e3e8ef" stroke="#aabaca"/>
+<text x="93" y="237" font-size="23" fill="#20344c" font-weight="400">第 0～11 块：已有使用者</text>
+<text x="93" y="273" font-size="21" fill="#20344c" font-weight="400">偏移 0x0000～0x17ff</text>
+<rect x="440" y="201" width="195" height="88" fill="#d4ecdf" stroke="#7fba9f"/>
+<text x="457" y="237" font-size="24" fill="#247054" font-weight="700">第 12 块</text>
+<text x="457" y="273" font-size="21" fill="#20344c" font-weight="400">起点 0x1800</text>
+<rect x="635" y="201" width="195" height="88" fill="#d4ecdf" stroke="#7fba9f"/>
+<text x="652" y="237" font-size="24" fill="#247054" font-weight="700">第 13 块</text>
+<text x="652" y="273" font-size="21" fill="#20344c" font-weight="400">起点 0x1a00</text>
+<rect x="830" y="201" width="295" height="88" fill="#f2f6fa" stroke="#aabaca"/>
+<text x="849" y="237" font-size="23" fill="#20344c" font-weight="400">后续池空间</text>
+<text x="849" y="273" font-size="21" fill="#20344c" font-weight="400">从 0x1c00 继续</text>
+<path d="M440 301L440 333L830 333L830 301" fill="none" stroke="#247054" stroke-width="2"/>
+<rect x="50" y="430" width="515" height="160" rx="14" fill="#f2f6fa" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="74" y="470" font-size="26" fill="#285f90" font-weight="700">CPU 使用的指针</text>
+<text x="74" y="511" font-size="24" fill="#20344c" font-weight="400">cpu_ptr = cpu_base + 0x1800</text>
+<text x="74" y="550" font-size="22" fill="#20344c" font-weight="400">同一偏移：12 × 512 = 0x1800</text>
+<rect x="615" y="430" width="535" height="160" rx="14" fill="#f2f6fa" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="639" y="470" font-size="26" fill="#285f90" font-weight="700">GPU 使用的内核系统地址</text>
+<text x="639" y="511" font-size="24" fill="#20344c" font-weight="400">gpu_base = 0x80_0020_0000</text>
+<text x="639" y="550" font-size="24" fill="#20344c" font-weight="400">gpu_addr = 0x80_0020_1800</text>
+<path d="M307 430L307 391L490 391L490 334" fill="none" stroke="#52677d" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M882 430L882 391L780 391L780 334" fill="none" stroke="#52677d" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="52" y="638" font-size="21" fill="#52677d" font-weight="400">CPU 与 GPU 分别从各自基地址增加 0x1800，最终定位管理块 M 的同一开头。</text>
+</g>
+</svg>

@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="650" viewBox="0 0 1080 650" role="img" aria-labelledby="title desc">
+<title id="title">AMDGPU 接入 DRM，并复用通用资源管理代码</title><desc id="desc">逻辑软件关系图，实线表示系统调用、函数调用或已登记回调的调用，不表示硬件物理布局。</desc>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#365874"/></marker></defs>
+<style>text{font-family:'Microsoft YaHei',sans-serif;fill:#16324a;font-size:19px}.title{font-size:27px;font-weight:600}.small{font-size:17px;fill:#415b70}.head{font-size:21px;font-weight:600}.edge{fill:none;stroke:#365874;stroke-width:2;marker-end:url(#arrow)}.later{fill:none;stroke:#6a6ab8;stroke-width:2;stroke-dasharray:7 5;marker-end:url(#arrow)}</style>
+<rect width="1080" height="650" fill="white"/>
+<text class="title" x="28" y="42">AMDGPU 接入 DRM，并复用通用资源管理代码</text>
+<text x="28" y="76" class="small">Host CPU 执行内核代码；本例入口为 /dev/dri/renderD128。</text>
+<rect x="28" y="120" width="250" height="130" rx="10" fill="#eef5fa" stroke="#7898b0" stroke-width="1.5"/>
+<text x="153.0" y="162.0" text-anchor="middle" class="head">P 的用户态 Runtime</text>
+<text x="153.0" y="192.0" text-anchor="middle" class="">打开设备、查询信息</text>
+<text x="153.0" y="222.0" text-anchor="middle" class="">准备资源</text>
+<rect x="415" y="120" width="250" height="130" rx="10" fill="#eef5fa" stroke="#7898b0" stroke-width="1.5"/>
+<text x="540.0" y="177.0" text-anchor="middle" class="head">render 设备文件</text>
+<text x="540.0" y="207.0" text-anchor="middle" class="">/dev/dri/renderD128</text>
+<rect x="802" y="120" width="250" height="130" rx="10" fill="#eef5fa" stroke="#7898b0" stroke-width="1.5"/>
+<text x="927.0" y="162.0" text-anchor="middle" class="head">AMDGPU 登记的</text>
+<text x="927.0" y="192.0" text-anchor="middle" class="">Linux 文件操作</text>
+<text x="927.0" y="222.0" text-anchor="middle" class="">open / ioctl / release</text>
+<rect x="802" y="390" width="250" height="130" rx="10" fill="#eef5fa" stroke="#7898b0" stroke-width="1.5"/>
+<text x="927.0" y="432.0" text-anchor="middle" class="head">DRM 核心</text>
+<text x="927.0" y="462.0" text-anchor="middle" class="">设备、打开文件</text>
+<text x="927.0" y="492.0" text-anchor="middle" class="">请求分发</text>
+<rect x="415" y="390" width="250" height="130" rx="10" fill="#edf7f1" stroke="#7898b0" stroke-width="1.5"/>
+<text x="540.0" y="432.0" text-anchor="middle" class="head">AMDGPU 的具体实现</text>
+<text x="540.0" y="462.0" text-anchor="middle" class="">设备和文件私有状态</text>
+<text x="540.0" y="492.0" text-anchor="middle" class="">BO 与 GPUVM</text>
+<rect x="28" y="390" width="250" height="130" rx="10" fill="#fff4e7" stroke="#7898b0" stroke-width="1.5"/>
+<text x="153.0" y="432.0" text-anchor="middle" class="head">DRM 内存组件</text>
+<text x="153.0" y="462.0" text-anchor="middle" class="">GEM 对象支持</text>
+<text x="153.0" y="492.0" text-anchor="middle" class="">TTM 存储管理</text>
+<path class="edge" d="M278 185 H415"/>
+<rect x="283.5" y="145" width="125" height="34" rx="5" fill="white"/>
+<text x="346" y="167" text-anchor="middle" class="small" style="fill:#16324a">系统调用</text>
+<path class="edge" d="M665 185 H802"/>
+<rect x="665.5" y="128" width="135" height="51" rx="5" fill="white"/>
+<text x="733" y="146" text-anchor="middle" class="small" style="fill:#16324a;font-size:15px">drm_stub_open</text>
+<text x="733" y="170" text-anchor="middle" class="small" style="fill:#16324a;font-size:15px">选择驱动的操作表</text>
+<path class="edge" d="M927 250 V390"/>
+<rect x="797.0" y="283" width="260" height="60" rx="5" fill="white"/>
+<text x="927" y="305" text-anchor="middle" class="small" style="fill:#16324a">open 直接进入</text>
+<text x="927" y="331" text-anchor="middle" class="small" style="fill:#16324a">ioctl 经 AMDGPU 包装进入</text>
+<path class="edge" d="M802 455 H665"/>
+<rect x="665.5" y="415" width="135" height="34" rx="5" fill="white"/>
+<text x="733" y="437" text-anchor="middle" class="small" style="fill:#16324a">调用登记的实现</text>
+<path class="edge" d="M415 455 H278"/>
+<rect x="281.0" y="415" width="130" height="34" rx="5" fill="white"/>
+<text x="346" y="437" text-anchor="middle" class="small" style="fill:#16324a">调用通用代码</text>
+<path class="edge" d="M153 520 V578 H540 V520"/>
+<rect x="35.0" y="577" width="650" height="34" rx="5" fill="white"/>
+<text x="360" y="599" text-anchor="middle" class="small" style="fill:#16324a">需要设备操作时，通用组件调用已登记的 AMDGPU 后端</text>
+</svg>

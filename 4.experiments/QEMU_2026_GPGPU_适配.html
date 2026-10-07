@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QEMU 2026 GPGPU 适配笔记</title>
+<style>
+:root { color-scheme: light; --bg:#f3f4f6; --paper:#fff; --text:#263241;
+  --muted:#657180; --line:#dde3ea; --link:#1666a7; --inline:#edf2f7; }
+* { box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+body { margin:0; background:var(--bg); color:var(--text);
+  font:16px/1.85 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans CJK SC",
+  "Microsoft YaHei",sans-serif; }
+.layout { display:grid; grid-template-columns:250px minmax(0,1fr);
+  max-width:1440px; margin:0 auto; }
+.sidebar { position:sticky; top:0; height:100vh; overflow-y:auto;
+  padding:34px 20px 28px; border-right:1px solid var(--line); }
+.brand { font-size:12px; letter-spacing:.12em; color:var(--muted); }
+.sidebar h2 { font-size:20px; margin:6px 0 24px; }
+nav a { display:block; padding:7px 10px; border-radius:5px;
+  color:var(--text); font-size:14px; line-height:1.55; text-decoration:none; }
+nav a:hover,nav a.active { color:var(--link); background:var(--inline); }
+nav .level-3 { padding-left:22px; font-size:13px; color:var(--muted); }
+.hint { margin-top:28px; color:var(--muted); font-size:12px; }
+main { min-width:0; padding:30px 42px 70px; }
+.toolbar { display:flex; justify-content:space-between; align-items:center;
+  margin:0 0 20px; color:var(--muted); font-size:13px; }
+.toolbar button { background:var(--paper); border:1px solid var(--line);
+  color:var(--text); padding:6px 12px; border-radius:5px; cursor:pointer; }
+article { max-width:1000px; margin:0 auto; padding:32px 40px 46px;
+  background:var(--paper); border:1px solid var(--line); border-radius:8px; }
+h1,h2,h3 { line-height:1.4; scroll-margin-top:22px; }
+h1 { font-size:30px; margin:0 0 26px; }
+article h2 { font-size:23px; margin:48px 0 18px; padding-top:16px;
+  border-top:1px solid var(--line); }
+article h3 { font-size:19px; margin:32px 0 14px; }
+p { margin:14px 0; }
+a { color:var(--link); text-underline-offset:3px; overflow-wrap:anywhere; }
+li { margin:7px 0; }
+code { font-family:"DejaVu Sans Mono",Consolas,"Liberation Mono",monospace; }
+p code,li code { padding:2px 5px; border-radius:4px; background:var(--inline);
+  font-size:.9em; overflow-wrap:anywhere; }
+.code-block { margin:22px 0; border-radius:6px; overflow:hidden;
+  background:#272822; color:#f8f8f2; }
+.code-block figcaption { padding:5px 16px; background:#20211d; color:#b6b9ad;
+  font:12px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+pre { margin:0; padding:16px 18px; overflow-x:auto; white-space:pre;
+  font-size:13px; line-height:1.75; tab-size:4; }
+pre code { color:inherit; }
+pre:focus-visible { outline:2px solid #8cc3e8; outline-offset:-2px; }
+.skip { position:absolute; left:10px; top:-100px; }
+.skip:focus { top:10px; z-index:10; padding:8px; background:var(--paper); }
+footer { max-width:1000px; margin:22px auto 0; color:var(--muted); font-size:12px; }
+@media(max-width:1000px) { .layout { grid-template-columns:215px minmax(0,1fr); }
+  main { padding:22px 22px 50px; } article { padding:26px; } }
+@media(max-width:760px) { .layout { display:block; }
+  .sidebar { position:static; height:auto; padding:20px; border-right:0;
+    border-bottom:1px solid var(--line); }
+  .sidebar h2 { margin-bottom:10px; } .hint { display:none; }
+  main { padding:18px 12px 40px; } article { padding:22px 18px; }
+  h1 { font-size:25px; } article h2 { font-size:21px; } pre { font-size:12px; } }
+@media print { body { background:white; } .layout { display:block; }
+  .sidebar,.toolbar,.skip,footer { display:none; } main { padding:0; }
+  article { border:0; padding:0; max-width:none; } h2,h3 { break-after:avoid; }
+  .code-block { break-inside:avoid; } pre { overflow:visible; font-size:9px; }
+  a { color:inherit; } }
+
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.code-block .hll { background-color: #49483e }
+.code-block { background: #272822; color: #f8f8f2 }
+.code-block .c { color: #959077 } /* Comment */
+.code-block .err { color: #ed007e; background-color: #1e0010 } /* Error */
+.code-block .esc { color: #f8f8f2 } /* Escape */
+.code-block .g { color: #f8f8f2 } /* Generic */
+.code-block .k { color: #66d9ef } /* Keyword */
+.code-block .l { color: #ae81ff } /* Literal */
+.code-block .n { color: #f8f8f2 } /* Name */
+.code-block .o { color: #ff4689 } /* Operator */
+.code-block .x { color: #f8f8f2 } /* Other */
+.code-block .p { color: #f8f8f2 } /* Punctuation */
+.code-block .ch { color: #959077 } /* Comment.Hashbang */
+.code-block .cm { color: #959077 } /* Comment.Multiline */
+.code-block .cp { color: #959077 } /* Comment.Preproc */
+.code-block .cpf { color: #959077 } /* Comment.PreprocFile */
+.code-block .c1 { color: #959077 } /* Comment.Single */
+.code-block .cs { color: #959077 } /* Comment.Special */
+.code-block .gd { color: #ff4689 } /* Generic.Deleted */
+.code-block .ge { color: #f8f8f2; font-style: italic } /* Generic.Emph */
+.code-block .ges { color: #f8f8f2; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.code-block .gr { color: #f8f8f2 } /* Generic.Error */
+.code-block .gh { color: #f8f8f2 } /* Generic.Heading */
+.code-block .gi { color: #a6e22e } /* Generic.Inserted */
+.code-block .go { color: #66d9ef } /* Generic.Output */
+.code-block .gp { color: #ff4689; font-weight: bold } /* Generic.Prompt */
+.code-block .gs { color: #f8f8f2; font-weight: bold } /* Generic.Strong */
+.code-block .gu { color: #959077 } /* Generic.Subheading */
+.code-block .gt { color: #f8f8f2 } /* Generic.Traceback */
+.code-block .kc { color: #66d9ef } /* Keyword.Constant */
+.code-block .kd { color: #66d9ef } /* Keyword.Declaration */
+.code-block .kn { color: #ff4689 } /* Keyword.Namespace */
+.code-block .kp { color: #66d9ef } /* Keyword.Pseudo */
+.code-block .kr { color: #66d9ef } /* Keyword.Reserved */
+.code-block .kt { color: #66d9ef } /* Keyword.Type */
+.code-block .ld { color: #e6db74 } /* Literal.Date */
+.code-block .m { color: #ae81ff } /* Literal.Number */
+.code-block .s { color: #e6db74 } /* Literal.String */
+.code-block .na { color: #a6e22e } /* Name.Attribute */
+.code-block .nb { color: #f8f8f2 } /* Name.Builtin */
+.code-block .nc { color: #a6e22e } /* Name.Class */
+.code-block .no { color: #66d9ef } /* Name.Constant */
+.code-block .nd { color: #a6e22e } /* Name.Decorator */
+.code-block .ni { color: #f8f8f2 } /* Name.Entity */
+.code-block .ne { color: #a6e22e } /* Name.Exception */
+.code-block .nf { color: #a6e22e } /* Name.Function */
+.code-block .nl { color: #f8f8f2 } /* Name.Label */
+.code-block .nn { color: #f8f8f2 } /* Name.Namespace */
+.code-block .nx { color: #a6e22e } /* Name.Other */
+.code-block .py { color: #f8f8f2 } /* Name.Property */
+.code-block .nt { color: #ff4689 } /* Name.Tag */
+.code-block .nv { color: #f8f8f2 } /* Name.Variable */
+.code-block .ow { color: #ff4689 } /* Operator.Word */
+.code-block .pm { color: #f8f8f2 } /* Punctuation.Marker */
+.code-block .w { color: #f8f8f2 } /* Text.Whitespace */
+.code-block .mb { color: #ae81ff } /* Literal.Number.Bin */
+.code-block .mf { color: #ae81ff } /* Literal.Number.Float */
+.code-block .mh { color: #ae81ff } /* Literal.Number.Hex */
+.code-block .mi { color: #ae81ff } /* Literal.Number.Integer */
+.code-block .mo { color: #ae81ff } /* Literal.Number.Oct */
+.code-block .sa { color: #e6db74 } /* Literal.String.Affix */
+.code-block .sb { color: #e6db74 } /* Literal.String.Backtick */
+.code-block .sc { color: #e6db74 } /* Literal.String.Char */
+.code-block .dl { color: #e6db74 } /* Literal.String.Delimiter */
+.code-block .sd { color: #e6db74 } /* Literal.String.Doc */
+.code-block .s2 { color: #e6db74 } /* Literal.String.Double */
+.code-block .se { color: #ae81ff } /* Literal.String.Escape */
+.code-block .sh { color: #e6db74 } /* Literal.String.Heredoc */
+.code-block .si { color: #e6db74 } /* Literal.String.Interpol */
+.code-block .sx { color: #e6db74 } /* Literal.String.Other */
+.code-block .sr { color: #e6db74 } /* Literal.String.Regex */
+.code-block .s1 { color: #e6db74 } /* Literal.String.Single */
+.code-block .ss { color: #e6db74 } /* Literal.String.Symbol */
+.code-block .bp { color: #f8f8f2 } /* Name.Builtin.Pseudo */
+.code-block .fm { color: #a6e22e } /* Name.Function.Magic */
+.code-block .vc { color: #f8f8f2 } /* Name.Variable.Class */
+.code-block .vg { color: #f8f8f2 } /* Name.Variable.Global */
+.code-block .vi { color: #f8f8f2 } /* Name.Variable.Instance */
+.code-block .vm { color: #f8f8f2 } /* Name.Variable.Magic */
+.code-block .il { color: #ae81ff } /* Literal.Number.Integer.Long */</style>
+</head>
+<body>
+<a class="skip" href="#article">跳到正文</a>
+<div class="layout">
+<aside class="sidebar">
+<div class="brand">QEMU CAMP 2026</div>
+<h2>GPGPU 适配笔记</h2>
+<nav aria-label="笔记目录"><a class="level-2" href="#section-2">GPGPU 设备注册与初始化调用图</a>
+<a class="level-2" href="#section-3">实验一 test-device-id</a>
+<a class="level-3" href="#section-4">控制寄存器区域的注册与映射</a>
+<a class="level-3" href="#section-5">测试读取与 QTest 协议</a>
+<a class="level-3" href="#section-6">地址分发与设备回调</a>
+<a class="level-3" href="#section-7">读取结果返回测试进程</a>
+<a class="level-2" href="#section-8">实验七：Grid/Block 规模与 SIMT 执行位置</a>
+<a class="level-3" href="#section-9">用一维任务看 dim 和 id 的对应关系</a>
+<a class="level-3" href="#section-10">同一个线程的 Warp 和 Lane 编号</a>
+<a class="level-3" href="#section-11">为什么 Warp 一起执行仍需要区分线程</a>
+<a class="level-3" href="#section-12">实验七先实现哪些行为</a>
+<a class="level-2" href="#section-13">浮点格式：FP32、FP16、BF16、FP8、FP4</a>
+<a class="level-3" href="#section-14">二进制下标、指数和尾数</a>
+<a class="level-3" href="#section-15">FP32：用 6.5 看 32 位编码</a>
+<a class="level-3" href="#section-16">FP16 与 BF16：两种 16 位格式</a>
+<a class="level-3" href="#section-17">FP8：E4M3 和 E5M2</a>
+<a class="level-3" href="#section-18">FP4 E2M1：为什么只有 0、0.5、1、1.5、2、3、4、6</a>
+<a class="level-3" href="#section-19">FP4 为什么不能准确表示 2.5</a>
+<a class="level-3" href="#section-20">浮点编码保存在 GPU 寄存器中</a></nav>
+<p class="hint">Ctrl / ⌘ + F 搜索全文<br>代码和文本图可横向滚动</p>
+</aside>
+<main>
+<div class="toolbar"><span>离线笔记 · 2026-10-06</span>
+<button type="button" id="print">打印 / 保存 PDF</button></div>
+<article id="article"><h1 id="section-1">QEMU 2026 GPGPU 适配文档</h1>
+<p>本文记录 GPGPU 设备注册与初始化的调用主线，以及实验一
+<code>test-device-id</code> 中 BAR0 读取如何触发设备回调、结果如何返回测试进程。
+实验七的笔记说明 Grid/Block 配置与 SIMT 执行位置之间的关系。</p>
+<h2 id="section-2">GPGPU 设备注册与初始化调用图</h2>
+<p>这张图只保留 GPU 设备的注册、创建和初始化主线。以启动参数
+<code>-device gpgpu</code> 为例，重点看三个 GPU 函数在什么位置被调用。
+<code>=&gt;</code> 表示通过已经登记的函数指针调用，通用属性分发内部函数省略。</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>程序装载：登记 QOM 模块回调
+
+type_init(gpgpu_register_types)                 [宏]
+`-- 宏生成的构造函数
+    `-- register_module_init(gpgpu_register_types, MODULE_INIT_QOM)
+
+QEMU 启动：调用模块回调，注册 GPU 类型
+
+qemu_init_subsystems()
+`-- module_call_init(MODULE_INIT_QOM)
+    `-- e-&gt;init() =&gt; gpgpu_register_types()     [GPU：注册类型]
+        `-- type_register_static(&amp;gpgpu_type_info)
+            `-- 将 &quot;gpgpu&quot; 的类型描述加入 QOM 类型表
+
+处理 -device gpgpu：查询类、创建实例，再初始化设备
+
+device_init_func()
+`-- qdev_device_add(...)
+    `-- qdev_device_add_from_qdict(...)
+        |
+        |-- qdev_get_device_class(...)
+        |   `-- module_object_class_by_name(&quot;gpgpu&quot;)
+        |       `-- type_initialize(...)
+        |           |-- 类已存在：直接返回
+        |           |-- 类尚未初始化：先初始化并继承父类
+        |           `-- ti-&gt;class_init() =&gt; gpgpu_class_init()
+        |               |                     [GPU：类初始化，每类型一次]
+        |               |-- pc-&gt;realize = gpgpu_realize    [登记]
+        |               |-- pc-&gt;exit = gpgpu_exit          [登记]
+        |               |-- 注册 gpgpu_reset 回调         [登记]
+        |               `-- 设置 PCI 标识、属性定义等类信息
+        |
+        |-- qdev_new(&quot;gpgpu&quot;)
+        |   `-- object_new(&quot;gpgpu&quot;)            [创建 GPGPUState 实例]
+        |
+        |-- object_set_properties_from_keyval(...)
+        |                                      [完成此实例的属性配置]
+        |
+        `-- qdev_realize(dev, bus, ...)
+            |-- qdev_set_parent_bus(...)        [关联到 PCI 总线]
+            `-- object_property_set_bool(..., &quot;realized&quot;, true, ...)
+                `-- 通过 realized 属性回调调用 device_set_realized()
+                    `-- dc-&gt;realize() =&gt; pci_qdev_realize()
+                        |-- do_pci_register_device(...)
+                        |                      [完成通用 PCI 注册]
+                        `-- pc-&gt;realize() =&gt; gpgpu_realize()
+                                               [GPU：此实例的设备初始化]
+</code></pre></figure>
+<p><code>TYPE_GPGPU</code> 对应 <code>&quot;gpgpu&quot;</code>，父类型是 <code>TYPE_PCI_DEVICE</code>。
+<code>gpgpu_type_info.class_init</code> 指向 <code>gpgpu_class_init()</code>；首次需要该类
+时，QOM 调用这个函数。类一旦初始化，后续设备实例直接复用。</p>
+<p><code>gpgpu_class_init()</code> 中的 <code>pc-&gt;realize = gpgpu_realize</code> 保存回调。
+实例创建和属性配置完成后，PCI 通用初始化函数才通过 <code>pc-&gt;realize</code>
+调用 <code>gpgpu_realize()</code>。创建多个 GPU 时，类初始化一次，每个实例
+分别执行 <code>gpgpu_realize()</code>。当前模型没有单独的 GPU <code>instance_init</code>
+回调，实例创建由 QOM 框架和父类初始化处理。</p>
+<p>另外两个已登记的 GPU 回调，在以下时机调用：</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>系统或设备复位
+`-- QEMU 复位流程
+    `-- 已登记的设备复位回调 =&gt; gpgpu_reset()
+
+设备 unrealize / 移除
+`-- qdev_unrealize()
+    `-- 通过 realized=false 的属性回调调用 device_set_realized()
+        `-- dc-&gt;unrealize() =&gt; pci_qdev_unrealize()
+            `-- pc-&gt;exit() =&gt; gpgpu_exit()
+</code></pre></figure>
+<p>查看 GPU 的实现，可以直接从
+<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/hw/gpgpu/gpgpu.c" title="源码第 429 行">gpgpu_register_types()</a>、
+<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/hw/gpgpu/gpgpu.c" title="源码第 399 行">gpgpu_class_init()</a>和
+<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/hw/gpgpu/gpgpu.c" title="源码第 298 行">gpgpu_realize()</a>
+进入。框架调用入口分别是
+<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/system/runstate.c" title="源码第 965 行">QOM 模块初始化</a>、
+<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/qom/object.c" title="源码第 336 行">类初始化</a>和
+<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/hw/pci/pci.c" title="源码第 2248 行">PCI realize</a>。</p>
+<h2 id="section-3">实验一 test-device-id</h2>
+<p>寄存器行为依据 <a href="https://qemu.gevico.online/exercise/2026/stage2/gpu/gpu-datasheet/">GPGPU 硬件手册</a>
+定义，设备读回调根据 BAR0 内部偏移返回对应寄存器的内容。
+<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/tests/qtest/gpgpu-test.c" title="源码第 128 行">测试函数</a>
+读取偏移 <code>0x0000</code> 的 <code>DEV_ID</code>，预期为 <code>0x47505055</code>；随后读取偏移
+<code>0x0004</code> 的 <code>DEV_VERSION</code>，预期为 <code>0x00010000</code>。</p>
+<p><code>qpci_io_readl()</code> 在宿主机的测试进程中执行，<code>gpgpu_ctrl_read()</code> 在
+QEMU 进程中执行。测试进程通过 QTest 协议请求读取一个地址；QEMU
+根据地址找到设备的内存区域，再调用该区域注册的读回调。</p>
+<h3 id="section-4">控制寄存器区域的注册与映射</h3>
+<p><a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/hw/gpgpu/gpgpu.c" title="源码第 212 行">gpgpu_ctrl_ops</a>
+指定了控制寄存器区域的读写操作：</p>
+<figure class="code-block"><figcaption>C</figcaption><pre tabindex="0"><code><span class="k">static</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">MemoryRegionOps</span><span class="w"> </span><span class="n">gpgpu_ctrl_ops</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="p">.</span><span class="n">read</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">gpgpu_ctrl_read</span><span class="p">,</span>
+<span class="w">    </span><span class="p">.</span><span class="n">write</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">gpgpu_ctrl_write</span><span class="p">,</span>
+<span class="w">    </span><span class="p">.</span><span class="n">endianness</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">DEVICE_LITTLE_ENDIAN</span><span class="p">,</span>
+<span class="w">    </span><span class="p">.</span><span class="n">impl</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="p">.</span><span class="n">min_access_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span>
+<span class="w">        </span><span class="p">.</span><span class="n">max_access_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span>
+<span class="w">    </span><span class="p">},</span>
+<span class="p">};</span>
+</code></pre></figure>
+<p><code>.read</code> 是函数指针，保存读取该区域时需要调用的 <code>gpgpu_ctrl_read</code>。
+控制寄存器按小端解释，设备回调处理的访问宽度为四字节。</p>
+<p><a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/hw/gpgpu/gpgpu.c" title="源码第 298 行">gpgpu_realize()</a>
+创建控制寄存器区域，并将该区域关联到 PCI BAR0：</p>
+<figure class="code-block"><figcaption>C</figcaption><pre tabindex="0"><code><span class="n">memory_region_init_io</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="o">-&gt;</span><span class="n">ctrl_mmio</span><span class="p">,</span><span class="w"> </span><span class="n">OBJECT</span><span class="p">(</span><span class="n">s</span><span class="p">),</span><span class="w"> </span><span class="o">&amp;</span><span class="n">gpgpu_ctrl_ops</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="p">,</span>
+<span class="w">                      </span><span class="s">&quot;gpgpu-ctrl&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">GPGPU_CTRL_BAR_SIZE</span><span class="p">);</span>
+<span class="n">pci_register_bar</span><span class="p">(</span><span class="n">pdev</span><span class="p">,</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">                 </span><span class="n">PCI_BASE_ADDRESS_SPACE_MEMORY</span><span class="w"> </span><span class="o">|</span>
+<span class="w">                 </span><span class="n">PCI_BASE_ADDRESS_MEM_TYPE_64</span><span class="p">,</span>
+<span class="w">                 </span><span class="o">&amp;</span><span class="n">s</span><span class="o">-&gt;</span><span class="n">ctrl_mmio</span><span class="p">);</span>
+</code></pre></figure>
+<p><code>memory_region_init_io()</code> 创建 <code>s-&gt;ctrl_mmio</code>，记录操作集合
+<code>gpgpu_ctrl_ops</code> 和设备数据 <code>s</code>。
+<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/system/memory.c" title="源码第 1562 行">内存区域初始化代码</a>
+将二者保存为 <code>mr-&gt;ops</code> 和 <code>mr-&gt;opaque</code>。</p>
+<p><code>pci_register_bar()</code> 将 BAR0 与 <code>s-&gt;ctrl_mmio</code> 关联，记录区域大小和
+BAR 类型。测试随后调用 <code>qpci_device_enable()</code>，设置 PCI Command
+寄存器以允许设备的内存访问，再调用 <code>qpci_iomap(pdev, 0, NULL)</code>。
+<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/tests/qtest/libqos/pci.c" title="源码第 518 行">qpci_iomap()</a>
+探测 BAR0 大小、分配地址，并将地址写入 PCI 配置空间。
+QEMU 的 <a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/hw/pci/pci.c" title="源码第 1724 行">pci_update_mappings()</a>
+据此把控制寄存器区域映射到 BAR0 的起始地址。完成这些操作后，
+测试才能通过 BAR0 地址访问控制寄存器。</p>
+<h3 id="section-5">测试读取与 QTest 协议</h3>
+<p>假设 BAR0 的起始地址为 <code>0x40000000</code>，读取版本号时，测试执行：</p>
+<figure class="code-block"><figcaption>C</figcaption><pre tabindex="0"><code><span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qpci_io_readl</span><span class="p">(</span><span class="n">pdev</span><span class="p">,</span><span class="w"> </span><span class="n">bar0</span><span class="p">,</span><span class="w"> </span><span class="n">GPGPU_REG_DEV_VERSION</span><span class="p">);</span>
+</code></pre></figure>
+<p><code>GPGPU_REG_DEV_VERSION</code> 是偏移 <code>0x0004</code>。
+<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/tests/qtest/libqos/pci.c" title="源码第 425 行">qpci_io_readl()</a>
+对这个内存类型的 BAR 执行以下读取：</p>
+<figure class="code-block"><figcaption>C</figcaption><pre tabindex="0"><code><span class="kt">uint32_t</span><span class="w"> </span><span class="n">val</span><span class="p">;</span>
+
+<span class="n">bus</span><span class="o">-&gt;</span><span class="n">memread</span><span class="p">(</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">bus</span><span class="p">,</span><span class="w"> </span><span class="n">token</span><span class="p">.</span><span class="n">addr</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">off</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">val</span><span class="p">,</span><span class="w"> </span><span class="k">sizeof</span><span class="p">(</span><span class="n">val</span><span class="p">));</span>
+<span class="k">return</span><span class="w"> </span><span class="n">le32_to_cpu</span><span class="p">(</span><span class="n">val</span><span class="p">);</span>
+</code></pre></figure>
+<p>读取地址是 BAR0 起始地址加寄存器偏移，即 <code>0x40000004</code>，读取长度
+为四字节。这里的 <code>bus-&gt;memread</code> 指向
+<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/tests/qtest/libqos/generic-pcihost.c" title="源码第 98 行">qpci_generic_memread()</a>，
+该函数调用 <code>qtest_memread()</code>。
+<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/tests/qtest/libqtest.c" title="源码第 1310 行">qtest_memread()</a>
+通过 QTest 连接向 QEMU 发送：</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>read 0x40000004 0x4
+</code></pre></figure>
+<p>命令指定地址和长度。本例虽然调用的函数名是 <code>qpci_io_readl</code>，
+实际发送的协议命令是 <code>read</code>。</p>
+<h3 id="section-6">地址分发与设备回调</h3>
+<p>QEMU 的 <a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/system/qtest.c" title="源码第 574 行">QTest 命令处理代码</a>
+解析 <code>read</code> 命令，并调用 <code>address_space_read()</code> 访问客户机物理
+地址空间。内存系统按地址寻找映射的区域。地址 <code>0x40000004</code> 落在
+GPGPU 的 BAR0 控制寄存器区域内，因此找到 <code>s-&gt;ctrl_mmio</code>，并计算
+区域内部的偏移 <code>0x0004</code>。</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>qos-test 进程
+`-- gpgpu_test_device_id(...)
+    |-- qpci_device_enable(pdev)             [允许 PCI 内存访问]
+    |-- qpci_iomap(pdev, 0, ...)             [分配并写入 BAR0 地址]
+    |   `-- QEMU 更新 BAR 映射，将该地址区域关联到 ctrl_mmio
+    `-- qpci_io_readl(pdev, bar0, 0x0004)    [下面展开版本寄存器读取]
+        `-- bus-&gt;memread() =&gt; qpci_generic_memread(...)
+            `-- qtest_memread(...)
+                |-- qtest_sendf(&quot;read 0x40000004 0x4\n&quot;)
+                `-- qtest_rsp_args(...)     [等待 QEMU 回复]
+                            |
+                            | QTest socket：读取指定地址的 4 字节
+                            v
+QEMU 进程
+`-- qtest_read(...)                         [收到 socket 数据]
+    `-- qtest_process_inbuf(...)
+        `-- qtest_process_command(...)      [处理 read 命令]
+            `-- address_space_read(...)
+                `-- address_space_read_full(...)
+                    `-- flatview_read(...)
+                        |-- flatview_translate(...)
+                        |   `-- 找到 ctrl_mmio，算出区域内偏移 0x0004
+                        `-- flatview_read_continue(...)
+                            `-- flatview_read_continue_step(...)
+                                `-- memory_region_dispatch_read(...)
+                                    `-- memory_region_dispatch_read1(...)
+                                        `-- access_with_adjusted_size(...)
+                                            `-- access_fn()
+                                                =&gt; memory_region_read_accessor()
+                                                `-- mr-&gt;ops-&gt;read(...)
+                                                    =&gt; gpgpu_ctrl_read(s, 0x0004, 4)
+                                                    `-- 返回版本号 0x00010000
+
+QEMU 将读值写入缓冲区，按字节顺序编码后发送 OK 回复
+                            |
+                            v
+qos-test 进程继续执行
+`-- qtest_memread(...)                      [解码回复，填入 val]
+    `-- 返回 qpci_generic_memread()
+        `-- 返回 qpci_io_readl()
+            `-- le32_to_cpu(val)            [得到数值 0x00010000]
+
+gpgpu_test_device_id() 拿到 qpci_io_readl() 的返回值后继续执行
+`-- g_assert_cmphex(version, ==, GPGPU_DEV_VERSION_VALUE)
+</code></pre></figure>
+<p>内存系统通过 <code>memory_region_dispatch_read()</code> 分发 MMIO 读取，
+最终执行 <a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/system/memory.c" title="源码第 439 行">memory.c 中的函数指针调用</a>：</p>
+<figure class="code-block"><figcaption>C</figcaption><pre tabindex="0"><code><span class="n">tmp</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mr</span><span class="o">-&gt;</span><span class="n">ops</span><span class="o">-&gt;</span><span class="n">read</span><span class="p">(</span><span class="n">mr</span><span class="o">-&gt;</span><span class="n">opaque</span><span class="p">,</span><span class="w"> </span><span class="n">addr</span><span class="p">,</span><span class="w"> </span><span class="n">size</span><span class="p">);</span>
+</code></pre></figure>
+<p>对于控制寄存器区域，<code>mr-&gt;ops-&gt;read</code> 保存的是 <code>gpgpu_ctrl_read</code>，
+<code>mr-&gt;opaque</code> 保存的是初始化时传入的设备数据 <code>s</code>。内存系统传入的
+<code>addr</code> 已经是区域内偏移，<code>size</code> 为四字节。因此这次函数指针调用
+等价于：</p>
+<figure class="code-block"><figcaption>C</figcaption><pre tabindex="0"><code><span class="n">gpgpu_ctrl_read</span><span class="p">(</span><span class="n">s</span><span class="p">,</span><span class="w"> </span><span class="mh">0x0004</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">);</span>
+</code></pre></figure>
+<p>设备回调根据 <code>addr</code> 选择 <code>DEV_VERSION</code>，返回手册定义的版本内容。
+ID 和版本属于固定信息，可以直接返回对应宏；由设备配置或运行
+状态决定的寄存器，则从 <code>GPGPUState</code> 的相应字段生成读值。</p>
+<h3 id="section-7">读取结果返回测试进程</h3>
+<p><code>gpgpu_ctrl_read()</code> 返回寄存器值后，QEMU 内存系统将该值写入读取
+缓冲区。QTest 命令处理代码按地址顺序将缓冲区字节编码为十六进制
+字符串，并发送 <code>OK</code> 回复。</p>
+<p>例如，读取 <code>DEV_ID</code> 得到数值 <code>0x47505055</code>，小端字节顺序为
+<code>55 50 50 47</code>，对应 <code>read</code> 协议回复：</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>OK 0x55505047
+</code></pre></figure>
+<p>测试进程的 <code>qtest_memread()</code> 将回复逐字节解码到 <code>val</code>。
+<code>qpci_io_readl()</code> 再通过 <code>le32_to_cpu(val)</code> 转成宿主机可用的
+<code>uint32_t</code> 数值，得到 <code>0x47505055</code>。测试函数拿到返回值后，才执行
+断言，检查寄存器内容是否符合预期。</p>
+<h2 id="section-8">实验七：Grid/Block 规模与 SIMT 执行位置</h2>
+<p><code>dim</code> 表示数量，<code>id</code> 表示当前的位置。实验四的 <code>s-&gt;kernel</code> 保存
+任务规模；<code>s-&gt;simt</code> 保存当前模拟线程的位置，以及活动和同步状态。
+这些信息描述的是同一套 Grid、Block、Warp、Lane 结构。</p>
+<h3 id="section-9">用一维任务看 dim 和 id 的对应关系</h3>
+<p>以下例子采用一维任务，Warp 大小为 32，Y、Z 维度均为 1：</p>
+<figure class="code-block"><figcaption>C</figcaption><pre tabindex="0"><code><span class="n">s</span><span class="o">-&gt;</span><span class="n">kernel</span><span class="p">.</span><span class="n">grid_dim</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span><span class="p">;</span><span class="w">   </span><span class="cm">/* 一共有 2 个 Block */</span>
+<span class="n">s</span><span class="o">-&gt;</span><span class="n">kernel</span><span class="p">.</span><span class="n">block_dim</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">64</span><span class="p">;</span><span class="w">  </span><span class="cm">/* 每个 Block 有 64 个线程 */</span>
+</code></pre></figure>
+<p>任务中共有 128 个线程。Block 编号为 0、1，每个 Block 内的线程
+编号都从 0 开始，范围为 0～63。</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>Grid：共 2 个 Block，grid_dim = {2, 1, 1}
+|
+|-- Block 0：block_id = {0, 0, 0}
+|   `-- 共 64 个线程，thread_id.x = 0～63
+|
+`-- Block 1：block_id = {1, 0, 0}
+    `-- 共 64 个线程，thread_id.x = 0～63
+
+每个 Block 的规模：block_dim = {64, 1, 1}
+</code></pre></figure>
+<p>假设执行器模拟到了 Block 1 中的线程 37，当前位置就是：</p>
+<figure class="code-block"><figcaption>C</figcaption><pre tabindex="0"><code><span class="n">s</span><span class="o">-&gt;</span><span class="n">simt</span><span class="p">.</span><span class="n">block_id</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="n">s</span><span class="o">-&gt;</span><span class="n">simt</span><span class="p">.</span><span class="n">thread_id</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">37</span><span class="p">;</span>
+</code></pre></figure>
+<p><code>grid_dim.x = 2</code> 告诉执行器任务中有两个 Block，<code>block_id.x = 1</code>
+表示当前位于第二个 Block。<code>block_dim.x = 64</code> 表示每个 Block 有
+64 个线程，<code>thread_id.x = 37</code> 表示当前是该 Block 内编号为 37 的
+线程。实际执行时，各坐标从 0 开始，范围由对应的维度确定。</p>
+<h3 id="section-10">同一个线程的 Warp 和 Lane 编号</h3>
+<p>每个 Block 的 64 个线程分为两个 Warp。Lane 编号在每个 Warp 内
+从 0 开始，因此线程 37 位于 Warp 1 的 Lane 5。</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>Block 1：64 个线程
+|
+|-- Warp 0：线程  0～31，对应 Lane 0～31
+|
+`-- Warp 1：线程 32～63，对应 Lane 0～31
+                |
+                `-- 线程 37：Warp 1，Lane 5
+</code></pre></figure>
+<p>当前线程的完整位置可以记录为：</p>
+<figure class="code-block"><figcaption>C</figcaption><pre tabindex="0"><code><span class="n">s</span><span class="o">-&gt;</span><span class="n">simt</span><span class="p">.</span><span class="n">block_id</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="n">s</span><span class="o">-&gt;</span><span class="n">simt</span><span class="p">.</span><span class="n">thread_id</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">37</span><span class="p">;</span>
+<span class="n">s</span><span class="o">-&gt;</span><span class="n">simt</span><span class="p">.</span><span class="n">warp_id</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span><span class="w">  </span><span class="cm">/* 37 / 32 */</span>
+<span class="n">s</span><span class="o">-&gt;</span><span class="n">simt</span><span class="p">.</span><span class="n">lane_id</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span><span class="p">;</span><span class="w">  </span><span class="cm">/* 37 % 32 */</span>
+</code></pre></figure>
+<p>这里的除法和取余公式用于上述一维例子。对于多维 Block，先将
+线程坐标线性化，再按 Warp 大小确定 Warp 和 Lane 编号。</p>
+<p>内核可以根据位置计算自己负责的数组元素。一维任务中：</p>
+<figure class="code-block"><figcaption>C</figcaption><pre tabindex="0"><code><span class="n">index</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">block_id_x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">block_dim_x</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">thread_id_x</span><span class="p">;</span>
+<span class="cm">/* 当前线程负责的元素：1 * 64 + 37 = 101 */</span>
+</code></pre></figure>
+<h3 id="section-11">为什么 Warp 一起执行仍需要区分线程</h3>
+<p>一个 Warp 中的活跃 Lane 执行同一条指令，每个 Lane 使用自己的
+寄存器值和数据地址。例如，同样执行数组加法，Warp 0 的线程
+处理元素 0～31，Warp 1 的线程处理元素 32～63。线程编号帮助
+内核确定读取哪个元素、把结果写到哪里。</p>
+<p>每个 Lane 的 PC、通用寄存器等长期执行状态保存在 <code>GPGPULane</code>
+中。<code>s-&gt;simt</code> 提供当前模拟线程的身份和同步状态；执行器在模拟
+不同线程时，需要更新相应的上下文。</p>
+<p><code>thread_mask</code> 的每个 bit 对应当前 Warp 的一个 Lane。
+<code>0xFFFFFFFF</code> 表示 32 个 Lane 都参与，<code>0x0000FFFF</code> 表示 Lane
+0～15 参与。bit 5 对应当前 Warp 的 Lane 5；在上面的 Warp 1
+中，这个 Lane 对应 Block 内的线程 37。</p>
+<p><code>barrier_count</code>、<code>barrier_target</code>、<code>barrier_active</code> 记录同步屏障
+的到达进度，用于等待同一个 Block 中的线程到达同步位置。</p>
+<h3 id="section-12">实验七先实现哪些行为</h3>
+<p>实验七先验证 Thread ID、Block ID、Warp ID、Lane ID 和 Thread
+Mask 的主机 MMIO 读写，以及软复位清零。主机侧可通过 BAR0
+设置这些字段；GPU 核心通过内部 CTRL 地址空间只读访问身份信息。</p>
+<p>写入 <code>grid_dim</code> 和 <code>block_dim</code> 后，执行位置仍需由执行器更新。
+当前 <code>gpgpu_core_exec_kernel()</code> 和 <code>gpgpu_core_exec_warp()</code> 还是
+待实现函数，实验七的寄存器读写检查尚未启动线程执行。</p>
+<p>相关定义见
+<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/hw/gpgpu/gpgpu.h" title="源码第 219 行">GPGPUSIMTContext</a>
+和 <a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/hw/gpgpu/gpgpu_core.h" title="源码第 67 行">GPGPULane、GPGPUWarp</a>；
+实验要求及硬件手册见 <a href="file:///home/book/1.project/qemu/QEMU_2026_%E5%AE%9E%E9%AA%8C.html#page-stage2--gpu--gpu-datasheet">本地实验文档</a>。</p>
+<h2 id="section-13">浮点格式：FP32、FP16、BF16、FP8、FP4</h2>
+<p>FP 是 Floating Point（浮点）的缩写。FP32、FP16、FP8、FP4 中的
+数字表示一个数的总编码位数。例如 FP32 使用 32 bit，也就是 4 字节。
+这些格式规定数值怎样编码；改变格式时，需要按照目标格式的规则转换。</p>
+<p>位数减少后，保存和传输数据所需的空间也减少，但数值范围或精度会受到
+限制。即使是 FP32，也只能准确表示有限的一组数，其他数需要舍入。</p>
+<h3 id="section-14">二进制下标、指数和尾数</h3>
+<p>浮点表示可以从科学计数法理解：</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>-123.45 = -1 × 1.2345 × 10²
+           ↑      ↑       ↑
+          符号  有效数字   指数
+</code></pre></figure>
+<p>计算机使用二进制，底数换成 2。编码分成符号、指数、尾数三个字段。
+符号位表示正负；指数位影响能表示的数值范围；尾数字段保存有效数字的
+小数部分，影响数值能表示得多精细。</p>
+<p><code>1.1₂</code> 右下角的 <code>₂</code> 表示二进制。二进制小数点后的位，权重依次是
+<code>1/2</code>、<code>1/4</code>、<code>1/8</code>。因此：</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>1.1₂  = 1 + 1/2             = 1.5（十进制）
+1.01₂ = 1 + 0 × 1/2 + 1/4   = 1.25（十进制）
+</code></pre></figure>
+<p><code>2¹</code> 右上角的 <code>¹</code> 表示次方，<code>2¹ = 2</code>。下标标明进制，上标标明次方。</p>
+<h3 id="section-15">FP32：用 6.5 看 32 位编码</h3>
+<p>FP32 通常指 IEEE 754 单精度格式，常见 C 环境中的 <code>float</code> 采用
+这种格式。实验九的 <code>FADD.S</code> 和 <code>FMUL.S</code> 操作的就是 FP32。</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>[符号：1 bit][指数：8 bit][尾数：23 bit]
+                  合计 32 bit
+</code></pre></figure>
+<p>将十进制的 <code>6.5</code> 转成二进制，再写成科学计数法：</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>6   = 110₂
+0.5 = 0.1₂
+
+6.5 = 110.1₂ = 1.101₂ × 2²
+                 ↑       ↑
+              有效数字   实际指数
+</code></pre></figure>
+<p><code>6.5</code> 是正数，符号位填 <code>0</code>。实际指数是 <code>2</code>；FP32 使用偏移量
+<code>127</code>，保存的指数为 <code>2 + 127 = 129</code>，二进制是 <code>10000001</code>。
+读取时减去 <code>127</code>，恢复成实际指数 <code>2</code>。</p>
+<p>对这个正规数，有效数字开头的 <code>1</code> 默认存在，因此尾数字段只保存小数点
+后面的 <code>101</code>，末尾补零到 23 位。零和非正规数采用另外的编码规则。</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>符号      指数                 尾数
+ 0      10000001      10100000000000000000000
+ ↑         ↑                    ↑
+1 bit     8 bit                23 bit
+
+完整 32 位：01000000110100000000000000000000
+十六进制：0x40D00000
+</code></pre></figure>
+<p>反过来解码：</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>符号：正
+实际指数：129 - 127 = 2
+有效数字：1.101₂ = 1 + 1/2 + 1/8 = 1.625
+
+数值 = 1.625 × 2² = 6.5
+</code></pre></figure>
+<p>有关符号、指数、尾数及舍入的定义，见
+<a href="https://docs.nvidia.com/cuda/floating-point/index.html#formats">NVIDIA 浮点格式说明</a>。</p>
+<h3 id="section-16">FP16 与 BF16：两种 16 位格式</h3>
+<p>FP16 通常指 IEEE 754 半精度格式，使用 16 bit，也就是 2 字节：</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>FP16：[符号：1 bit][指数：5 bit][尾数：10 bit]
+</code></pre></figure>
+<p>FP16 的指数位和尾数位都比 FP32 少，所以数值范围和精度都降低。
+同一个 <code>6.5</code>，FP16 使用指数偏移量 <code>15</code>，实际指数 <code>2</code> 保存为
+<code>17</code>，二进制是 <code>10001</code>：</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>6.5 的 FP16 编码：0 | 10001 | 1010000000 = 0x4680
+</code></pre></figure>
+<p>实验十使用的 16 位格式是 BF16（Bfloat16）。它的位分配是：</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>BF16：[符号：1 bit][指数：8 bit][尾数：7 bit]
+</code></pre></figure>
+<p>BF16 保留了 FP32 的 8 位指数和偏移量 <code>127</code>，所以数值范围接近
+FP32。尾数字段只有 7 位，精度降低。<code>6.5</code> 在两种格式中都能准确表示，
+但编码不同：</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>6.5 的 BF16 编码：0 | 10000001 | 1010000 = 0x40D0
+</code></pre></figure>
+<p>FP16 与 BF16 都占 16 位，转换函数需要分别遵守各自的编码规则。
+定义见 <a href="https://docs.nvidia.com/cuda/cuda-math-api/cuda_math_api/struct____half.html">NVIDIA FP16 说明</a>
+和本地 <a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/fpu/softfloat.c" title="源码第 594 行">SoftFloat 格式参数</a>。</p>
+<h3 id="section-17">FP8：E4M3 和 E5M2</h3>
+<p>FP8 使用 8 bit，也就是 1 字节。FP8 有多种具体格式，实验十采用
+E4M3 和 E5M2。名称中的 E 表示指数，M 表示尾数：</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>E4M3：[符号：1 bit][指数：4 bit][尾数：3 bit]
+E5M2：[符号：1 bit][指数：5 bit][尾数：2 bit]
+</code></pre></figure>
+<p>E4M3 把更多位分给尾数，能表示得更精细。E5M2 把更多位分给指数，
+能表示更宽的数值范围。在本实验采用的格式中，E4M3 的最大有限值
+是 <code>448</code>，可以表示 NaN，但没有 Inf 编码；E5M2 可以表示 Inf 和 NaN。</p>
+<p>实验要求 E4M3 下转换时，将超出范围的有限值和 Inf 饱和到对应符号的
+最大有限值。例如 <code>1000.0</code> 和 <code>+Inf</code> 转成 E4M3 后，再转回 FP32，
+都得到 <code>448.0</code>。具体格式定义见
+<a href="https://www.opencompute.org/documents/ocp-8-bit-floating-point-specification-ofp8-revision-1-0-2023-06-20-pdf">OCP FP8 规范</a>。</p>
+<h3 id="section-18">FP4 E2M1：为什么只有 0、0.5、1、1.5、2、3、4、6</h3>
+<p>实验十的 FP4 采用 E2M1 格式：</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>[符号 S：1 bit][指数 E：2 bit][尾数 M：1 bit]
+</code></pre></figure>
+<p>4 位总共有 <code>2⁴ = 16</code> 种编码。符号位为 <code>0</code> 时，有 8 种编码。
+对正规数，尾数 <code>M = 0</code> 表示有效数字 <code>1.0₂ = 1</code>，尾数
+<code>M = 1</code> 表示有效数字 <code>1.1₂ = 1.5</code>。</p>
+<p>E2M1 的指数偏移量是 <code>1</code>。指数位 <code>01</code>、<code>10</code>、<code>11</code> 对应实际
+指数 <code>0</code>、<code>1</code>、<code>2</code>：</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>指数位 01 → 实际指数 0 → 1 × 2⁰ = 1；1.5 × 2⁰ = 1.5
+指数位 10 → 实际指数 1 → 1 × 2¹ = 2；1.5 × 2¹ = 3
+指数位 11 → 实际指数 2 → 1 × 2² = 4；1.5 × 2² = 6
+</code></pre></figure>
+<p>指数位 <code>00</code> 采用零和非正规数规则。尾数为 <code>0</code> 时表示零；尾数为
+<code>1</code> 时，没有默认的前导 <code>1</code>，数值是 <code>0.1₂ × 2⁰ = 0.5</code>。
+因此，符号位为 <code>0</code> 时能表示的值是：</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>0、0.5、1、1.5、2、3、4、6
+</code></pre></figure>
+<p>符号位为 <code>1</code> 时表示对应的负数，并包含负零。E2M1 有正零和负零，
+没有 Inf 或 NaN 编码。格式定义见
+<a href="https://www.opencompute.org/documents/ocp-microscaling-formats-mx-v1-0-spec-final-pdf">OCP FP4 规范</a>。</p>
+<h3 id="section-19">FP4 为什么不能准确表示 2.5</h3>
+<p>把 <code>2.5</code> 写成二进制科学计数法：</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>2.5 = 10.1₂ = 1.01₂ × 2¹
+                 ↑↑
+             需要保存尾数 01，共两位
+</code></pre></figure>
+<p>E2M1 的尾数字段只有一位，保存不下 <code>01</code>。在实际指数为 <code>1</code> 的
+量级，尾数只有两个选择：</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>尾数为 0：1.0₂ × 2¹ = 2
+尾数为 1：1.1₂ × 2¹ = 3
+</code></pre></figure>
+<p>因此 <code>2.5</code> 只能舍入到 <code>2</code> 或 <code>3</code>。它恰好位于两者中间；默认的
+RNE（最近值、平局取偶数）规则选择 <code>2</code>，因为 <code>2</code> 的最低尾数位为
+<code>0</code>，<code>3</code> 的最低尾数位为 <code>1</code>。这里的“偶数”按浮点有效数字编码判断。</p>
+<p>转换回 FP32 时，只能恢复已经舍入后的值。例如 <code>2.5 → E2M1 → FP32</code>
+在 RNE 下得到 <code>2.0</code>。超出表示范围的值则按实验规定饱和，例如
+<code>100.0 → E2M1 → FP32</code> 得到 <code>6.0</code>。</p>
+<h3 id="section-20">浮点编码保存在 GPU 寄存器中</h3>
+<p><code>GPGPULane.fpr[]</code> 的元素类型是 <code>uint32_t</code>，用来保存浮点数的
+原始位编码。在当前模型中，把 FP32 的 <code>6.5</code> 放进 f1，可以写成：</p>
+<figure class="code-block"><figcaption>C</figcaption><pre tabindex="0"><code><span class="n">lane</span><span class="o">-&gt;</span><span class="n">fpr</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mh">0x40D00000</span><span class="p">;</span><span class="w">  </span><span class="cm">/* f1 保存 FP32 格式的 6.5 */</span>
+</code></pre></figure>
+<p>FP32 编码占全部 32 位。实验十的 BF16、FP8、FP4 编码分别保存在
+<code>fpr</code> 元素的低 16、8、4 位；承载这些编码的寄存器数组仍使用
+<code>uint32_t</code>。解释器需要根据指令的格式，决定怎样解读这些位。</p>
+<p>以 BF16 往返转换为例：</p>
+<figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>f1：FP32 的 42.0
+    |
+    | FCVT.BF16.S f2, f1
+    v
+f2：低 16 位保存 BF16 的 42.0
+    |
+    | FCVT.S.BF16 f3, f2
+    v
+f3：FP32 的 42.0
+</code></pre></figure>
+<p>实验要求及转换方向见
+<a href="file:///home/book/1.project/qemu/QEMU_2026_%E5%AE%9E%E9%AA%8C.html#fragment-page-stage2--gpu--gpu-datasheet--133">本地 GPGPU 硬件手册 §13.3</a>。</p>
+</article>
+<footer>来源：QEMU_2026_GPGPU_适配.md。源码链接打开本机文件；具体行号可查看链接提示。</footer>
+</main>
+</div>
+<script>
+document.getElementById('print').addEventListener('click', () => window.print());
+const links = [...document.querySelectorAll('nav a')];
+const headings = [...document.querySelectorAll('article h2, article h3')];
+function updateDirectory() {
+  let current = headings[0];
+  for (const heading of headings) {
+    if (heading.getBoundingClientRect().top <= 100) current = heading;
+  }
+  for (const link of links) {
+    const active = current && link.getAttribute('href') === '#' + current.id;
+    link.classList.toggle('active', !!active);
+    if (active) link.setAttribute('aria-current', 'location');
+    else link.removeAttribute('aria-current');
+  }
+}
+window.addEventListener('scroll', updateDirectory, {passive: true});
+updateDirectory();
+</script>
+</body>
+</html>

@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="1550" viewBox="0 0 1100 1550">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#087a78"/></marker>
+    <style>
+      text { font-family: 'Microsoft YaHei', sans-serif; fill: #172b42; }
+      .title { font-size: 30px; font-weight: 700; }
+      .heading { font-size: 24px; font-weight: 700; fill: #087a78; }
+      .body { font-size: 22px; }
+      .note { font-size: 22px; fill: #54677a; }
+      .number { font-size: 24px; font-weight: 700; fill: #087a78; }
+      .box { fill: #edf8f6; stroke: #087a78; stroke-width: 2; }
+      .flow { stroke: #087a78; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+  <rect width="1100" height="1550" fill="white"/>
+  <text class="title" x="550" y="52" text-anchor="middle">P 的 Runtime 初始化：从驱动接口到可用 Agent</text>
+  <text class="note" x="550" y="90" text-anchor="middle">箭头表示正常首次初始化的执行顺序；每框说明本步留下的状态</text>
+
+  <text class="number" x="62" y="151">01</text>
+  <rect class="box" x="116" y="120" width="928" height="150" rx="12"/>
+  <text class="heading" x="138" y="156">P 的 Host 线程调用 hsa_init()</text>
+  <text class="body" x="138" y="194">Runtime::Acquire() 首次取得引用 → Runtime::Load()</text>
+  <text class="note" x="138" y="232">重复调用 hsa_init() 会增加引用计数，复用已初始化的 Runtime。</text>
+  <path class="flow" d="M 580 270 V 301"/>
+
+  <text class="number" x="62" y="341">02</text>
+  <rect class="box" x="116" y="310" width="928" height="170" rx="12"/>
+  <text class="heading" x="138" y="346">KfdDriver::Open → hsaKmtOpenKFD</text>
+  <text class="body" x="138" y="384">打开 /dev/kfd，检查可访问的拓扑节点。</text>
+  <text class="body" x="138" y="416">打开并缓存对应的 render 文件，供后续关联 GPUVM 使用。</text>
+  <text class="note" x="138" y="452">随后 KfdDriver::Init 核对接口版本、能力与进程模式。</text>
+  <path class="flow" d="M 580 480 V 511"/>
+
+  <text class="number" x="62" y="551">03</text>
+  <rect class="box" x="116" y="520" width="928" height="190" rx="12"/>
+  <text class="heading" x="138" y="556">BuildTopology → KfdDriver::GetSystemProperties</text>
+  <text class="body" x="138" y="594">hsaKmtAcquireSystemProperties 取得一致的拓扑快照。</text>
+  <text class="body" x="138" y="626">准备进程地址范围，调用 ACQUIRE_VM，并初始化 Doorbell 管理记录。</text>
+  <text class="note" x="138" y="670">§2.1～§2.2 沿调用解释：P 的进程记录怎样关联 GPUVM。</text>
+  <path class="flow" d="M 580 710 V 741"/>
+
+  <text class="number" x="62" y="781">04</text>
+  <rect class="box" x="116" y="750" width="928" height="170" rx="12"/>
+  <text class="heading" x="138" y="786">BuildTopology 继续：按节点属性建立 Agent</text>
+  <text class="body" x="138" y="824">读取 CPU / GPU 节点属性与连接关系，应用设备可见性设置。</text>
+  <text class="body" x="138" y="856">创建 CpuAgent / GpuAgent，并登记到 P 的 Runtime 列表。</text>
+  <text class="note" x="138" y="892">结果：驱动公开的节点，在 Runtime 中有了可供应用查询的对象。</text>
+  <path class="flow" d="M 580 920 V 951"/>
+
+  <text class="number" x="62" y="991">05</text>
+  <rect class="box" x="116" y="960" width="928" height="155" rx="12"/>
+  <text class="heading" x="138" y="996">Runtime::Load 继续准备运行资源</text>
+  <text class="body" x="138" y="1034">准备分配器与 scratch 管理，按能力准备 Trap 与搬运支持。</text>
+  <text class="note" x="138" y="1078">部分资源延迟到首次使用时建立；§2.2.5 说明建立时机。</text>
+  <path class="flow" d="M 580 1115 V 1146"/>
+
+  <text class="number" x="62" y="1186">06</text>
+  <rect x="116" y="1155" width="928" height="220" rx="12" fill="#fff7e9" stroke="#9b6723" stroke-width="2"/>
+  <text x="138" y="1191" font-size="24" font-weight="700" fill="#9b6723" style="fill:#9b6723">hsa_init() 成功返回，应用开始选择 GPU0</text>
+  <text class="body" x="138" y="1229">hsa_iterate_agents() → hsa_agent_get_info()</text>
+  <text class="body" x="138" y="1261">应用枚举 Agent、查询设备类型与属性，选中 GPU0。</text>
+  <text class="body" x="138" y="1293">应用保存 hsa_agent_t，后续用该句柄指定目标 Agent。</text>
+  <text class="body" x="138" y="1341">接下来：申请任务内存，并为本例创建 Queue Q0。</text>
+
+  <text class="note" x="116" y="1420">拓扑来源：内核公开的 sysfs 目录</text>
+  <text class="note" x="116" y="1452">/sys/devices/virtual/kfd/kfd/topology</text>
+  <text class="note" x="116" y="1502">本例：外部 Host CPU + MI300X；GPU 可见，运行时与驱动接口兼容。</text>
+</svg>

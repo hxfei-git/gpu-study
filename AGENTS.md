@@ -6,13 +6,15 @@
 
 ## Project Structure & Module Organization
 
-本仓库是关于 Linux、AMD GPU、内存管理和命令提交的 Markdown 知识库。根目录下以 `NN_主题.md` 命名的文件是当前学习主线，例如 `01_Linux 内存管理基础.md` 和 `02_GPU 内存管理基础.md`；`1.笔记` 目录只保存参考学习文档，`2.源码` 保存笔记引用的固定源码基线。
+本仓库保存 Linux、AMD GPU、内存管理和命令提交的学习笔记与实验材料。`1.笔记` 目录保存以 `NN_主题.md` 命名的当前学习笔记，例如 `01_Linux 内存管理基础.md` 和 `02_GPU 内存管理基础.md`；配套图片与资源保存在 `1.笔记/assets`，`2.源码` 保存笔记引用的固定源码基线。`3.资料` 保存参考 PDF，`4.experiments` 保存 QEMU 教学设备的实验材料与源码。学习背景身份卡和文档常见问题清单保留在根目录。
 
-当前后续学习只安排第七章，范围统一放在根目录的 [07_AMDGPU 通用内存管理与 DRM 任务提交（大纲）](<./07_AMDGPU 通用内存管理与 DRM 任务提交（大纲）.md>) 中。编写第七章前先阅读该大纲；已有章节的局部缺口补回首次需要它的位置。不要把 `1.笔记` 中旧式的 `1. 标题.md` 命名继续用于当前学习主线。
+笔记部分的后续学习只安排第七章，范围统一放在 `1.笔记` 目录的 [07_AMDGPU 通用内存管理与 DRM 任务提交（大纲）](<./1.笔记/07_AMDGPU 通用内存管理与 DRM 任务提交（大纲）.md>) 中。编写第七章前先阅读该大纲；已有章节的局部缺口补回首次需要它的位置。学习笔记继续采用 `NN_主题.md` 命名。
+
+实验部分按 `4.experiments` 中的 [QEMU GPGPU 四阶段实验大纲](<./4.experiments/00_QEMU GPGPU 四阶段实验大纲.md>) 推进，实验计划统一在该大纲维护。进入当前阶段后再细化近期任务，根据实际代码、运行结果和学习反馈动态调整后续范围与顺序，不在项目开始时预先固定全部目标。学习背景身份卡保留个人基础、转型方向与讲解偏好。
 
 ### 03 上下篇的共同上下文
 
-[03_AMD GPU 队列与 AQL Dispatch（上）](<./03_AMD GPU 队列与 AQL Dispatch（上）.md>)与[下篇](<./03_AMD GPU 队列与 AQL Dispatch（下）.md>)在内容上是一篇连续的学习文档，只为降低编辑和同步开销而拆成两个文件。上篇包含第 0～3 章，下篇包含第 4～9 章；两篇属于同一个学习阶段。
+[03_AMD GPU 队列与 AQL Dispatch（上）](<./1.笔记/03_AMD GPU 队列与 AQL Dispatch（上）.md>)与[下篇](<./1.笔记/03_AMD GPU 队列与 AQL Dispatch（下）.md>)在内容上是一篇连续的学习文档，只为降低编辑和同步开销而拆成两个文件。上篇包含第 0～3 章，下篇包含第 4～9 章；两篇属于同一个学习阶段。
 
 - 修改或审阅任一篇前，先阅读两篇的“本篇大纲”，再读取修改位置的前后段落，以及其引用或依赖的跨篇小节。解释当前章节时，要接上另一篇中已经建立的对象、条件和结论。
 - 两篇共用章节编号、术语、贯穿案例和固定源码基线。修改定义、案例参数、执行顺序或生命周期结论时，应搜索并核对另一篇中的相关说明，必要时同步修改。
@@ -20,18 +22,20 @@
 
 ## 硬件环境约束
 
-本仓库统一采用 **外部 Host CPU + AMD Instinct MI300X 独立 GPU（CDNA 3）** 的学习模型。Host CPU 运行 Linux、驱动和应用的 CPU 端代码，MI300X 执行 GPU Kernel；主机 system RAM 与设备本地 HBM 分别讲解，两者通过 PCIe 连接。
+本仓库的 AMDGPU 知识讲解统一采用 **外部 Host CPU + AMD Instinct MI300X 独立 GPU（CDNA 3）** 的学习模型。Host CPU 运行 Linux、驱动和应用的 CPU 端代码，MI300X 执行 GPU Kernel；主机 system RAM 与设备本地 HBM 分别讲解，两者通过 PCIe 连接。
+
+`4.experiments` 中的自定义 QEMU 教学设备按其实际实现单独说明；实验中的简化设计不作为 MI300X 的硬件结论。以下硬件约束用于 AMDGPU 知识讲解与源码分析。
 
 - 这是用户明确选定的教学基线，不代表已经核验实体设备的型号。文档与日常讲解直接使用该模型；实际实验时再核对设备、分区和软件配置，不因尚未实测而重新展开多型号分支。
 - 除非用户主动要求，不引入 MI300A、CPU/GPU 集成封装或其他硬件类型的对比，也不把型号差异作为额外学习内容。图示、案例、数量推导和跨文档引用都应与 MI300X 主线一致。
 - 示例需要 IOMMU、分区或缓存配置时，先明确本例取值，再沿该配置解释。必要时可说明同一模型内某个配置变化的影响，避免同时引入多套平台。
-- 涉及指令、寄存器、执行模型和内存访问语义时，优先查阅仓库中的 `amd-instinct-mi300-cdna3-instruction-set-architecture.pdf`；引用时注明封面日期 `2025-08-05`、章节和原文页码。
+- 涉及指令、寄存器、执行模型和内存访问语义时，优先查阅仓库中的 `3.资料/amd-instinct-mi300-cdna3-instruction-set-architecture.pdf`；引用时注明封面日期 `2025-08-05`、章节和原文页码。
 - 引用共有组件资料时，必须核对其对 MI300X 的适用性。只用于其他型号的行为不得改名后当作 MI300X 结论；正文只解释当前模型需要的部分，证据不足时保留明确边界。
 - 驱动和运行时实现仍须依据仓库的固定源码基线核对，不能由硬件型号推定软件版本、配置或实现路径。原始资料和源码保留原貌；源码中的其他平台分支只在理解本模型的条件判断确有必要时说明。
 
 ## Build, Test, and Development Commands
 
-There is no build system, package manifest, or automated test suite in this checkout. Work in a Markdown preview and use these lightweight checks:
+学习笔记没有独立构建系统或自动化测试。实验构建与测试遵循 `4.experiments` 中的说明；Markdown 文档使用预览和以下轻量检查：
 
 ```powershell
 rg --files -g '*.md'                 # list the note set
@@ -62,7 +66,7 @@ When answering questions about this repository, keep the response concise, clear
 - 原图只需补充中文释义时，在图旁解释术语和阅读顺序。只有原图缺失、表达不清，或无法展示本节需要的字段、对象关系、访问过程与时序时，才补画示意图，并说明补图解决的问题。
 - 使用原图时注明出处、版本或日期、页码或图号，并核对 MI300X 的适用性；保留原始标注，不把其他型号的图改名使用。需要截取时标明范围，并保留理解图示所必需的上下文。区分物理布局图、逻辑结构图和流程图，避免把布局或比例示意当作实际访问顺序。
 - 补画示意图时，标出对象、保存的值，以及箭头表示的选择、访问或写入动作。图前说明例子条件，图后解释关键关系。
-- 当 `text` 或 Mermaid 难以清楚表达空间位置、上下堆叠、复杂连线等关系，或出现中文对齐、布局拥挤等影响理解的问题时，应生成清晰的示意图片并嵌入文档。图片保存到仓库的 `assets/` 下，按文档编号分目录，使用相对路径引用；有可编辑源文件时一并保存。交付前在文档预览中检查文字、边界和连线是否清楚，图片是否完整显示。
+- 补充示意图优先使用 `text` 或 Mermaid；出现对齐、布局或连线问题时，简化图示、拆分步骤，并配合文字解释。除非用户明确要求，不生成新的示意图片并插入文档。
 - 用户选中或认可的图示应随讲解写入文档，不能在补充时只保留图中的结论。若相关事实或案例改变，自绘图同步修正，引用原图保持原貌并另配说明或换用适用原图。用户要求“简要”时，压缩重复文字，保留帮助理解的图示和必要步骤。
 - 以学习者能否沿图说明“谁保存什么、谁根据什么找到谁、下一步做什么”为检查标准。不要用加粗的一句话或职责罗列表代替这层解释。
 
@@ -100,7 +104,7 @@ When answering questions about this repository, keep the response concise, clear
 
 Place an abbreviation glossary immediately after each document's `#` title. Use the columns `缩写`, `英文全称`, and `中文含义`, and include the technical abbreviations used in that document. Add a glossary entry whenever a new abbreviation is introduced.
 
-Keep filenames stable. For links to files whose names contain spaces or non-ASCII characters, preserve the repository convention: `[label](<./02_GPU 内存管理基础.md>)`.
+Keep filenames stable. For links to files whose names contain spaces or non-ASCII characters, preserve the repository convention: `[label](<./1.笔记/02_GPU 内存管理基础.md>)`.
 
 Separate facts from analysis with the labels already used in the notes: `[SOURCE]`, `[SPEC]`, `[INFERENCE]`, `[BOUNDARY]`, and `[DESIGN]`. Cite the exact source path, version, or specification section whenever making a source-backed implementation claim.
 
@@ -130,6 +134,7 @@ Separate facts from analysis with the labels already used in the notes: `[SOURCE
 - 加入源码前先判断必要性。实现流程、对象关系、调用顺序和生命周期保护可以使用源码；概念与硬件语义优先使用规范、例子和图示。与当前结论无关或前文已经证明的源码不要重复加入。
 - 摘录既要直接证明当前结论，也要保留读懂它所需的上下文。必要时应包含函数或结构体名称、关键入参、外围 `if/else`、调用者与被调用函数，以及影响结论的返回路径；如果只截取孤立语句会隐藏对象来源、控制流或实际执行顺序，就应扩大到完整相关分支或短函数。无关日志、调试输出、兼容细节和一般性错误路径仍可省略。
 - `[SOURCE]`、`[SPEC]` 必须给出准确的文件路径、版本或规范信息以及真实行号。代码行保留原文件行号；不连续片段分成不同代码块，并在正文中说明它们的调用关系或先后顺序。连续展示更容易理解时，不要为了减少行数强行拆开。不得把教学伪代码伪装成原始源码。
+- 源码引用必须支持在 VS Code 的 Markdown 编辑区和预览中点击后直接定位到真实行号。当前 Windows 环境中的本地源码定位使用 VS Code 原生格式 `vscode://file/绝对路径:行:列`，例如 `vscode://file/C:/path/to/amdgpu_discovery.c:2484:1`；路径中的中文和空格使用 URL 编码。不要给本地源码文件 URI 附加 `#L…` 行号片段，避免同一物理文件被当作不同文档打开并触发 C/C++ IntelliSense 的规范化路径冲突。文件名链接定位到当前引用的第一段，每个行号或范围也单独做成链接；范围文字保留完整起止行号，链接定位到起始行，不连续范围分别链接。定位路径按当前仓库位置生成，移动目录后同步更新；普通文档链接继续使用相对路径。已有上游源码链接保留固定 commit 与 `#L起始行-L结束行`。交付前核对文件、行号范围和预览中的链接目标，并区分格式检查与实际打开验证，不能只凭行号解析通过就宣称已验证跳转。
 - 源码后先说明“它主要证明什么”和“这段代码处在什么上下文中”，再按连续行号组解释关键输入、判断、状态变化、输出和必要联动。避免机械逐行复述；通常使用少量要点即可。
 - 如果源码及其解释比概念本身更长、更难理解，应先重组讲解或将源码放入可选阅读部分；不得以破坏上下文为代价继续裁剪。
 - 英文源码注释、错误信息或规范摘录后，应立即提供与当前结论有关的中文翻译。
@@ -150,6 +155,10 @@ Separate facts from analysis with the labels already used in the notes: `[SOURCE
 
 Keep each pull request focused. Describe the reader-facing change, identify updated chapters and index links, and state how links/rendering were checked. Link relevant issues or source revisions. Include a screenshot only when a Mermaid diagram, table, or rendered layout materially changed.
 
-### 学习进度
+### 学习与实验进度
 
-`1.笔记` 目录下的内容仅作为参考学习文档。目前已学习到 [06_AQL 应用的完整运行流程：驱动初始化、执行与资源释放](<./06_AQL 应用的完整运行流程：驱动初始化、执行与资源释放.md>)；第七章仍是后续学习阶段，按[第七章大纲](<./07_AMDGPU 通用内存管理与 DRM 任务提交（大纲）.md>)继续。已有章节的补充按当前问题就地完成。文档已写入、源码已核对和用户已掌握分别判断，不以文件存在替代个人学习完成记录。
+学习部分已完成第 06 阶段上下篇的学习：[06_AQL 应用的完整运行流程：驱动初始化、执行与资源释放（上）](<./1.笔记/06_AQL 应用的完整运行流程：驱动初始化、执行与资源释放（上）.md>)与[下篇](<./1.笔记/06_AQL 应用的完整运行流程：驱动初始化、执行与资源释放（下）.md>)。第七章仍是后续学习阶段，按[第七章大纲](<./1.笔记/07_AMDGPU 通用内存管理与 DRM 任务提交（大纲）.md>)继续；已有章节的补充按当前问题就地完成。
+
+实验部分正在进行第一阶段：跑通应用到设备的计算流程，具体范围见 [QEMU GPGPU 四阶段实验大纲](<./4.experiments/00_QEMU GPGPU 四阶段实验大纲.md>)。后续随实验进展同步更新此处的阶段记录与大纲。
+
+学习进度按用户反馈记录；文档已写入、源码已核对、实验已运行验证和用户已掌握分别判断，不以文件存在替代学习或实验完成记录。

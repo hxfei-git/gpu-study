@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="780" viewBox="0 0 1100 780">
+<defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#526a80"/></marker></defs>
+<rect width="1100" height="780" fill="#fff"/>
+<g font-family="Microsoft YaHei, sans-serif" fill="#20344c">
+<text x="50" y="57" font-size="34" font-weight="700">驱动先为自己的命令缓冲准备内存</text>
+<text x="50" y="97" font-size="22" fill="#617487">应用 P 尚未启动 · 例子：AMDGPU 内部 Ring，后备存储在主机 RAM</text>
+<rect x="50" y="126" width="1000" height="94" rx="14" fill="#f1f6fa" stroke="#c5d6e4" stroke-width="1.5"/>
+<text x="76" y="163" font-size="26" font-weight="700" fill="#2a6493">① 内存模块：先准备分配器与页表</text>
+<text x="76" y="197" font-size="22">建立分配与映射能力，提前启用 GPU 地址翻译</text>
+<path d="M550 221 V259" fill="none" stroke="#526a80" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="574" y="248" font-size="20" fill="#617487">进行内部分配</text>
+<rect x="50" y="268" width="1000" height="124" rx="14" fill="#f1f6fa" stroke="#c5d6e4" stroke-width="1.5"/>
+<text x="76" y="307" font-size="26" font-weight="700" fill="#2a6493">② Ring 初始化：申请主机 RAM 中的缓冲</text>
+<text x="76" y="343" font-size="23">分配结果：BO 管理记录、CPU 指针、GPU 地址</text>
+<text x="76" y="374" font-size="20" fill="#617487">记录与地址保存在驱动里；命令字节存放在下方 RAM 中</text>
+<path d="M550 393 V442" fill="none" stroke="#526a80" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="574" y="422" font-size="20" fill="#617487">后续 GFX 配置 Ring</text>
+<rect x="50" y="451" width="1000" height="255" rx="14" fill="#f7fafc" stroke="#c5d6e4" stroke-width="1.5"/>
+<text x="76" y="494" font-size="26" font-weight="700" fill="#2a6493">③ 硬件准备完成后，通过这份缓冲提交命令</text>
+<rect x="85" y="537" width="240" height="116" rx="12" fill="#eef4f9" stroke="#c5d6e4" stroke-width="1.5"/>
+<text x="108" y="572" font-size="26" font-weight="700">Host CPU / 驱动</text>
+<text x="108" y="606" font-size="22">使用 CPU 指针</text>
+<text x="108" y="636" font-size="22">填写管理命令</text>
+<rect x="430" y="537" width="250" height="116" rx="12" fill="#e7f3ed" stroke="#b8d8c8" stroke-width="1.5"/>
+<text x="455" y="572" font-size="26" font-weight="700" fill="#257458">主机 RAM</text>
+<text x="455" y="606" font-size="22">Ring 命令缓冲</text>
+<text x="455" y="636" font-size="22">保存实际命令字节</text>
+<rect x="785" y="537" width="235" height="116" rx="12" fill="#eef4f9" stroke="#c5d6e4" stroke-width="1.5"/>
+<text x="811" y="572" font-size="26" font-weight="700">MI300X</text>
+<text x="811" y="606" font-size="22">使用 GPU 地址</text>
+<text x="811" y="636" font-size="22">取令、执行</text>
+<path d="M326 597 H422" fill="none" stroke="#526a80" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="351" y="582" font-size="20" fill="#617487">写入</text>
+<path d="M784 597 H688" fill="none" stroke="#526a80" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="712" y="582" font-size="20" fill="#617487">读取</text>
+<text x="85" y="685" font-size="20" fill="#617487">Host 发布命令后，设备读取；使用期间保留缓冲、BO 与映射</text>
+<text x="50" y="753" font-size="20" fill="#617487">软件流程示意：CPU 与 GPU 用各自的地址，访问同一份 RAM；地址翻译细节见 02 §1.6.4。</text>
+</g></svg>

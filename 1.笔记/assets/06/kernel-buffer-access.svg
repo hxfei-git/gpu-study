@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1230" viewBox="0 0 1200 1230">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#52677d"/></marker></defs>
+<rect width="1200" height="1230" fill="#ffffff"/>
+<g font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif">
+<text x="48" y="57" font-size="31" fill="#20344c" font-weight="700">两种地址访问同一块 RAM：CPU 写入，GPU 随后读取</text>
+<text x="48" y="98" font-size="21" fill="#52677d" font-weight="400">逻辑访问图 · 本例使用内核系统 GPU 地址 · Host IOMMU 开启翻译 · δ 为池内偏移</text>
+<rect x="50" y="125" width="1100" height="155" rx="14" fill="#eaf4ee" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="74" y="165" font-size="26" fill="#247054" font-weight="700">GPU0 的 KFD 设备记录保存分配结果</text>
+<text x="74" y="203" font-size="23" fill="#20344c" font-weight="400">gtt_mem → BO（Host 内核管理对象），记录这份池的大小与后备存储</text>
+<text x="74" y="244" font-size="23" fill="#20344c" font-weight="400">gtt_start_cpu_ptr = cpu_base；gtt_start_gpu_addr = gpu_base</text>
+<rect x="50" y="330" width="440" height="112" rx="14" fill="#f2f6fa" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="73" y="370" font-size="25" fill="#285f90" font-weight="700">① Host CPU 写管理块 M</text>
+<text x="73" y="408" font-size="24" fill="#20344c" font-weight="400">使用 cpu_base + δ</text>
+<rect x="580" y="330" width="570" height="112" rx="14" fill="#f2f6fa" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="603" y="370" font-size="25" fill="#285f90" font-weight="700">② GPU 读取已交付的管理块 M</text>
+<text x="603" y="408" font-size="23" fill="#20344c" font-weight="400">使用 gpu_base + δ（内核系统地址）</text>
+<path d="M270 442L270 491" fill="none" stroke="#52677d" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M865 442L865 491" fill="none" stroke="#52677d" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="50" y="492" width="440" height="110" rx="14" fill="#f2f6fa" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="73" y="533" font-size="25" fill="#285f90" font-weight="700">CPU MMU / CPU 页表</text>
+<text x="73" y="573" font-size="22" fill="#20344c" font-weight="400">CPU 虚拟地址 → 主机物理地址</text>
+<rect x="580" y="492" width="570" height="128" rx="14" fill="#f2f6fa" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="603" y="533" font-size="25" fill="#285f90" font-weight="700">GPU MMU / VMID 0 系统上下文</text>
+<text x="603" y="571" font-size="23" fill="#20344c" font-weight="400">系统页表（含 GART 映射）</text>
+<text x="603" y="607" font-size="22" fill="#20344c" font-weight="400">系统 GPU 地址 → 页面的 DMA 地址</text>
+<path d="M865 620L865 674" fill="none" stroke="#52677d" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="580" y="675" width="570" height="110" rx="14" fill="#f2f6fa" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="603" y="716" font-size="25" fill="#285f90" font-weight="700">设备 DMA 地址：本例为 IOVA</text>
+<text x="603" y="757" font-size="22" fill="#20344c" font-weight="400">来自这份池已经建立的 GART 映射</text>
+<path d="M865 785L865 834" fill="none" stroke="#52677d" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="580" y="835" width="570" height="110" rx="14" fill="#f2f6fa" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="603" y="876" font-size="25" fill="#285f90" font-weight="700">经 PCIe → Host IOMMU</text>
+<text x="603" y="918" font-size="23" fill="#20344c" font-weight="400">IOVA → 主机物理地址</text>
+<rect x="50" y="1010" width="1100" height="145" rx="14" fill="#eaf4ee" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="360" y="1050" font-size="26" fill="#247054" font-weight="700">system RAM / KFD 管理池</text>
+<rect x="455" y="1089" width="290" height="48" rx="14" fill="#d4ecdf" stroke="#c5d4df" stroke-width="1.5"/>
+<text x="475" y="1122" font-size="21" fill="#247054" font-weight="700">M：池内偏移 δ 处的数据</text>
+<path d="M270 602L270 1114L453 1114" fill="none" stroke="#52677d" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="90" y="780" font-size="22" fill="#52677d" font-weight="400">CPU 页表定位</text>
+<text x="90" y="816" font-size="22" fill="#52677d" font-weight="400">RAM 中的 M</text>
+<path d="M865 945L865 1114L747 1114" fill="none" stroke="#52677d" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="885" y="982" font-size="21" fill="#52677d" font-weight="400">定位同一份 M</text>
+<text x="52" y="1200" font-size="21" fill="#52677d" font-weight="400">箭头表示访存请求的寻址方向；先完成写入交接，再让设备读取。</text>
+</g>
+</svg>
