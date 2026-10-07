@@ -24,6 +24,8 @@
 
 本目录已有 `QEMU_2026_讲义.html`、`QEMU_2026_实验.html`、`QEMU_2026_GPGPU_适配.html`，以及 `qemu-camp-2026-exper-hxfei-git` 源码目录。后续实验沿用这些材料和代码。
 
+**[DESIGN] 仓库与分支约束：** 实验子仓库为 [qemu-camp/qemu-camp-2026-exper-hxfei-git](https://github.com/qemu-camp/qemu-camp-2026-exper-hxfei-git.git)，本地目录为 `4.experiments/qemu-camp-2026-exper-hxfei-git`。实验开发统一在 `hxfei-qemu` 分支进行，修改代码前先确认当前分支。
+
 **[DESIGN]** 参考 AMDGPU / KFD 的设计与代码，在现有设备上逐步实现计算驱动和小型用户态运行时，并按阶段引入 Linux 通用框架。先让应用能够提交计算、取得结果，再补齐任务管理、地址隔离和异常恢复。
 
 **[BOUNDARY]** 实验对象是自定义 QEMU GPGPU 教学设备。实验中的寄存器、命令和页表设计按实际实现说明，与学习笔记中的 MI300X 模型分开；项目不以复现 MI300X 或兼容整套 ROCm 为目标。
