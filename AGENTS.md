@@ -35,6 +35,12 @@ rg -n '^#{1,3} ' -g '*.md'           # review heading hierarchy
 rg -n '\]\(' -g '*.md'              # find links to verify after renames
 ```
 
+## 代码修改约束
+
+修改代码时，尽量缩小影响范围和改动量，沿用现有架构、模块职责、接口和执行模型。只修改完成当前任务必需的内容，不顺手重构、移动代码或改名；必须调整架构或接口时，先说明原因和必要范围。
+
+与用户的交互、代码注释、文档说明以及提交标题和正文均使用中文。技术术语可保留通用英文写法；标识符、路径、命令、协议字段、汇编助记符、机器读取的标记和许可证声明保留原文，不因中文化改变其含义或行为。
+
 ## Testing Guidelines
 
 Before submitting, preview edited files to check tables, Mermaid diagrams, code fences, and internal anchors. Test every changed relative link by opening it from the rendered note.
@@ -85,9 +91,9 @@ When answering questions about this repository, keep the response concise, clear
 
 ### 中文文档自然化检查
 
-每次新建、补充、改写或审阅本仓库的中文文档时，包括只修改一个段落，都必须使用 `humanizer-zh-docs` 技能完成最终检查和润色。不得只在用户明确要求“去 AI 味”时才使用该技能。
+每次新建、补充、改写或审阅本仓库的中文文档时，包括只修改一个段落，都必须使用 [humanizer-zh](https://github.com/op7418/Humanizer-zh/blob/f4518a8eab97b8bfebc66a89d34320a89bef6930/SKILL.md) 技能完成最终检查和润色。不得只在用户明确要求“去 AI 味”时才使用该技能。
 
-- 修改前完整读取 `humanizer-zh-docs` 的 `SKILL.md`，并按其中的流程执行；
+- 修改前完整读取 `humanizer-zh` 的 `SKILL.md`，并按其中的流程执行；
 - 先完成事实、结构、源码证据和 Markdown 格式，再对本次新增或改动的自然语言做自然化检查；
 - 润色时保留技术事实、数字、结论强度、术语、代码、链接、引用、标题层级和用户指定的固定措辞；
 - 局部修改只检查和润色本次改动及必要的上下文，不顺手重写无关章节；
