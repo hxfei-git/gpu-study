@@ -258,24 +258,24 @@ device_init_func()
             `-- pc-&gt;exit() =&gt; gpgpu_exit()
 </code></pre></figure>
 <p>查看 GPU 的实现，可以直接从
-<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/hw/gpgpu/gpgpu.c" title="源码第 429 行">gpgpu_register_types()</a>、
-<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/hw/gpgpu/gpgpu.c" title="源码第 399 行">gpgpu_class_init()</a>和
-<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/hw/gpgpu/gpgpu.c" title="源码第 298 行">gpgpu_realize()</a>
+<a href="./gpu-study-qemu/hw/gpgpu/gpgpu.c" title="源码第 429 行">gpgpu_register_types()</a>、
+<a href="./gpu-study-qemu/hw/gpgpu/gpgpu.c" title="源码第 399 行">gpgpu_class_init()</a>和
+<a href="./gpu-study-qemu/hw/gpgpu/gpgpu.c" title="源码第 298 行">gpgpu_realize()</a>
 进入。框架调用入口分别是
-<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/system/runstate.c" title="源码第 965 行">QOM 模块初始化</a>、
-<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/qom/object.c" title="源码第 336 行">类初始化</a>和
-<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/hw/pci/pci.c" title="源码第 2248 行">PCI realize</a>。</p>
+<a href="./gpu-study-qemu/system/runstate.c" title="源码第 965 行">QOM 模块初始化</a>、
+<a href="./gpu-study-qemu/qom/object.c" title="源码第 336 行">类初始化</a>和
+<a href="./gpu-study-qemu/hw/pci/pci.c" title="源码第 2248 行">PCI realize</a>。</p>
 <h2 id="section-3">实验一 test-device-id</h2>
 <p>寄存器行为依据 <a href="https://qemu.gevico.online/exercise/2026/stage2/gpu/gpu-datasheet/">GPGPU 硬件手册</a>
 定义，设备读回调根据 BAR0 内部偏移返回对应寄存器的内容。
-<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/tests/qtest/gpgpu-test.c" title="源码第 128 行">测试函数</a>
+<a href="./gpu-study-qemu/tests/qtest/gpgpu-test.c" title="源码第 128 行">测试函数</a>
 读取偏移 <code>0x0000</code> 的 <code>DEV_ID</code>，预期为 <code>0x47505055</code>；随后读取偏移
 <code>0x0004</code> 的 <code>DEV_VERSION</code>，预期为 <code>0x00010000</code>。</p>
 <p><code>qpci_io_readl()</code> 在宿主机的测试进程中执行，<code>gpgpu_ctrl_read()</code> 在
 QEMU 进程中执行。测试进程通过 QTest 协议请求读取一个地址；QEMU
 根据地址找到设备的内存区域，再调用该区域注册的读回调。</p>
 <h3 id="section-4">控制寄存器区域的注册与映射</h3>
-<p><a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/hw/gpgpu/gpgpu.c" title="源码第 212 行">gpgpu_ctrl_ops</a>
+<p><a href="./gpu-study-qemu/hw/gpgpu/gpgpu.c" title="源码第 212 行">gpgpu_ctrl_ops</a>
 指定了控制寄存器区域的读写操作：</p>
 <figure class="code-block"><figcaption>C</figcaption><pre tabindex="0"><code><span class="k">static</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">MemoryRegionOps</span><span class="w"> </span><span class="n">gpgpu_ctrl_ops</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="p">.</span><span class="n">read</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">gpgpu_ctrl_read</span><span class="p">,</span>
@@ -289,7 +289,7 @@ QEMU 进程中执行。测试进程通过 QTest 协议请求读取一个地址�
 </code></pre></figure>
 <p><code>.read</code> 是函数指针，保存读取该区域时需要调用的 <code>gpgpu_ctrl_read</code>。
 控制寄存器按小端解释，设备回调处理的访问宽度为四字节。</p>
-<p><a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/hw/gpgpu/gpgpu.c" title="源码第 298 行">gpgpu_realize()</a>
+<p><a href="./gpu-study-qemu/hw/gpgpu/gpgpu.c" title="源码第 298 行">gpgpu_realize()</a>
 创建控制寄存器区域，并将该区域关联到 PCI BAR0：</p>
 <figure class="code-block"><figcaption>C</figcaption><pre tabindex="0"><code><span class="n">memory_region_init_io</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="o">-&gt;</span><span class="n">ctrl_mmio</span><span class="p">,</span><span class="w"> </span><span class="n">OBJECT</span><span class="p">(</span><span class="n">s</span><span class="p">),</span><span class="w"> </span><span class="o">&amp;</span><span class="n">gpgpu_ctrl_ops</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="p">,</span>
 <span class="w">                      </span><span class="s">&quot;gpgpu-ctrl&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">GPGPU_CTRL_BAR_SIZE</span><span class="p">);</span>
@@ -300,14 +300,14 @@ QEMU 进程中执行。测试进程通过 QTest 协议请求读取一个地址�
 </code></pre></figure>
 <p><code>memory_region_init_io()</code> 创建 <code>s-&gt;ctrl_mmio</code>，记录操作集合
 <code>gpgpu_ctrl_ops</code> 和设备数据 <code>s</code>。
-<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/system/memory.c" title="源码第 1562 行">内存区域初始化代码</a>
+<a href="./gpu-study-qemu/system/memory.c" title="源码第 1562 行">内存区域初始化代码</a>
 将二者保存为 <code>mr-&gt;ops</code> 和 <code>mr-&gt;opaque</code>。</p>
 <p><code>pci_register_bar()</code> 将 BAR0 与 <code>s-&gt;ctrl_mmio</code> 关联，记录区域大小和
 BAR 类型。测试随后调用 <code>qpci_device_enable()</code>，设置 PCI Command
 寄存器以允许设备的内存访问，再调用 <code>qpci_iomap(pdev, 0, NULL)</code>。
-<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/tests/qtest/libqos/pci.c" title="源码第 518 行">qpci_iomap()</a>
+<a href="./gpu-study-qemu/tests/qtest/libqos/pci.c" title="源码第 518 行">qpci_iomap()</a>
 探测 BAR0 大小、分配地址，并将地址写入 PCI 配置空间。
-QEMU 的 <a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/hw/pci/pci.c" title="源码第 1724 行">pci_update_mappings()</a>
+QEMU 的 <a href="./gpu-study-qemu/hw/pci/pci.c" title="源码第 1724 行">pci_update_mappings()</a>
 据此把控制寄存器区域映射到 BAR0 的起始地址。完成这些操作后，
 测试才能通过 BAR0 地址访问控制寄存器。</p>
 <h3 id="section-5">测试读取与 QTest 协议</h3>
@@ -315,7 +315,7 @@ QEMU 的 <a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-gi
 <figure class="code-block"><figcaption>C</figcaption><pre tabindex="0"><code><span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">qpci_io_readl</span><span class="p">(</span><span class="n">pdev</span><span class="p">,</span><span class="w"> </span><span class="n">bar0</span><span class="p">,</span><span class="w"> </span><span class="n">GPGPU_REG_DEV_VERSION</span><span class="p">);</span>
 </code></pre></figure>
 <p><code>GPGPU_REG_DEV_VERSION</code> 是偏移 <code>0x0004</code>。
-<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/tests/qtest/libqos/pci.c" title="源码第 425 行">qpci_io_readl()</a>
+<a href="./gpu-study-qemu/tests/qtest/libqos/pci.c" title="源码第 425 行">qpci_io_readl()</a>
 对这个内存类型的 BAR 执行以下读取：</p>
 <figure class="code-block"><figcaption>C</figcaption><pre tabindex="0"><code><span class="kt">uint32_t</span><span class="w"> </span><span class="n">val</span><span class="p">;</span>
 
@@ -324,16 +324,16 @@ QEMU 的 <a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-gi
 </code></pre></figure>
 <p>读取地址是 BAR0 起始地址加寄存器偏移，即 <code>0x40000004</code>，读取长度
 为四字节。这里的 <code>bus-&gt;memread</code> 指向
-<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/tests/qtest/libqos/generic-pcihost.c" title="源码第 98 行">qpci_generic_memread()</a>，
+<a href="./gpu-study-qemu/tests/qtest/libqos/generic-pcihost.c" title="源码第 98 行">qpci_generic_memread()</a>，
 该函数调用 <code>qtest_memread()</code>。
-<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/tests/qtest/libqtest.c" title="源码第 1310 行">qtest_memread()</a>
+<a href="./gpu-study-qemu/tests/qtest/libqtest.c" title="源码第 1310 行">qtest_memread()</a>
 通过 QTest 连接向 QEMU 发送：</p>
 <figure class="code-block"><figcaption>文本图 / 命令</figcaption><pre tabindex="0"><code>read 0x40000004 0x4
 </code></pre></figure>
 <p>命令指定地址和长度。本例虽然调用的函数名是 <code>qpci_io_readl</code>，
 实际发送的协议命令是 <code>read</code>。</p>
 <h3 id="section-6">地址分发与设备回调</h3>
-<p>QEMU 的 <a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/system/qtest.c" title="源码第 574 行">QTest 命令处理代码</a>
+<p>QEMU 的 <a href="./gpu-study-qemu/system/qtest.c" title="源码第 574 行">QTest 命令处理代码</a>
 解析 <code>read</code> 命令，并调用 <code>address_space_read()</code> 访问客户机物理
 地址空间。内存系统按地址寻找映射的区域。地址 <code>0x40000004</code> 落在
 GPGPU 的 BAR0 控制寄存器区域内，因此找到 <code>s-&gt;ctrl_mmio</code>，并计算
@@ -384,7 +384,7 @@ gpgpu_test_device_id() 拿到 qpci_io_readl() 的返回值后继续执行
 `-- g_assert_cmphex(version, ==, GPGPU_DEV_VERSION_VALUE)
 </code></pre></figure>
 <p>内存系统通过 <code>memory_region_dispatch_read()</code> 分发 MMIO 读取，
-最终执行 <a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/system/memory.c" title="源码第 439 行">memory.c 中的函数指针调用</a>：</p>
+最终执行 <a href="./gpu-study-qemu/system/memory.c" title="源码第 439 行">memory.c 中的函数指针调用</a>：</p>
 <figure class="code-block"><figcaption>C</figcaption><pre tabindex="0"><code><span class="n">tmp</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">mr</span><span class="o">-&gt;</span><span class="n">ops</span><span class="o">-&gt;</span><span class="n">read</span><span class="p">(</span><span class="n">mr</span><span class="o">-&gt;</span><span class="n">opaque</span><span class="p">,</span><span class="w"> </span><span class="n">addr</span><span class="p">,</span><span class="w"> </span><span class="n">size</span><span class="p">);</span>
 </code></pre></figure>
 <p>对于控制寄存器区域，<code>mr-&gt;ops-&gt;read</code> 保存的是 <code>gpgpu_ctrl_read</code>，
@@ -482,8 +482,8 @@ Mask 的主机 MMIO 读写，以及软复位清零。主机侧可通过 BAR0
 当前 <code>gpgpu_core_exec_kernel()</code> 和 <code>gpgpu_core_exec_warp()</code> 还是
 待实现函数，实验七的寄存器读写检查尚未启动线程执行。</p>
 <p>相关定义见
-<a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/hw/gpgpu/gpgpu.h" title="源码第 219 行">GPGPUSIMTContext</a>
-和 <a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/hw/gpgpu/gpgpu_core.h" title="源码第 67 行">GPGPULane、GPGPUWarp</a>；
+<a href="./gpu-study-qemu/hw/gpgpu/gpgpu.h" title="源码第 219 行">GPGPUSIMTContext</a>
+和 <a href="./gpu-study-qemu/hw/gpgpu/gpgpu_core.h" title="源码第 67 行">GPGPULane、GPGPUWarp</a>；
 实验要求及硬件手册见 <a href="file:///home/book/1.project/qemu/QEMU_2026_%E5%AE%9E%E9%AA%8C.html#page-stage2--gpu--gpu-datasheet">本地实验文档</a>。</p>
 <h2 id="section-13">浮点格式：FP32、FP16、BF16、FP8、FP4</h2>
 <p>FP 是 Floating Point（浮点）的缩写。FP32、FP16、FP8、FP4 中的
@@ -561,7 +561,7 @@ FP32。尾数字段只有 7 位，精度降低。<code>6.5</code> 在两种格�
 </code></pre></figure>
 <p>FP16 与 BF16 都占 16 位，转换函数需要分别遵守各自的编码规则。
 定义见 <a href="https://docs.nvidia.com/cuda/cuda-math-api/cuda_math_api/struct____half.html">NVIDIA FP16 说明</a>
-和本地 <a href="file:///home/book/1.project/qemu/qemu-camp-2026-exper-hxfei-git/fpu/softfloat.c" title="源码第 594 行">SoftFloat 格式参数</a>。</p>
+和本地 <a href="./gpu-study-qemu/fpu/softfloat.c" title="源码第 594 行">SoftFloat 格式参数</a>。</p>
 <h3 id="section-17">FP8：E4M3 和 E5M2</h3>
 <p>FP8 使用 8 bit，也就是 1 字节。FP8 有多种具体格式，实验十采用
 E4M3 和 E5M2。名称中的 E 表示指数，M 表示尾数：</p>

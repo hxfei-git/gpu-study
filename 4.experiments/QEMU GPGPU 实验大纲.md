@@ -22,9 +22,9 @@
 
 当前正在进行第一阶段。根据此前的实验反馈，前 10 个基础实验已完成；接下来围绕“进阶实验一：设计类 CUDA 的 GPGPU 软件栈”，实现应用到设备的计算流程。
 
-本目录已有 `QEMU_2026_讲义.html`、`QEMU_2026_实验.html`、`QEMU_2026_GPGPU_适配.html`，以及 `qemu-camp-2026-exper-hxfei-git` 源码目录。后续实验沿用这些材料和代码。
+本目录已有 `QEMU_2026_讲义.html`、`QEMU_2026_实验.html`、`QEMU_2026_GPGPU_适配.html`，以及 `gpu-study-qemu` 源码目录。后续实验沿用这些材料和代码。
 
-**[DESIGN] 仓库与分支约束：** 实验子仓库为 [qemu-camp/qemu-camp-2026-exper-hxfei-git](https://github.com/qemu-camp/qemu-camp-2026-exper-hxfei-git.git)，本地目录为 `4.experiments/qemu-camp-2026-exper-hxfei-git`。实验开发统一在 `hxfei-qemu` 分支进行，修改代码前先确认当前分支。
+**[DESIGN] 仓库与分支约束：** 实验子仓库为 [hxfei-git/gpu-study-qemu](https://github.com/hxfei-git/gpu-study-qemu)，本地目录为 `4.experiments/gpu-study-qemu`。实验开发统一在 `hxfei-qemu` 分支进行，修改代码前先确认当前分支。原仓库 `qemu-camp/qemu-camp-2026-exper-hxfei-git` 的提交历史完整保留；子仓库的 `upstream` 远端指向原仓库，`origin` 指向新仓库。
 
 **[DESIGN]** 参考 AMDGPU / KFD 的设计与代码，在现有设备上逐步实现计算驱动和小型用户态运行时，并按阶段引入 Linux 通用框架。先让应用能够提交计算、取得结果，再补齐任务管理、地址隔离和异常恢复。
 

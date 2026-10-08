@@ -20,6 +20,6 @@
 	path = 2.源码/vortex
 	url = https://github.com/vortexgpgpu/vortex.git
 [submodule "4.experiments/qemu-camp-2026-exper-hxfei-git"]
-	path = 4.experiments/qemu-camp-2026-exper-hxfei-git
-	url = https://github.com/qemu-camp/qemu-camp-2026-exper-hxfei-git.git
+	path = 4.experiments/gpu-study-qemu
+	url = https://github.com/hxfei-git/gpu-study-qemu.git
 	branch = hxfei-qemu
