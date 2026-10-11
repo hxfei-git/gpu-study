@@ -20,7 +20,7 @@
 | HSA | Heterogeneous System Architecture | 异构系统架构 |
 | CPU | Central Processing Unit | 中央处理器 |
 | ARM64 | Arm 64-bit Architecture | Arm 64 位架构；本实验运行 Linux 的处理器架构 |
-| RV32 | 32-bit RISC-V | 本实验计算 kernel 使用的 32 位 RISC-V 指令集 |
+| RV32 | 32-bit RISC-V | 本实验计算 kernel 的指令集，以及原生 CP 的 32 位 RISC-V 模型 |
 | API | Application Programming Interface | 应用编程接口 |
 | ABI | Application Binary Interface | 应用二进制接口；本文用于约定软件与设备之间的数据布局 |
 | RAM | Random Access Memory | 随机存取存储器；本文的系统 RAM 指 Linux 客体内存 |
@@ -30,6 +30,8 @@
 | SMMUv3 | System Memory Management Unit version 3 | Arm 系统内存管理单元第三版 |
 | IOVA | I/O Virtual Address | 设备经系统 IOMMU 访问内存时使用的地址 |
 | PCI | Peripheral Component Interconnect | 外设互连总线 |
+| PCIe | Peripheral Component Interconnect Express | 高速外设互连总线 |
+| TCG | Tiny Code Generator | QEMU 的动态代码生成基础设施 |
 | BAR | Base Address Register | PCI 基址寄存器；用于描述设备资源窗口 |
 | MMIO | Memory-Mapped I/O | 内存映射输入输出 |
 | MSI-X | Message Signaled Interrupts Extended | 扩展消息中断 |
@@ -47,7 +49,7 @@
 
 根据用户反馈，前 10 个基础实验和第一阶段“进阶实验一：设计类 CUDA 的 GPGPU 软件栈”已完成，并已搭配 A57、支持 SMMUv3 系统 IOMMU。第一阶段成果继续保留，当前进入第二阶段：用户 AQL Queue、Doorbell、CP 与 Signal。
 
-第二阶段目前完成的是范围与 v1 规格约定，尚未记录实现完成或运行验收通过。第一阶段的实现与历史验证记录见 [软件栈说明](<./gpu-study-qemu/software/gpgpu/README.md>)；本大纲中的设计取值不作为已有设备能力。
+第二阶段的队列功能仍在讨论。2026-10-11 已实现并验收双进程设备与原生 CP 基础：CP 三项验收、远端 SMMUv3 两项专项均通过；原单进程和双进程的两种 IOMMU 配置分别通过 68 项运行时检查。实际命令、数量与日志见 [远端设备与 CP 验收记录](<./远端 GPGPU 与 RISC-V CP 验收记录.md>)。这些结果不表示第二阶段整体完成。第一阶段的实现与历史验证记录见 [软件栈说明](<./gpu-study-qemu/software/gpgpu/README.md>)；本大纲中的设计取值不作为已有设备能力。
 
 本目录已有 `QEMU_2026_讲义.html`、`QEMU_2026_实验.html`、`QEMU_2026_GPGPU_适配.html`，以及 `gpu-study-qemu` 源码目录。后续实验沿用这些材料和代码。
 
@@ -75,9 +77,23 @@
 
 ### 2.2 第二阶段：用户 AQL Queue、Doorbell、CP 与 Signal
 
+**[DESIGN] 当前确认范围：** 已确认的设计统一记录在 [第一版规格](<./CP_MEC 第一版规格.md>) 中。下文的单用户队列方案及其他参数保留为此前草案，后续随讨论逐项复审，不作为本轮已确认规格。
+
+本轮近期任务是双进程设备与原生 CP 接入，接口见 [第一版规格第 2 节](<./CP_MEC 第一版规格.md#2-远端设备与-cp-固件启动>)。先让 A57 经 `vfio-user-pci` 使用远端 GPGPU，复用原驱动、运行时与 SMMUv3，再验证默认保持复位、装载启动和相同地址替换固件。
+
+```text
+A57 Linux（进程 A）
+  → PCIe 代理：转发 BAR、处理消息 DMA、接收中断
+  → gpgpu-cp（进程 B）：gpu0 + 原生 RV32 CP
+       ├─ 原同步计算与 DMA：CP 保持复位时继续使用
+       └─ CP 固件：从共享 VRAM 取指，并把结果写回 VRAM
+```
+
+本轮只实现 CP 复位、入口与基本固件运行，不扩写后续队列功能。以下队列流程仍为待复审草案，不能据此认定第二阶段整体完成。
+
 当前先按 [AMD CP 功能分析与实验规格](<./AMD CP 功能分析与实验规格.md>) 阅读整体执行流程和九项功能，再复审本节的 Queue、Doorbell、Packet 与 Signal 约定。该文档用于友商分析与教学设计讨论；实验阶段安排及协议参数仍统一在本大纲维护，以下 v1 取值保留为本轮复审的基础。
 
-**[DESIGN]** 本阶段 v1 采用单进程、单用户队列和单生产者。应用可以连续提交多个任务，设备一次执行一个 kernel，并按队列顺序推进。正常提交由用户态写包和敲门铃完成；驱动负责创建、映射、等待和销毁等资源管理操作。
+**[DESIGN]** 此前队列草案采用单个 Host 应用进程、单用户队列和单生产者。应用可以连续提交多个任务，设备一次执行一个 kernel，并按队列顺序推进。正常提交由用户态写包和敲门铃完成；驱动负责创建、映射、等待和销毁等资源管理操作。
 
 以下新增参数、寄存器和状态均属于本阶段设计。这里的“硬件规格”是 QEMU 教学设备对软件提供的行为约定，不代表 MI300X 的实际寄存器或内部实现。
 
@@ -190,34 +206,20 @@ RV32 a0 指向该页，kernel 按现有约定读取参数
 
 #### 2.2.3 CP 寄存器与 Doorbell
 
-保留现有 BAR 分工：BAR0 管控制，BAR2 对应 VRAM，BAR4 提供 Doorbell。在 BAR0 的 `0x0500` 分组增加以下寄存器。
+保留 BAR0 控制、BAR2 VRAM、BAR4 Doorbell 的分工。本轮在 BAR0 接入两个 CP 寄存器，均为对齐、小端的 32 位访问：
 
 ```text
-偏移     寄存器              作用
-0x0500   CP_CTRL             ENABLE、STOP
-0x0504   CP_STATUS           DISABLED、IDLE、RUNNING、STOPPING、QUIESCED、FAULT
-0x0508   ARENA_BASE_LO       共享区 DMA 地址低 32 位
-0x050c   ARENA_BASE_HI       共享区 DMA 地址高 32 位
-0x0510   ARENA_SIZE          本版必须为 64 KiB
-0x0514   QUEUE_ABI_VERSION   只读，本版为 1
-0x0518   FAULT_CODE          错误原因
-0x051c   FAULT_STAGE         取包、读取参数、执行或完成写回
-0x0520   FAULT_PACKET_ID     出错任务的包编号
-0x0524   FAULT_ADDR_LO       出错地址低 32 位
-0x0528   FAULT_ADDR_HI       出错地址高 32 位
+0x0500 CP_CTRL           bit 0 RESET_HOLD：保持复位；bit 1 PRESENT：存在 CP
+0x0504 CP_RESET_VECTOR   CP 地址空间的 32 位启动入口，本版也为 VRAM 偏移
 ```
 
-所有寄存器都是小端、32 位访问。地址配置只能在设备尚未启用或已经静止时修改，最后写 `ENABLE` 使整组配置生效。Doorbell 位于 BAR4 的 `0x0000`：
+远端设备默认 `CP_CTRL = 3`；Host 在保持复位时，经 BAR2 装载固件并设置入口，执行访问屏障和读回后清零 `RESET_HOLD`，读回为 2。入口默认 0，须位于 VRAM 内并按 2 字节对齐。非法入口或运行期间修改入口保留原值，通过 `ERROR_STATUS.INVALID_CMD` 报错。没有 CP 的单进程设备对这两个寄存器读零、写入忽略。完整复位语义见 [第一版规格第 2 节](<./CP_MEC 第一版规格.md#2-远端设备与-cp-固件启动>)。
 
-```text
-DOORBELL_KICK：32 位写入 1，通知 CP 检查队列
-```
+原有 `CP_CTRL.ENABLE/STOP` 与 `0x0504 CP_STATUS` 草案由上述启动接口替代。队列启停、共享区地址、队列状态和故障定位字段仍待复审，不在本轮固定新的寄存器偏移。原 BAR4 Doorbell 尚未接入原生 CP。
 
-Doorbell 回调只安排后续工作，不在回调中运行完整 kernel。重复写 Doorbell 不得重复执行任务。运行时只获得 Doorbell 所在页的映射，BAR0 控制寄存器继续由驱动访问。
+此前草案要求 Doorbell 只安排后续工作，不在回调中执行完整 kernel；重复通知不得重复执行任务，运行时只映射 Doorbell 所在页。这些要求留待队列实现时核对。
 
-**[BOUNDARY]** 本版 Doorbell 不携带包编号，CP 从共享 `wptr` 判断有哪些任务。这是教学门铃约定，不复刻 AMD 的门铃编码。
-
-> **[SOURCE]** 实验基线 `049ed3eb6ba06c3b464dcff8871fd4463a441569`：现有寄存器定义见 [hw/gpgpu/gpgpu_regs.h](https://github.com/hxfei-git/gpu-study-qemu/blob/049ed3eb6ba06c3b464dcff8871fd4463a441569/hw/gpgpu/gpgpu_regs.h#L15-L88) 的 [15–88 行](https://github.com/hxfei-git/gpu-study-qemu/blob/049ed3eb6ba06c3b464dcff8871fd4463a441569/hw/gpgpu/gpgpu_regs.h#L15-L88)；门铃采用 4 字节访问，见 [hw/gpgpu/gpgpu_doorbell.c](https://github.com/hxfei-git/gpu-study-qemu/blob/049ed3eb6ba06c3b464dcff8871fd4463a441569/hw/gpgpu/gpgpu_doorbell.c#L25-L32) 的 [25–32 行](https://github.com/hxfei-git/gpu-study-qemu/blob/049ed3eb6ba06c3b464dcff8871fd4463a441569/hw/gpgpu/gpgpu_doorbell.c#L25-L32)。这些源码用于核对现有布局；新增 CP 寄存器及其语义属于本节设计。
+**[BOUNDARY]** CP 的 32 位本地地址不限制原有 DMA 地址的位宽。双进程消息 DMA 保留完整设备地址，A 通过 PCI DMA 接口处理，并在启用时经过 SMMUv3。
 
 #### 2.2.4 AQL Packet、Kernel 描述对象与队列消费
 

@@ -23,7 +23,7 @@
 | ABI | Application Binary Interface | 应用二进制接口；本文用于描述软件与设备的数据和启动约定 |
 | ID | Identifier | 标识符；Packet ID 用于标识队列中的包 |
 | LLVM | LLVM（项目名称，源自 Low Level Virtual Machine） | 编译器基础设施项目；本文引用其 AMDGPU 后端文档 |
-| RV32 | 32-bit RISC-V | 本实验计算执行器采用的指令集方向，以及拟议控制核的指令集方向；具体支持范围分别约定 |
+| RV32 | 32-bit RISC-V | 本实验计算解释器采用的指令集，以及原生 CP 的 32 位模型；两者支持范围分别说明 |
 | VRAM | Video RAM | 设备显存；本实验由 QEMU 提供后备存储 |
 | DMA | Direct Memory Access | 直接内存访问 |
 | IOMMU | Input/Output Memory Management Unit | 输入输出内存管理单元 |
@@ -35,7 +35,7 @@
 | BAR | Base Address Register | PCIe 基址寄存器；用于描述设备的地址窗口 |
 | MMIO | Memory-Mapped Input/Output | 内存映射输入输出 |
 | PC | Program Counter | 程序计数器，保存取指位置 |
-| SRAM | Static Random-Access Memory | 静态随机存取存储器；本文用于拟议 CP 的私有存储 |
+| RAM | Random Access Memory | 随机存取存储器；本版 CP 使用现有 VRAM 的 RAM 后备存储 |
 | TCG | Tiny Code Generator | QEMU 的动态代码生成基础设施 |
 | SIMT | Single Instruction, Multiple Threads | 单指令、多线程执行模型 |
 | KIQ | Kernel Interface Queue | 驱动使用的内核接口队列 |
@@ -54,13 +54,15 @@
 
 ## 1. 分析范围与阅读顺序
 
+**[DESIGN] 当前确认范围：** 已确认的设计统一记录在 [第一版规格](<./CP_MEC 第一版规格.md>) 中。下文的单用户队列方案及其他参数保留为此前草案，后续随讨论逐项复审，不作为本轮已确认规格。
+
 第一阶段已经跑通应用到设备的计算流程，当前进入用户 AQL Queue、Doorbell、CP 与 Signal 阶段。接下来先确定 CP 的功能、输入输出和执行边界，再据此复审队列及任务协议。
 
 本文是友商分析与教学设计讨论稿。第 2、3 节解释任务流程与 AMD 功能，第 4、5 节记录教学设计要求和待复审的协议。第 6～10 节保存本轮讨论中的问题与回答，按实验目标、QEMU 执行模型、寄存器、启动流程、多队列状态的依赖顺序整理。问题保留原意和主要措辞，回答采用源码核验后的说明；重复问题共用必要的图示，不作为逐字聊天日志。实验阶段安排、寄存器和数据布局统一维护在 [QEMU GPGPU 四阶段实验大纲](<./QEMU GPGPU 实验大纲.md>) 中；本文不另设实验进度记录。
 
 **[BOUNDARY]** AMD 分析采用外部 Host CPU + MI300X 独立 GPU（CDNA 3）模型，围绕 AQL 计算提交路径展开。HSA 的 Packet Processor 是处理队列包的协议角色；AMD CP 及配合它工作的派发硬件承担相关功能。QEMU 中的教学 CP 是自定义模块，不能据其实现推定 MI300X 内部结构。
 
-当前已明确的目标是：在 PCIe GPGPU 内增加一个能执行自定义固件的独立控制核，让固件管理队列和派发任务。现有 RV32 计算执行器继续执行应用 kernel。本文新增的控制核方案仍是设计讨论，不能据此认定控制核或第二阶段已经实现。
+当前已明确的目标是：在 PCIe GPGPU 内增加一个能执行自定义固件的独立控制核，让固件管理队列和派发任务。现有 RV32 计算执行器继续执行应用 kernel。本轮先实现双进程设备、原生 CP 复位与固件运行；队列管理和派发仍属后续设计，第二阶段整体尚未完成。
 
 公开资料能够确认软件可见的行为、驱动配置和固件接口。CP 内部流水线、逐周期调度算法和吞吐数量不在本文结论范围内。Linux 源码中的固件加载函数也不能作为 CP 固件内部解析流程的实现源码。
 
@@ -434,7 +436,7 @@ MI300X 本文主线采用 PSP 固件加载路径。驱动请求 `gc_9_4_3_mec.bi
 
 > **提问：** 我觉得自定义固件的控制核，才是我真正的目标，因为这个更加贴近于实际，我可以在 QEMU 中再模拟一个 CP/MEC 核吗？
 
-**回答：** 可以。实验目标应改为在设备内部模拟一个具有独立取指、寄存器和私有存储状态的控制核。它执行你编译的固件，固件通过内部 DMA、队列和派发接口控制计算执行器。
+**回答：** 可以。实验目标是为设备接入一个具有独立取指、寄存器和复位状态的控制核，本版共享现有 VRAM，先执行你编译的基本固件；后续再通过内部 DMA、队列和派发接口控制计算执行器。
 
 **[DESIGN]** 可以采用自定义 RV32 标量控制核，以便使用现成工具链编译固件。这个选择借鉴的是“驱动加载固件、设备控制核执行固件”的结构。它不说明 AMD MEC 使用 RISC-V，也不承诺运行 AMD 的固件二进制。
 
@@ -446,9 +448,9 @@ MI300X 本文主线采用 PSP 固件加载路径。驱动请求 `gc_9_4_3_mec.bi
 >
 > **追问：** 先不用这样，你先回答我的问题，其实我是好奇，目前我是一个 A57 核 + GPGPU 核吗？
 
-**回答：** 在当前实验配置下，可以先理解为“A57 系统 CPU + 一块包含计算执行器的 PCIe GPGPU 设备”。“一块设备”与“一个核”是不同层面的数量：设备还包括寄存器、显存、DMA、中断和多个 lane 的执行状态。
+**回答：** 在第一阶段的单进程配置下，可以先理解为“A57 系统 CPU + 一块包含计算执行器的 PCIe GPGPU 设备”。“一块设备”与“一个核”是不同层面的数量：设备还包括寄存器、显存、DMA、中断和多个 lane 的执行状态。
 
-下图是当前 QEMU 对象与状态的逻辑关系，不是 MI300X 的物理结构图。
+下图是第一阶段单进程入口的 QEMU 对象与状态关系，不是 MI300X 的物理结构图。双进程与原生 CP 的扩展见第 7.4 节。
 
 ```text
 QEMU 模拟的机器
@@ -463,7 +465,7 @@ QEMU 模拟的机器
           从 VRAM 取出应用 kernel 指令并解释执行
 ```
 
-当前计算执行器实现了部分 RV32 整数、乘除及浮点操作，不能据此称为完整的 RV32 指令集实现。当前设备也还没有一个加载独立固件、持续保存控制程序执行上下文的 CP。
+当前计算执行器实现了部分 RV32 整数、乘除及浮点操作，不能据此称为完整的 RV32 指令集实现。第一阶段基线没有加载独立固件、持续保存控制程序上下文的 CP；本轮通过单独的 RISC-V QEMU 进程接入原生控制核。
 
 > **[SOURCE]** QEMU 教学仓库 `049ed3eb6ba06c3b464dcff8871fd4463a441569`：
 >
@@ -529,66 +531,52 @@ GPGPU 驱动 → PCIe BAR 寄存器 → CP 启动与状态控制
 
 > **提问：** 那我们回到 CP 的制定，我该如何给 PCIe 的 GPGPU 增加一个独立的核呢？感觉不太好搞啊。
 
-**回答：** 可以先在现有设备内部增加一个标量指令解释器，不必先把它注册为 Linux 可见的系统 CPU。独立控制核至少要有自己的 PC、通用寄存器、存储空间、复位状态，以及按固件指令修改这些状态的执行器。
+**回答：** 本轮用第二个 QEMU 进程承载 GPGPU，并接入 QEMU 原生 `rv32` CPU 作为 CP。A57 进程保留 Linux 与 PCIe 代理；设备进程保留原有计算解释器。两个进程通过 `vfio-user` 传递 BAR 访问、DMA 请求与中断，CP 的指令由设备进程中的 TCG 执行。
 
-**[DESIGN]** 第一版可按下面的结构实现，容量与命名均为讨论值，尚未冻结寄存器偏移。
-
-```text
-GPGPU 设备
-├─ Host 控制接口
-│    固件装载窗口、入口、START、RESET、状态和错误报告
-│
-├─ CP 标量控制核
-│    PC、32 个整数寄存器、私有 SRAM（建议从 64 KiB 开始）
-│    HALTED / RUNNING / WAITING / FAULT 状态
-│    独立的固件指令解释器
-│
-├─ CP 可访问的内部接口
-│    DMA 请求及结果、Doorbell 事件、计算派发及完成事件
-│
-└─ 现有 RV32 计算执行器
-     保留应用 kernel 的 lane、寄存器、PC 和计算数据
-```
-
-固件装载与运行按以下顺序展开：
+**[DESIGN]** Host 已能通过 BAR2 写入显存，接下来要把固件装到明确的偏移，并使默认保持复位的 CP 从该地址取指。以下图示说明本轮对象关系：
 
 ```text
-驱动取得 cp-fw.bin
-  → 把固件装入 CP 私有 SRAM
-  → 写 CP 入口与 START
-  → CP 从入口取指，初始化栈和固件数据
-  → 固件报告 FW_READY
-  → 驱动允许创建和启用队列
-
-Doorbell 到达
-  → 唤醒等待中的 CP
-  → 固件通过 DMA 读取 Packet
-  → 固件检查 Packet，写内部派发接口
-  → 计算执行器运行 kernel
-  → 固件处理完成事件并更新 Signal
+进程 A：A57 Linux
+  └─ PCIe 代理 ── BAR / 消息 DMA / 中断 ── 进程 B：gpgpu-cp
+                                           ├─ gpu0：寄存器、DMA、中断
+                                           ├─ VRAM：代码、数据、结果
+                                           │    ↑ Host 通过 BAR2 访问
+                                           │    ↑ CP 地址 0 起访问同一份存储
+                                           ├─ 原生 RV32 CP：独立 PC、寄存器、复位态
+                                           └─ 原 RV32 计算解释器：执行应用 kernel
 ```
 
-实现时，需要先分清以下几项边界。
+普通 `qemu-system-aarch64` 按 ARM 目标构建，因此原生 CP 放在 `qemu-system-riscv32` 中。`gpgpu-cp` 继承远端 machine，创建 `gpu0` 和一个原生 RV32 CPU；公共 GPGPU 模块通过回调控制 CP，RISC-V 专用实现留在 machine 中。原单进程入口继续可用。
 
-- **指令执行与队列策略：** QEMU C 代码实现指令、DMA 和设备接口；固件实现取包、验证和调度逻辑。如果固件只调用一个“处理整个 AQL 队列”的特殊指令，而实际策略仍全写在 QEMU C 代码中，就没有达到这次自定义固件的目标。
-- **控制状态与计算状态：** CP 拥有独立寄存器和 PC，不能直接借用一个正在执行 kernel 的 lane。可以复用经过整理的指令运算辅助代码，但两类执行上下文必须分开。
-- **固件工具链与指令覆盖：** 现有计算解释器只支持部分指令。要运行普通 C 固件，须按所选编译选项补齐启动代码、分支跳转、字节和半字访存等必需行为，并明确非法指令如何进入故障状态。
-- **异步推进：** 每次事件只执行有限数量的 CP 指令，再保存 PC 并交还 QEMU。可以先用虚拟时钟定时器，每次最多执行例如 1000 条指令；等待事件时停止取指，由 Doorbell 或完成事件唤醒。这个数值是调试用预算，不是硬件周期模型。
-- **地址与复位：** 32 位 CP 本地指针不限制 DMA 只能用 32 位地址。DMA 接口应保留完整 IOVA，并通过现有 PCI DMA 路径经过系统 IOMMU；复位需要取消后续事件并停止访问旧资源。
+CP 使用现有 VRAM 的 RAM 后备存储，地址 `0～vram_size-1` 对应相同的 VRAM 偏移。例如固件写在偏移 `0x4000`，Host 写 `BAR2 基址 + 0x4000`，CP 的启动地址填写 `0x4000`。不新增私有存储，也不永久预留固件分区；固件测试与原软件栈测试分别安排代码和结果位置。
 
-不能在一次 MMIO 回调里直接进入固件的永久循环，否则回调不会返回。计算执行器目前同步运行整个 kernel，也需要逐步改成可以保存进度、分段执行，才能满足运行中停止和状态查询要求。
+启动步骤为：
 
-普通 `qemu-system-aarch64` 构建按目标架构包含 CPU 实现，不能假定只创建一个 RISC-V CPU 对象就能在当前二进制里运行。设备内部解释器可以把第一版的改动限定在教学设备中；是否以后接入更完整的 CPU 模型，可以另行评估。
+```text
+Host 保持 CP 复位并读回确认
+  → 经 BAR2 装入固件与初始数据
+  → 设置 CP_RESET_VECTOR
+  → 执行访问屏障和读回，确认写入完成
+  → 清零 CP_CTRL.RESET_HOLD
+  → CP 取指、执行，并将结果写入 VRAM
+  → Host 经 BAR2 读取结果
+```
 
-> **[SOURCE]** QEMU 教学仓库 `049ed3eb6ba06c3b464dcff8871fd4463a441569`：
+BAR0 的 `0x0500 CP_CTRL` 保存复位保持位，并报告 CP 是否存在；`0x0504 CP_RESET_VECTOR` 保存 32 位入口。远端设备默认读回 `CP_CTRL = 3`，解除复位后为 2。入口默认 0，只能在保持复位时修改，须位于 VRAM 内且按 2 字节对齐。复位与释放在目标 CPU 线程中同步完成；重复写相同复位状态不会重新启动。完整定义与三种复位范围见 [第一版规格第 2 节](<./CP_MEC 第一版规格.md#2-远端设备与-cp-固件启动>)。
+
+BAR、DMA、计算解释器和冷复位对 VRAM 的写入需要使对应 TCG 翻译失效。这样 Host 复位 CP 后在相同地址覆盖固件，下一次启动才能执行新指令。最小验收使用明确的代码与结果偏移：默认保持复位时结果不变；解除复位后写出预期值；再复位并替换指令，从相同入口得到新值。
+
+**[BOUNDARY]** 本轮只实现基本固件运行，CP 尚未连接队列、Doorbell 事件、内部派发或异步 Host DMA。原同步计算与 DMA 在 CP 保持复位时继续使用。消息 DMA 保留完整设备地址，由 A 的 PCI DMA 接口访问 Host RAM，在启用时经过 SMMUv3。本版不支持断线重连和迁移。
+
+RISC-V 是本实验控制核的选择，不说明 AMD MEC 使用 RISC-V，也不承诺执行 AMD 固件二进制。后续队列协议仍须明确 Packet 发布、完成 Signal 和停止条件；普通 DMA 读后写不能在并发写者存在时替代原子递减。
+
+> **[SOURCE] 可选源码索引** QEMU 教学仓库提交 `1c41928fbeff4dcb4c9baddf9fd58a50a3d3133a`，基于 `b83b51f6b5fc48024c2dab437b38328f2b135ff5`；以下索引对应本轮新增实现。
 >
-> - [configs/targets/aarch64-softmmu.mak](https://github.com/hxfei-git/gpu-study-qemu/blob/049ed3eb6ba06c3b464dcff8871fd4463a441569/configs/targets/aarch64-softmmu.mak#L1-L2)（[1–2 行](https://github.com/hxfei-git/gpu-study-qemu/blob/049ed3eb6ba06c3b464dcff8871fd4463a441569/configs/targets/aarch64-softmmu.mak#L1-L2)）指定 ARM 目标
-> - [meson.build](https://github.com/hxfei-git/gpu-study-qemu/blob/049ed3eb6ba06c3b464dcff8871fd4463a441569/meson.build#L4240-L4251)（[4240–4251 行](https://github.com/hxfei-git/gpu-study-qemu/blob/049ed3eb6ba06c3b464dcff8871fd4463a441569/meson.build#L4240-L4251)）展示按目标组织架构构建
-> - [hw/gpgpu/gpgpu_dma.c](https://github.com/hxfei-git/gpu-study-qemu/blob/049ed3eb6ba06c3b464dcff8871fd4463a441569/hw/gpgpu/gpgpu_dma.c#L41-L65)（[41–65 行](https://github.com/hxfei-git/gpu-study-qemu/blob/049ed3eb6ba06c3b464dcff8871fd4463a441569/hw/gpgpu/gpgpu_dma.c#L41-L65)）使用 PCI DMA 访问接口并检查事务结果。[include/qemu/aio.h](https://github.com/hxfei-git/gpu-study-qemu/blob/049ed3eb6ba06c3b464dcff8871fd4463a441569/include/qemu/aio.h#L464-L471)（[464–471 行](https://github.com/hxfei-git/gpu-study-qemu/blob/049ed3eb6ba06c3b464dcff8871fd4463a441569/include/qemu/aio.h#L464-L471)）还提醒：自我重新调度的底半部回调可能立即再次执行，因此不能把它当作必然让出的固件无限循环。
-
-**[DESIGN]** 最小验证先让固件计算 `20 + 22`，将 42 写入结果寄存器后停止；替换固件为 `20 + 23`，无需重新编译 QEMU 就得到 43。然后依次加入 C 固件、DMA、内部计算派发和 AQL 队列。这样每一步都能验证“正在执行固件指令”，而不是只验证设备回调返回了预设值。
-
-共享 Signal 的原子递减还需要明确的原子服务。普通 DMA 读出数值再写回，不能在存在并发写入时替代原子递减；第一版若只支持单任务、单写者的 `1 → 0`，应继续标为教学完成语义。
+> - CPU 线程中的复位、暂停与启动：[hw/riscv/gpgpu-cp.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/riscv/gpgpu-cp.c:38:1)，[38–102 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/riscv/gpgpu-cp.c:38:1)。
+> - 创建 gpu0、原生 RV32 与共享 VRAM 映射：[hw/riscv/gpgpu-cp.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/riscv/gpgpu-cp.c:104:1)，[104–147 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/riscv/gpgpu-cp.c:104:1)。
+> - 控制寄存器默认值、入口校验与状态转换：[hw/gpgpu/gpgpu_cp.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu_cp.c:17:1)，[17–74 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu_cp.c:17:1)。
+> - BAR 写入经过 RAM 地址空间：[hw/gpgpu/gpgpu.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu.c:32:1)，[32–49 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu.c:32:1)。
+> - 冷复位停止 CP 后清零 VRAM：[hw/gpgpu/gpgpu.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu.c:136:1)，[136–145 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu.c:136:1)。
 
 ## 8. Host 可见寄存器与控制核内部状态
 
@@ -614,7 +602,7 @@ CP 固件读 Packet、写设备内部接口
   → 组织计算与完成处理
 ```
 
-BAR 描述设备的地址窗口。映射窗口后，Host 访问某个偏移，QEMU 回调再读写对应状态。可以暴露 `CP_ENTRY`、`CP_CTRL`、`CP_STATUS`、`CP_RESULT` 这样的教学寄存器，也可以给固件装载提供地址与数据窗口。上述名称是实验拟议名称，不是 AMD 寄存器。
+BAR 描述设备的地址窗口。映射窗口后，Host 访问某个偏移，QEMU 回调再读写对应状态。本轮通过 `CP_CTRL` 控制复位、`CP_RESET_VECTOR` 设置入口，固件经 BAR2 装载，结果保存在 VRAM。后续队列状态与内部派发接口仍待讨论。上述接口属于教学设备，不是 AMD 寄存器。
 
 控制核的通用寄存器、当前 PC 和内部临时状态可以保留在设备内部。只有调试或管理确有需要的部分才映射出去。Host 能操作启动寄存器，与 Host 能逐个访问控制核所有寄存器，是两个不同的设计选择。
 

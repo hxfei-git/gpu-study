@@ -5220,7 +5220,7 @@
 
 
                 
-              </div><section class="notes-wrap"><h2>我的笔记</h2><p class="notes-help">这里可以直接输入；要改上方原文，点顶部「编辑正文」。写完请点「保存 HTML」。</p><div class="personal-notes" contenteditable="true" role="textbox" aria-multiline="true" aria-label="GPGPU 虚拟加速器实验手册的笔记" data-placeholder="写下你的理解、疑问，或粘贴代码与实验记录……"></div></section></article><article class="lesson" id="page-stage2--gpu--gpu-datasheet" data-page-id="stage2--gpu--gpu-datasheet" data-portable-saved-at="0"><div class="chapter-meta"><span class="chapter-number">14 / 22 · GPGPU 硬件手册</span><a href="https://qemu.gevico.online/exercise/2026/stage2/gpu/gpu-datasheet/" target="_blank" rel="noopener noreferrer">原网页 ↗</a></div><details class="local-toc"><summary>本页目录 · 14 节</summary><ul><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--1">1. 概述</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--2">2. 文档约定</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--3">3. 系统架构</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--4-bar">4. 地址空间与 BAR 映射</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--5-0x0000">5. 设备信息寄存器 (0x0000)</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--6-0x0100">6. 全局控制寄存器 (0x0100)</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--7-0x0200">7. 中断控制寄存器 (0x0200)</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--8-0x0300">8. 内核分发寄存器 (0x0300)</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--9-dma-0x0400">9. DMA 引擎寄存器 (0x0400)</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--10-simt-0x1000">10. SIMT 上下文寄存器 (0x1000)</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--11-0x2000">11. 同步寄存器 (0x2000)</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--12">12. 执行模型</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--13">13. 指令集</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--14">14. 限制与已知约束</a></li></ul></details><div class="source-content md-typeset" spellcheck="false">
+              </div><section class="notes-wrap"><h2>我的笔记</h2><p class="notes-help">这里可以直接输入；要改上方原文，点顶部「编辑正文」。写完请点「保存 HTML」。</p><div class="personal-notes" contenteditable="true" role="textbox" aria-multiline="true" aria-label="GPGPU 虚拟加速器实验手册的笔记" data-placeholder="写下你的理解、疑问，或粘贴代码与实验记录……"></div></section></article><article class="lesson" id="page-stage2--gpu--gpu-datasheet" data-page-id="stage2--gpu--gpu-datasheet" data-portable-saved-at="0"><div class="chapter-meta"><span class="chapter-number">14 / 22 · GPGPU 硬件手册</span><a href="https://qemu.gevico.online/exercise/2026/stage2/gpu/gpu-datasheet/" target="_blank" rel="noopener noreferrer">原网页 ↗</a></div><details class="local-toc"><summary>本页目录 · 15 项</summary><ul><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--1">1. 概述</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--2">2. 文档约定</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--3">3. 系统架构</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--4-bar">4. 地址空间与 BAR 映射</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--5-0x0000">5. 设备信息寄存器 (0x0000)</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--6-0x0100">6. 全局控制寄存器 (0x0100)</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--7-0x0200">7. 中断控制寄存器 (0x0200)</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--8-0x0300">8. 内核分发寄存器 (0x0300)</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--9-dma-0x0400">9. DMA 引擎寄存器 (0x0400)</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--95-cp">9.5 CP 复位与固件入口 (0x0500)</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--10-simt-0x1000">10. SIMT 上下文寄存器 (0x1000)</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--11-0x2000">11. 同步寄存器 (0x2000)</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--12">12. 执行模型</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--13">13. 指令集</a></li><li><a href="#fragment-page-stage2--gpu--gpu-datasheet--14">14. 限制与已知约束</a></li></ul></details><div class="source-content md-typeset" spellcheck="false">
                 
                   
   
@@ -5228,6 +5228,36 @@
 
 
 <h1 id="fragment-page-stage2--gpu--gpu-datasheet--gpgpu">GPGPU 虚拟加速器硬件手册（教学版）<a class="headerlink" href="#fragment-page-stage2--gpu--gpu-datasheet--gpgpu" title="Permanent link">¶</a></h1>
+<div class="table-scroll"><table><thead><tr><th>缩写</th><th>英文全称</th><th>中文含义</th></tr></thead><tbody>
+<tr><td>GPGPU</td><td>General-Purpose Computing on Graphics Processing Units</td><td>利用 GPU 进行通用计算</td></tr>
+<tr><td>GPU</td><td>Graphics Processing Unit</td><td>图形处理器</td></tr>
+<tr><td>QEMU</td><td>Quick Emulator</td><td>仿真与虚拟化工具</td></tr>
+<tr><td>CPU</td><td>Central Processing Unit</td><td>中央处理器</td></tr>
+<tr><td>CP</td><td>Command Processor</td><td>命令处理器</td></tr>
+<tr><td>RV32</td><td>32-bit RISC-V</td><td>32 位 RISC-V；原生 CP 与计算解释器的支持范围分别说明</td></tr>
+<tr><td>TCG</td><td>Tiny Code Generator</td><td>QEMU 动态代码生成基础设施</td></tr>
+<tr><td>PCI</td><td>Peripheral Component Interconnect</td><td>外设互连总线</td></tr>
+<tr><td>PCIe</td><td>Peripheral Component Interconnect Express</td><td>高速外设互连总线</td></tr>
+<tr><td>BAR</td><td>Base Address Register</td><td>PCI 基址寄存器</td></tr>
+<tr><td>MMIO</td><td>Memory-Mapped Input/Output</td><td>内存映射输入输出</td></tr>
+<tr><td>RAM</td><td>Random Access Memory</td><td>随机存取存储器</td></tr>
+<tr><td>VRAM</td><td>Video RAM</td><td>设备显存</td></tr>
+<tr><td>DMA</td><td>Direct Memory Access</td><td>直接内存访问</td></tr>
+<tr><td>IOMMU</td><td>Input/Output Memory Management Unit</td><td>输入输出内存管理单元</td></tr>
+<tr><td>IOVA</td><td>Input/Output Virtual Address</td><td>设备 DMA 虚拟地址</td></tr>
+<tr><td>SMMUv3</td><td>System Memory Management Unit version 3</td><td>Arm 系统内存管理单元第三版</td></tr>
+<tr><td>MSI</td><td>Message Signaled Interrupts</td><td>消息中断</td></tr>
+<tr><td>MSI-X</td><td>Message Signaled Interrupts Extended</td><td>扩展消息中断</td></tr>
+<tr><td>IRQ</td><td>Interrupt Request</td><td>中断请求</td></tr>
+<tr><td>SIMT</td><td>Single Instruction, Multiple Threads</td><td>单指令、多线程</td></tr>
+<tr><td>CU</td><td>Compute Unit</td><td>计算单元</td></tr>
+<tr><td>PC</td><td>Program Counter</td><td>程序计数器</td></tr>
+<tr><td>BF16</td><td>Brain Floating Point 16</td><td>16 位 Brain 浮点格式</td></tr>
+<tr><td>FP32</td><td>32-bit Floating Point</td><td>32 位浮点格式</td></tr>
+<tr><td>FP8</td><td>8-bit Floating Point</td><td>8 位浮点格式</td></tr>
+<tr><td>FP4</td><td>4-bit Floating Point</td><td>4 位浮点格式</td></tr>
+</tbody></table></div>
+
 <div class="admonition warning">
 <p class="admonition-title">免责声明</p>
 <p>本手册描述的是用于 QEMU 训练营的 <strong>教学用虚拟 GPGPU 加速器</strong> 的规格与编程模型，并不对应任何实体芯片。
@@ -5379,6 +5409,17 @@
 </tbody>
 </table>
 </div><p>命令行示例：<code>-device gpgpu,num_cus=8,vram_size=128M</code></p>
+<h3 id="fragment-page-stage2--gpu--gpu-datasheet--34-remote">3.4 双进程的 BAR、DMA 与中断路径<a class="headerlink" href="#fragment-page-stage2--gpu--gpu-datasheet--34-remote" title="Permanent link">¶</a></h3>
+<p><strong>[DESIGN]</strong> A57 Linux 运行在进程 A，通过 <code>vfio-user-pci</code> 访问进程 B 的 <code>gpu0</code>。进程 B 使用 <code>gpgpu-cp</code> machine，包含原有寄存器、VRAM、DMA、中断与计算解释器，以及由 TCG 执行的原生 RV32 CP。CP 默认保持复位；原同步计算和 DMA 可继续使用。</p>
+<pre><code class="language-text">进程 A：A57 Linux
+  └─ PCIe 设备代理
+       ├─ 配置空间、BAR0/BAR2/BAR4 请求 ─→ 进程 B：GPGPU
+       ├─ PCI DMA 接口 ←─ B 的读写请求       ├─ 原计算解释器
+       │    └─ SMMUv3（启用时）→ Host RAM    └─ 原生 RV32 CP
+       └─ Linux 驱动 ←─ 完成与错误中断            └─ 访问同一份 VRAM
+</code></pre>
+<p><code>none</code> 与 <code>smmuv3</code> 都使用 <code>x-dma-via-socket=on</code>：B 把设备 DMA 地址、方向和数据请求发送给 A，A 调用该 PCI 设备的 DMA 接口，并返回数据或错误。SMMUv3 的翻译、权限检查和故障记录保留在 A。该启动选项只选择通信方式，不增加硬件寄存器。</p>
+<p>BAR 访问通过消息转发，MSI-X 表和屏蔽状态在两端同步。计算完成、DMA 完成和错误事件沿原有向量传给 A 的 Linux 驱动。DMA 继续同步搬运数据，并通过原定时器报告完成。本版不支持断线重连和迁移。</p>
 <h2 id="fragment-page-stage2--gpu--gpu-datasheet--4-bar">4. 地址空间与 BAR 映射<a class="headerlink" href="#fragment-page-stage2--gpu--gpu-datasheet--4-bar" title="Permanent link">¶</a></h2>
 <h3 id="fragment-page-stage2--gpu--gpu-datasheet--41-bar">4.1 BAR 总览<a class="headerlink" href="#fragment-page-stage2--gpu--gpu-datasheet--41-bar" title="Permanent link">¶</a></h3>
 <div class="table-scroll"><table>
@@ -5452,6 +5493,12 @@
 <td><code>0x0400</code></td>
 <td><code>0x04FF</code></td>
 <td>源/目标地址、大小、控制、状态</td>
+</tr>
+<tr>
+<td>CP 控制</td>
+<td><code>0x0500</code></td>
+<td><code>0x05FF</code></td>
+<td>复位保持与固件入口；仅连接 CP 时有效</td>
 </tr>
 <tr>
 <td>SIMT 上下文</td>
@@ -5732,6 +5779,7 @@
 <li>SIMT 上下文清零</li>
 <li>内核参数、DMA 状态清零</li>
 <li>VRAM <strong>不</strong>清零</li>
+<li>连接 CP 时，使 CP 保持复位并将入口恢复为 0</li>
 </ul>
 <h2 id="fragment-page-stage2--gpu--gpu-datasheet--7-0x0200">7. 中断控制寄存器 (0x0200)<a class="headerlink" href="#fragment-page-stage2--gpu--gpu-datasheet--7-0x0200" title="Permanent link">¶</a></h2>
 <h3 id="fragment-page-stage2--gpu--gpu-datasheet--71">7.1 寄存器映射<a class="headerlink" href="#fragment-page-stage2--gpu--gpu-datasheet--71" title="Permanent link">¶</a></h3>
@@ -6063,10 +6111,30 @@
 </table>
 </div><h3 id="fragment-page-stage2--gpu--gpu-datasheet--94">9.4 编程模型<a class="headerlink" href="#fragment-page-stage2--gpu--gpu-datasheet--94" title="Permanent link">¶</a></h3>
 <ul>
-<li><strong>Host→VRAM</strong>：<code>SRC</code> = 主机物理地址，<code>DST</code> = VRAM 偏移，<code>DIR = 0</code>。</li>
-<li><strong>VRAM→Host</strong>：<code>SRC</code> = VRAM 偏移，<code>DST</code> = 主机物理地址，<code>DIR = 1</code>。</li>
+<li><strong>Host→VRAM</strong>：<code>SRC</code> = Host 端 DMA 地址（启用 SMMUv3 时为 IOVA），<code>DST</code> = VRAM 偏移，<code>DIR = 0</code>。</li>
+<li><strong>VRAM→Host</strong>：<code>SRC</code> = VRAM 偏移，<code>DST</code> = Host 端 DMA 地址（启用 SMMUv3 时为 IOVA），<code>DIR = 1</code>。</li>
 <li>写 <code>DMA_CTRL.START = 1</code> 触发传输。数据同步拷贝，完成通过 1ms 虚拟定时器通知。</li>
 </ul>
+<h3 id="fragment-page-stage2--gpu--gpu-datasheet--95-cp">9.5 CP 复位与固件入口（0x0500）<a class="headerlink" href="#fragment-page-stage2--gpu--gpu-datasheet--95-cp" title="Permanent link">¶</a></h3>
+<p><strong>[DESIGN]</strong> Host 已取得 BAR0、BAR2 映射，接下来要装载固件并使 CP 从指定入口执行。CP 的地址 <code>0～vram_size-1</code> 映射 VRAM 的相同字节偏移；例如入口为 <code>0x1000</code>，Host 写 <code>BAR2 基址 + 0x1000</code>，CP 从地址 <code>0x1000</code> 取指。两者访问同一份存储，不复制显存，也不永久预留固件分区。</p>
+<pre><code class="language-text">Host 写 CP_CTRL.RESET_HOLD = 1，读回确认
+  → 通过 BAR2 装载代码、数据和初始结果
+  → 设置 CP_RESET_VECTOR（CP 地址，也为 VRAM 偏移）
+  → 执行访问屏障和读回，确认写入完成
+  → 清零 RESET_HOLD
+  → CP 从入口执行，把结果写回 VRAM
+  → Host 经 BAR2 读取结果
+</code></pre>
+<h4 id="fragment-page-stage2--gpu--gpu-datasheet--951-cp-ctrl">9.5.1 CP_CTRL（0x0500）<a class="headerlink" href="#fragment-page-stage2--gpu--gpu-datasheet--951-cp-ctrl" title="Permanent link">¶</a></h4>
+<p>对齐、小端的 32 位寄存器。bit 0 <code>RESET_HOLD</code> 可读写，默认 1；bit 1 <code>PRESENT</code> 只读，连接 CP 时为 1。远端设备默认读回 3，解除复位后读回 2。保留位读零、写入忽略，写 <code>PRESENT</code> 忽略。</p>
+<p>置位 <code>RESET_HOLD</code> 使 CP 恢复原生复位状态并保持不取指；清零后从入口运行。重复写入相同复位状态不会重新启动 CPU。复位和启动在目标 CPU 线程中同步完成，Host 可通过读回确认。</p>
+<h4 id="fragment-page-stage2--gpu--gpu-datasheet--952-cp-reset-vector">9.5.2 CP_RESET_VECTOR（0x0504）<a class="headerlink" href="#fragment-page-stage2--gpu--gpu-datasheet--952-cp-reset-vector" title="Permanent link">¶</a></h4>
+<p>对齐、小端的 32 位启动地址寄存器，默认 0。只有保持复位时可修改；地址必须位于 VRAM 内，并满足 RV32 的 2 字节指令对齐。有效修改同步更新 CPU 复位向量和复位态 PC。非法地址或运行期间修改入口时保留原值，并通过已有 <code>ERROR_STATUS.INVALID_CMD</code> 报错。</p>
+<p>单进程设备没有连接 CP 时，这两个寄存器读零、写入忽略。</p>
+<h4 id="fragment-page-stage2--gpu--gpu-datasheet--953-cp-reset">9.5.3 复位范围与固件替换<a class="headerlink" href="#fragment-page-stage2--gpu--gpu-datasheet--953-cp-reset" title="Permanent link">¶</a></h4>
+<p>CP 单独复位保留 VRAM、入口和原 DMA、派发、中断状态。<code>GLOBAL_CTRL.RESET</code> 复位设备状态并使 CP 回到保持复位、入口为 0 的默认状态，VRAM 保留。设备冷复位先停止 CP，再清零 VRAM 并恢复全部默认状态。<code>GLOBAL_CTRL.ENABLE</code> 不自动解除 CP 复位。</p>
+<p>替换固件时先保持 CP 复位并读回确认，再通过 BAR2 覆盖原代码、设置入口、执行屏障和读回，最后解除复位。BAR、DMA、计算解释器和冷复位的 VRAM 写入会使修改范围的 TCG 翻译失效，支持从相同地址执行新固件。固件测试与原软件栈测试分别运行，并明确各自的代码、结果地址。</p>
+<p><strong>[BOUNDARY]</strong> 本轮 CP 仅执行基本固件、访问本地 VRAM，尚未处理队列、Doorbell 事件、计算派发或异步 Host DMA。该教学接口不作为 MI300X 的寄存器或控制核结构结论。</p>
 <h2 id="fragment-page-stage2--gpu--gpu-datasheet--10-simt-0x1000">10. SIMT 上下文寄存器 (0x1000)<a class="headerlink" href="#fragment-page-stage2--gpu--gpu-datasheet--10-simt-0x1000" title="Permanent link">¶</a></h2>
 <h3 id="fragment-page-stage2--gpu--gpu-datasheet--101">10.1 寄存器映射<a class="headerlink" href="#fragment-page-stage2--gpu--gpu-datasheet--101" title="Permanent link">¶</a></h3>
 <div class="table-scroll"><table>
