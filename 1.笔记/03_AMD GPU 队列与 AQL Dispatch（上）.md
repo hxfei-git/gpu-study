@@ -69,7 +69,7 @@
 | PCIe    | Peripheral Component Interconnect Express       | 高速外设互连总线                                                      |
 | PDD     | Process Device Data                             | KFD 中某个进程在某个 GPU 上的状态                                     |
 | PFN     | Page Frame Number                               | 物理页帧号                                                            |
-| PM4     | AMD PM4                                         | AMD GPU 的一类底层命令包协议；本篇重点看 HWS 控制包                    |
+| PM4     | AMD PM4                                         | AMD GPU 的一类底层命令包协议；本篇重点看 HWS 控制包                   |
 | PQM     | Process Queue Manager                           | KFD 进程队列管理器，管理该进程的 Queue ID 和 Queue 列表               |
 | PTE     | Page Table Entry                                | 页表项                                                                |
 | QPD     | Queue Process Device Data                       | PDD 内嵌的 Queue 与调度状态；源码类型为`qcm_process_device`         |
@@ -124,19 +124,19 @@
 | Wave             | AMD GPU 成批执行 Work-item 的执行单位；本文 MI300 固定为 64 Lane                                 |
 | Work Distributor | 本文对“把 Work-group/Wave 分配给 CU 的硬件前端”的概念性称呼；具体模块名随 GPU 硬件架构版本变化 |
 
-| 章节    | 主要内容                           | 贯穿案例所在阶段                            |
-| ------- | ---------------------------------- | ------------------------------------------- |
-| [第 0 章](#0-从内存准备到-gpu-任务执行) | 从内存准备到 GPU 任务执行的条件    | 固定一个`vector_add` 任务和三条时间线     |
-| [第 1 章](#1-amd-hsa-计算栈与-queue-对象地图) | AMD HSA 计算栈与 Queue 对象        | 建立层级图和对象地图                        |
-| [第 2 章](#2-queue-创建从-rocr-到-kfd) | AQL Queue 的创建与资源准备         | 内存准备、对象管理、资源保护与 Doorbell     |
-| [第 3 章](#3-mi300-硬件结构queue-驻留与-mqd-装载) | MI300 硬件、Queue 驻留与 MQD 装载  | 硬件结构、多 XCC 分工、活动条件、驻留与恢复 |
+| 章节                                             | 主要内容                          | 贯穿案例所在阶段                            |
+| ------------------------------------------------ | --------------------------------- | ------------------------------------------- |
+| [第 0 章](#0-从内存准备到-gpu-任务执行)           | 从内存准备到 GPU 任务执行的条件   | 固定一个`vector_add` 任务和三条时间线     |
+| [第 1 章](#1-amd-hsa-计算栈与-queue-对象地图)     | AMD HSA 计算栈与 Queue 对象       | 建立层级图和对象地图                        |
+| [第 2 章](#2-queue-创建从-rocr-到-kfd)            | AQL Queue 的创建与资源准备        | 内存准备、对象管理、资源保护与 Doorbell     |
+| [第 3 章](#3-mi300-硬件结构queue-驻留与-mqd-装载) | MI300 硬件、Queue 驻留与 MQD 装载 | 硬件结构、多 XCC 分工、活动条件、驻留与恢复 |
 
 **[BOUNDARY]** 本文固定采用外部 Host CPU + **AMD Instinct MI300X / CDNA 3** 的学习模型，通过 PCIe 连接。Wave 使用 wave64，Queue 寄存器和回调按本地 GFX9.4.3 路径核对。多 XCC 案例固定整卡 8 个 XCC 组成一个逻辑 GPU；实际实验另行核对设备分区和软件配置。
 
 本文采用以下固定证据基线：
 
-- [MI300 / CDNA 3 ISA](<../3.资料/amd-instinct-mi300-cdna3-instruction-set-architecture.pdf>)（封面日期 2025-08-05），执行模型重点见 §1.1、§2、§3、§4.3，原文第 4～13、19 页；
-- AMD 作者论文 [Realizing the AMD Exascale Heterogeneous Processor Vision](<../3.资料/isca2024_exascale.pdf>)（ISCA 2024，作者版本），上篇第 3 章结合 §VII 的 MI300X 组件复用说明，使用 §IV-B 的 XCD 结构和 §VI-A 的多 XCD 协作机制；[本地中文译文](<../3.资料/isca2024_exascale_中文全译.pdf>)用于辅助阅读，非官方译本，页码与英文版分别标注；
+- [MI300 / CDNA 3 ISA](../3.资料/amd-instinct-mi300-cdna3-instruction-set-architecture.pdf)（封面日期 2025-08-05），执行模型重点见 §1.1、§2、§3、§4.3，原文第 4～13、19 页；
+- AMD 作者论文 [Realizing the AMD Exascale Heterogeneous Processor Vision](../3.资料/isca2024_exascale.pdf)（ISCA 2024，作者版本），上篇第 3 章结合 §VII 的 MI300X 组件复用说明，使用 §IV-B 的 XCD 结构和 §VI-A 的多 XCD 协作机制；[本地中文译文](../3.资料/isca2024_exascale_中文全译.pdf)用于辅助阅读，非官方译本，页码与英文版分别标注；
 - HSA Platform System Architecture Specification 1.2，重点是 §2.8“User mode queuing”和 §2.9“Architected Queuing Language”；
 - Linux `248951ddc14de84de3910f9b13f51491a8cd91df`；
 - ROCr `ba56a24c6132c5d195686ae4adf969ca1222fbba`；
@@ -345,10 +345,10 @@ Queue 创建时，ROCr、HSAKMT 和 KFD 建立 Ring、Doorbell 与内核 Queue�
 
 > **[SOURCE] 可选源码索引**
 >
-> - 固定 CLR 基线 `81277d69e3352e7144ced2ee9601484f9b48d950` 的 [`README.md`](<../2.源码/rocm-clr/README.md>) 第 1～3、21～23 行说明：CLR 是 Compute Language Runtime，`hipamd` 实现 AMD 平台上的 HIP，`opencl` 实现 OpenCL，`rocclr` 是两者共用的计算 Runtime；
-> - [`rocclr/cmake/ROCclrHSA.cmake`](<../2.源码/rocm-clr/rocclr/cmake/ROCclrHSA.cmake>) 第 23～36 行显示，`rocclr` 的 ROCr 后端包含 HSA 头文件并链接 `hsa-runtime64`；[`rocclr/device/rocm/rocvirtual.cpp`](<../2.源码/rocm-clr/rocclr/device/rocm/rocvirtual.cpp>) 第 1184～1293 行显示，普通 Dispatch 直接写 `gpu_queue_->base_address`、发布 Header 并写 `doorbell_signal`；
-> - 固定 ROCr 基线 `ba56a24c6132c5d195686ae4adf969ca1222fbba` 的 [`runtime/docs/what-is-rocr-runtime.rst`](<../2.源码/rocr-runtime/runtime/docs/what-is-rocr-runtime.rst>) 第 10～29 行说明 ROCr 是 AMD 的 HSA Runtime 实现，并提供 Agent、Signal、AQL Dispatch 和内存管理等接口；
-> - ROCr [`README.md`](<../2.源码/rocr-runtime/README.md>) 第 6～8 行区分 HSA Runtime 与 `libhsakmt`；[`libhsakmt/README.md`](<../2.源码/rocr-runtime/libhsakmt/README.md>) 第 1～10 行说明 `libhsakmt` 提供访问内核驱动的用户态接口。
+> - 固定 CLR 基线 `81277d69e3352e7144ced2ee9601484f9b48d950` 的 [`README.md`](../2.源码/rocm-clr/README.md) 第 1～3、21～23 行说明：CLR 是 Compute Language Runtime，`hipamd` 实现 AMD 平台上的 HIP，`opencl` 实现 OpenCL，`rocclr` 是两者共用的计算 Runtime；
+> - [`rocclr/cmake/ROCclrHSA.cmake`](../2.源码/rocm-clr/rocclr/cmake/ROCclrHSA.cmake) 第 23～36 行显示，`rocclr` 的 ROCr 后端包含 HSA 头文件并链接 `hsa-runtime64`；[`rocclr/device/rocm/rocvirtual.cpp`](../2.源码/rocm-clr/rocclr/device/rocm/rocvirtual.cpp) 第 1184～1293 行显示，普通 Dispatch 直接写 `gpu_queue_->base_address`、发布 Header 并写 `doorbell_signal`；
+> - 固定 ROCr 基线 `ba56a24c6132c5d195686ae4adf969ca1222fbba` 的 [`runtime/docs/what-is-rocr-runtime.rst`](../2.源码/rocr-runtime/runtime/docs/what-is-rocr-runtime.rst) 第 10～29 行说明 ROCr 是 AMD 的 HSA Runtime 实现，并提供 Agent、Signal、AQL Dispatch 和内存管理等接口；
+> - ROCr [`README.md`](../2.源码/rocr-runtime/README.md) 第 6～8 行区分 HSA Runtime 与 `libhsakmt`；[`libhsakmt/README.md`](../2.源码/rocr-runtime/libhsakmt/README.md) 第 1～10 行说明 `libhsakmt` 提供访问内核驱动的用户态接口。
 
 ### 1.1 “Queue”可能指以下五种对象
 
@@ -508,9 +508,9 @@ hsa_queue_t → AQL Ring   ：一对一
 >
 > 以下路径均来自固定 CLR 基线 `81277d69e3352e7144ced2ee9601484f9b48d950`：
 >
-> - `hipStreamCreate() → hip::Stream`：[`hipamd/src/hip_stream.cpp`](<../2.源码/rocm-clr/hipamd/src/hip_stream.cpp>) 第 18～30、188～201、274～281 行；
-> - `HostQueue → VirtualGPU → acquireQueue()`：[`rocclr/platform/commandqueue.hpp`](<../2.源码/rocm-clr/rocclr/platform/commandqueue.hpp>) 第 159～175 行，以及 [`rocclr/device/rocm/rocvirtual.cpp`](<../2.源码/rocm-clr/rocclr/device/rocm/rocvirtual.cpp>) 第 1737～1758、1877～1887 行；
-> - 复用已有 Queue 或调用 ROCr 创建新 Queue：[`rocclr/device/rocm/rocdevice.cpp`](<../2.源码/rocm-clr/rocclr/device/rocm/rocdevice.cpp>) 第 3135～3175 行。
+> - `hipStreamCreate() → hip::Stream`：[`hipamd/src/hip_stream.cpp`](../2.源码/rocm-clr/hipamd/src/hip_stream.cpp) 第 18～30、188～201、274～281 行；
+> - `HostQueue → VirtualGPU → acquireQueue()`：[`rocclr/platform/commandqueue.hpp`](../2.源码/rocm-clr/rocclr/platform/commandqueue.hpp) 第 159～175 行，以及 [`rocclr/device/rocm/rocvirtual.cpp`](../2.源码/rocm-clr/rocclr/device/rocm/rocvirtual.cpp) 第 1737～1758、1877～1887 行；
+> - 复用已有 Queue 或调用 ROCr 创建新 Queue：[`rocclr/device/rocm/rocdevice.cpp`](../2.源码/rocm-clr/rocclr/device/rocm/rocdevice.cpp) 第 3135～3175 行。
 >
 > ROCr、HSAKMT 和 KFD 的 Queue 创建源码分别在第 2.1～2.8 节和第 3.0～3.3 节展开。
 
@@ -579,7 +579,7 @@ read_index  = 0
 
 CP/MEC 根据 HQD 定位这条 Ring，读取 `slot 0` 并启动 Kernel。硬件消费该 Packet 后，`read_index` 前进到 1。Ring 的 slot 保存 Packet，`hsa_queue_t` 提供 Ring 地址和 Doorbell 等提交入口信息。
 
-> **[SOURCE]** 固定 CLR 基线 [`rocclr/device/rocm/rocvirtual.cpp`](<../2.源码/rocm-clr/rocclr/device/rocm/rocvirtual.cpp>) 第 1184～1276 行依次取得 write index、用掩码定位 slot、复制 Packet、以 release 语义发布 Header，并把 Packet ID 写入 Doorbell。
+> **[SOURCE]** 固定 CLR 基线 [`rocclr/device/rocm/rocvirtual.cpp`](../2.源码/rocm-clr/rocclr/device/rocm/rocvirtual.cpp) 第 1184～1276 行依次取得 write index、用掩码定位 slot、复制 Packet、以 release 语义发布 Header，并把 Packet ID 写入 Doorbell。
 
 #### 1.1.4 MQD：内存中的 Queue 配置
 
@@ -666,7 +666,7 @@ Queue 创建时，ROCr 建立 `hsa_queue_t` 和 Ring，KFD 建立 MQD。Queue �
 
 下面的定义用于验证这些字段。第一次阅读时可以跳过源码块，直接看源码后的结论。
 
-> **[SPEC]** ROCr HSA 头文件 [`runtime/hsa-runtime/inc/hsa.h`](<../2.源码/rocr-runtime/runtime/hsa-runtime/inc/hsa.h>) 第 2300～2363 行：
+> **[SPEC]** ROCr HSA 头文件 [`runtime/hsa-runtime/inc/hsa.h`](../2.源码/rocr-runtime/runtime/hsa-runtime/inc/hsa.h) 第 2300～2363 行：
 
 ```c
 2300: /**
@@ -871,9 +871,9 @@ doorbell_id  → Producer 应写这片 Doorbell 区域中的哪个槽位？
 
 > **[SOURCE] 可选源码索引**
 >
-> - ROCr [`runtime/hsa-runtime/core/inc/queue.h`](<../2.源码/rocr-runtime/runtime/hsa-runtime/core/inc/queue.h>) 第 406～412 行定义公开 HSA Queue ID 的递增计数器；[`runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp`](<../2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp>) 第 278～286 行保存 HSAKMT 返回的 Doorbell 地址、填写 `hsa_queue_t::id`，并把 `QueueResource.QueueId` 保存到 `queue_id_`；
-> - libhsakmt [`libhsakmt/src/queues.c`](<../2.源码/rocr-runtime/libhsakmt/src/queues.c>) 第 54～56、719～747 行把 KFD `queue_id` 保存进私有 `struct queue`，再把该对象的地址编码成 `HSA_QUEUEID` 返回；第 785～797 行展示销毁时的反向转换；
-> - Linux [`kfd_chardev.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c>) 第 405～424 行返回 KFD `queue_id` 和 Doorbell offset；[`kfd_device_queue_manager.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c>) 第 567～642 行展示不同 GPU 硬件架构版本的 `doorbell_id` 分配与 Doorbell offset 计算。
+> - ROCr [`runtime/hsa-runtime/core/inc/queue.h`](../2.源码/rocr-runtime/runtime/hsa-runtime/core/inc/queue.h) 第 406～412 行定义公开 HSA Queue ID 的递增计数器；[`runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp`](../2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp) 第 278～286 行保存 HSAKMT 返回的 Doorbell 地址、填写 `hsa_queue_t::id`，并把 `QueueResource.QueueId` 保存到 `queue_id_`；
+> - libhsakmt [`libhsakmt/src/queues.c`](../2.源码/rocr-runtime/libhsakmt/src/queues.c) 第 54～56、719～747 行把 KFD `queue_id` 保存进私有 `struct queue`，再把该对象的地址编码成 `HSA_QUEUEID` 返回；第 785～797 行展示销毁时的反向转换；
+> - Linux [`kfd_chardev.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) 第 405～424 行返回 KFD `queue_id` 和 Doorbell offset；[`kfd_device_queue_manager.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c) 第 567～642 行展示不同 GPU 硬件架构版本的 `doorbell_id` 分配与 Doorbell offset 计算。
 
 ### 1.4 AQL Queue 与普通 DRM IB 使用不同的提交路径
 
@@ -997,13 +997,13 @@ Device::acquireQueue()
 
 `private_segment_size` 和 `group_segment_size` 是创建 Queue 时传入的资源提示。每次提交 Kernel 时，Runtime 还会根据具体 Kernel 填写 Dispatch Packet 的 segment 字段，因此不能直接把创建提示当成本次任务的最终需求。两种粒度的区别见第 4.3 节。
 
-> **[SPEC]** ROCr HSA 头文件 [`runtime/hsa-runtime/inc/hsa.h`](<../2.源码/rocr-runtime/runtime/hsa-runtime/inc/hsa.h>) 第 2365～2371 行规定，创建 Queue 时 Runtime 建立 Queue 结构、底层 Packet buffer 和读写索引；两个索引初值为 0，所有槽位的类型初始化为 `INVALID`。
+> **[SPEC]** ROCr HSA 头文件 [`runtime/hsa-runtime/inc/hsa.h`](../2.源码/rocr-runtime/runtime/hsa-runtime/inc/hsa.h) 第 2365～2371 行规定，创建 Queue 时 Runtime 建立 Queue 结构、底层 Packet buffer 和读写索引；两个索引初值为 0，所有槽位的类型初始化为 `INVALID`。
 
 #### 2.1.1 可选源码阅读：入口检查与返回值
 
 下面的源码用于核对上面的调用流程。第一次阅读时，可以先跳到第 2.2 节。
 
-> **[SOURCE]** ROCr [`runtime/hsa-runtime/core/runtime/hsa.cpp`](<../2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/hsa.cpp>) 第 717～760 行：
+> **[SOURCE]** ROCr [`runtime/hsa-runtime/core/runtime/hsa.cpp`](../2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/hsa.cpp) 第 717～760 行：
 
 ```cpp
 717: hsa_status_t hsa_queue_create(
@@ -1132,7 +1132,7 @@ write_index = 0
 - `for (...)` 表示循环处理每个 Ring slot；
 - `memset(..., 0, ...)` 表示把一段结构体内存清零。
 
-> **[SOURCE]** ROCr [`runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp`](<../2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp>) 第 78～148、260～285 行。下面先连续展示构造函数入口和 Ring 初始化：
+> **[SOURCE]** ROCr [`runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp`](../2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp) 第 78～148、260～285 行。下面先连续展示构造函数入口和 Ring 初始化：
 
 ```cpp
 78: AqlQueue::AqlQueue(core::SharedQueue* shared_queue, GpuAgent* agent, size_t req_size_pkts,
@@ -1268,7 +1268,7 @@ write_index = 0
 
 `queue_rsrc` 是这次驱动调用使用的资源结构，不是另一条 Queue。调用前，ROCr 把 rptr 和 wptr 的地址放进去；调用成功后，HSAKMT 再通过它返回 Doorbell 地址和 Queue 句柄。
 
-> **[SOURCE]** ROCr [`runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp`](<../2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp>) 第 286～340 行继续完成构造函数：
+> **[SOURCE]** ROCr [`runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp`](../2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp) 第 286～340 行继续完成构造函数：
 
 1. 第 286 行建立 `QueueGuard`。后续初始化失败时，它会销毁刚创建的 KFD Queue；
 2. 第 288～331 行初始化 Scratch、异步错误处理、PM4 IB 和 CU mask；
@@ -1298,7 +1298,7 @@ device memory Ring
 
 **[BOUNDARY]** `LargeBarEnabled()` 是 ROCr 的能力判断名称，不能直接用于判断 MI300 型号或物理连接。
 
-> **[SOURCE]** ROCr `ba56a24c6132`，[`amd_gpu_agent.cpp`](<../2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_gpu_agent.cpp>) 第 228～234 行读取 CPU—GPU link 信息，并在 `num_hop >= 1` 时设置该标志。判断实际内存路径还须核对平台配置。
+> **[SOURCE]** ROCr `ba56a24c6132`，[`amd_gpu_agent.cpp`](../2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_gpu_agent.cpp) 第 228～234 行读取 CPU—GPU link 信息，并在 `num_hop >= 1` 时设置该标志。判断实际内存路径还须核对平台配置。
 
 ROCr 用 `IsDeviceMemRingBuf()` 选择分配器。选择设备内存时，它还会检查 Large BAR；该能力判断为假时，ROCr 会拒绝创建这种 Ring。判断名称本身不证明 MI300 的实际主机连接。
 
@@ -1308,7 +1308,7 @@ ROCr 用 `IsDeviceMemRingBuf()` 选择分配器。选择设备内存时，它还
 
 这里的 system-memory pool 用于选择内存类型和分配路径。本文的 Ring 会进入 HSAKMT 的本次内存申请流程，而不是从进程初始化时已映射的某块 Ring 内存中切出 16 KiB。调用与分配阶段的完整关系见 [02 的 2.0 节](<./02_GPU 内存管理基础.md#20-ring-的分配时机创建-queue-时准备一次>)。
 
-> **[SOURCE]** ROCr `ba56a24c6132`：[`amd_gpu_agent.cpp`](<../2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_gpu_agent.cpp>) 第 2451～2467 行建立 system allocator，并通过所选 pool 调用 Runtime 分配；[`amd_kfd_driver.cpp`](<../2.源码/rocr-runtime/runtime/hsa-runtime/core/driver/kfd/amd_kfd_driver.cpp>) 第 257～275 行将子分配限制在满足条件的本地内存，第 286～335 行继续执行内存申请与 GPU 映射，第 502～537 行分别封装 `hsaKmtAllocMemory()` 和 `hsaKmtMapMemoryToGPUNodes()`。
+> **[SOURCE]** ROCr `ba56a24c6132`：[`amd_gpu_agent.cpp`](../2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_gpu_agent.cpp) 第 2451～2467 行建立 system allocator，并通过所选 pool 调用 Runtime 分配；[`amd_kfd_driver.cpp`](../2.源码/rocr-runtime/runtime/hsa-runtime/core/driver/kfd/amd_kfd_driver.cpp) 第 257～275 行将子分配限制在满足条件的本地内存，第 286～335 行继续执行内存申请与 GPU 映射，第 502～537 行分别封装 `hsaKmtAllocMemory()` 和 `hsaKmtMapMemoryToGPUNodes()`。
 
 下面跟踪 system RAM 的 USERPTR 分支，并选择 HSAKMT 通过 `mmap()` 预留地址的方式。USERPTR 表示驱动使用用户地址对应的页面；在这个例子中，用户地址和匿名内存由 HSAKMT 在本次 Ring 分配中准备。
 
@@ -1340,7 +1340,7 @@ Page Fault：Linux 根据 VMA 检查地址合法且允许写入
 
 第一次调用发生在 `hsakmt_mmap_allocate_aligned()`。地址参数为 `0`，由 Linux 在当前进程的虚拟地址空间中选择空闲区间；`PROT_NONE` 暂时禁止 CPU 访问。预留长度包含对齐和保护间隔所需的额外空间，因此可能大于 Ring 本身的 16 KiB：
 
-> **[SOURCE]** ROCr `ba56a24c6132c5d195686ae4adf969ca1222fbba`，[`libhsakmt/src/fmm.c`](<../2.源码/rocr-runtime/libhsakmt/src/fmm.c>) 第 770～783 行。调用先预留地址范围，失败时返回；随后第 785～805 行处理对齐、范围检查和多余区间，并返回保留的地址。
+> **[SOURCE]** ROCr `ba56a24c6132c5d195686ae4adf969ca1222fbba`，[`libhsakmt/src/fmm.c`](../2.源码/rocr-runtime/libhsakmt/src/fmm.c) 第 770～783 行。调用先预留地址范围，失败时返回；随后第 785～805 行处理对齐、范围检查和多余区间，并返回保留的地址。
 
 ```c
 770: void *hsakmt_mmap_allocate_aligned(int prot, int flags, uint64_t size, uint64_t align,
@@ -1365,7 +1365,7 @@ Page Fault：Linux 根据 VMA 检查地址合法且允许写入
 
 第二次调用发生在 `fmm_allocate_host_gpu()` 的 USERPTR 分支。`mem` 接收地址预留结果，随后传给指定地址的匿名映射：
 
-> **[SOURCE]** ROCr `ba56a24c6132c5d195686ae4adf969ca1222fbba`，[`libhsakmt/src/fmm.c`](<../2.源码/rocr-runtime/libhsakmt/src/fmm.c>) 第 2043～2058 行。这里只展开地址预留和 RW 匿名映射；BO 登记发生在同一分支的后续代码中。
+> **[SOURCE]** ROCr `ba56a24c6132c5d195686ae4adf969ca1222fbba`，[`libhsakmt/src/fmm.c`](../2.源码/rocr-runtime/libhsakmt/src/fmm.c) 第 2043～2058 行。这里只展开地址预留和 RW 匿名映射；BO 登记发生在同一分支的后续代码中。
 
 ```c
 2043: 	/* Paged memory is allocated as a userptr mapping, non-paged
@@ -1398,11 +1398,11 @@ Linux 会相应调整 VMA，可能拆分或合并已有记录。
 
 缺页处理要先依据 VMA 判断地址和访问权限是否合法。因此，处于 `PROT_NONE` 阶段的 CPU 访问会因权限不符而失败；只有先建立允许相应访问的 VMA，才能按上图继续准备页面和 PTE。
 
-> **[SOURCE]** Linux `248951ddc14de84de3910f9b13f51491a8cd91df`，[`mm/memory.c`](<../2.源码/linux/mm/memory.c>) 第 5287～5381 行展示匿名页缺页处理中的零页、私有页和 PTE 安装。参数含义及 VMA 与 PTE 的完整说明见 [02 的 2.0.4“整条 Ring 的申请流程”](<./02_GPU 内存管理基础.md#204-整条-ring-的申请流程>)。
+> **[SOURCE]** Linux `248951ddc14de84de3910f9b13f51491a8cd91df`，[`mm/memory.c`](../2.源码/linux/mm/memory.c) 第 5287～5381 行展示匿名页缺页处理中的零页、私有页和 PTE 安装。参数含义及 VMA 与 PTE 的完整说明见 [02 的 2.0.4“整条 Ring 的申请流程”](<./02_GPU 内存管理基础.md#204-整条-ring-的申请流程>)。
 
 实际创建 USERPTR Ring 时，KFD 还会主动获取这些用户页面，可能在 CPU 初始化 Ring 之前就完成页面准备。上图的“CPU 首次访问”解释了按需缺页的一种触发方式；实际 Ring 路径也可能由 KFD 提前触发页面准备。
 
-> **[SOURCE]** Linux `248951ddc14de84de3910f9b13f51491a8cd91df`，[`amdgpu_amdkfd_gpuvm.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c>) 第 1845～1849 行调用 `init_user_pages()`；[`amdgpu_hmm.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_hmm.c>) 第 186～202 行要求准备页面并调用 `hmm_range_fault()`。
+> **[SOURCE]** Linux `248951ddc14de84de3910f9b13f51491a8cd91df`，[`amdgpu_amdkfd_gpuvm.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c) 第 1845～1849 行调用 `init_user_pages()`；[`amdgpu_hmm.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_hmm.c) 第 186～202 行要求准备页面并调用 `hmm_range_fault()`。
 
 到这里已经说明 CPU 访问 Ring 所需的 VMA、页面和 PTE。GPU 要读取同一块 Ring，还需要后续 GPUVM 映射，下面继续解释这个过程。
 
@@ -1423,11 +1423,11 @@ CPU 和 GPU 各自有页表，软件可以在两套地址空间中使用同一�
 
 **先选一个两端都能使用的地址。** 前面 `mmap()` 返回的地址还会经过 HSAKMT 的对齐和范围检查。只有保留区间落在允许的地址范围内，才继续进行本次分配；后续 GPU MAP 也必须成功。这样，CPU 地址既有合法的进程地址范围，也满足这条 GPU 路径的地址约束。
 
-> **[SOURCE]** ROCr `ba56a24c6132`，[`libhsakmt/src/fmm.c`](<../2.源码/rocr-runtime/libhsakmt/src/fmm.c>) 第 785～805 行检查对齐后的地址区间是否落在 `aper_base`～`aper_limit` 内；第 2362～2406、2439～2462 行说明 GPU 可用范围与 mmap 地址分配方式的选择。较受限的范围也可以采用预留地址区间的管理方式。
+> **[SOURCE]** ROCr `ba56a24c6132`，[`libhsakmt/src/fmm.c`](../2.源码/rocr-runtime/libhsakmt/src/fmm.c) 第 785～805 行检查对齐后的地址区间是否落在 `aper_base`～`aper_limit` 内；第 2362～2406、2439～2462 行说明 GPU 可用范围与 mmap 地址分配方式的选择。较受限的范围也可以采用预留地址区间的管理方式。
 
 **再把同一个数值放进两个不同含义的参数。** 下面继续前面 `fmm_allocate_host_gpu()` 的 USERPTR 分支。第 2059～2069 行处理 NUMA 策略和映射建议，随后代码把已经取得的 CPU 地址 `mem` 交给内存对象创建函数：
 
-> **[SOURCE]** ROCr `ba56a24c6132`，[`libhsakmt/src/fmm.c`](<../2.源码/rocr-runtime/libhsakmt/src/fmm.c>) 第 2070～2077 行。调用者同时传入 mem 与保存其数值的 mmap_offset，并明确使用 USERPTR 标志。前文已展示这一分支的条件及 CPU 匿名映射。
+> **[SOURCE]** ROCr `ba56a24c6132`，[`libhsakmt/src/fmm.c`](../2.源码/rocr-runtime/libhsakmt/src/fmm.c) 第 2070～2077 行。调用者同时传入 mem 与保存其数值的 mmap_offset，并明确使用 USERPTR 标志。前文已展示这一分支的条件及 CPU 匿名映射。
 
 ```c
 2070: 		/* Create userptr BO */
@@ -1444,7 +1444,7 @@ CPU 和 GPU 各自有页表，软件可以在两套地址空间中使用同一�
 
 被调用函数用这两个输入填写 KFD ALLOC 参数：
 
-> **[SOURCE]** ROCr `ba56a24c6132`，[`libhsakmt/src/fmm.c`](<../2.源码/rocr-runtime/libhsakmt/src/fmm.c>) 第 1150～1177 行。fmm_allocate_memory_object() 用 mem 填计划 GPUVA，在 USERPTR 分支中用 *mmap_offset 填 CPU 地址来源。保留了会改写地址含义的分支。
+> **[SOURCE]** ROCr `ba56a24c6132`，[`libhsakmt/src/fmm.c`](../2.源码/rocr-runtime/libhsakmt/src/fmm.c) 第 1150～1177 行。fmm_allocate_memory_object() 用 mem 填计划 GPUVA，在 USERPTR 分支中用 *mmap_offset 填 CPU 地址来源。保留了会改写地址含义的分支。
 
 ```c
 1150: 	/* Allocate memory from amdkfd */
@@ -1502,7 +1502,7 @@ amdgpu_vm_bo_map(..., X, ...)
 GPUVA X 开始指向该 Ring 的 backing
 ```
 
-> **[SOURCE]** Linux `248951ddc14d`：[`kfd_chardev.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c>) 第 1183～1186 行传入 `args->va_addr`；[`amdgpu_amdkfd_gpuvm.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c>) 第 1838 行记录 `kgd_mem.va`，第 876、987 行将其传到 attachment，第 1317～1351 行使用 `entry->va` 建立映射并更新 PTE。正常可用页面走更新 PTE 的路径，失效 USERPTR 的延后恢复另行处理。
+> **[SOURCE]** Linux `248951ddc14d`：[`kfd_chardev.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) 第 1183～1186 行传入 `args->va_addr`；[`amdgpu_amdkfd_gpuvm.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c) 第 1838 行记录 `kgd_mem.va`，第 876、987 行将其传到 attachment，第 1317～1351 行使用 `entry->va` 建立映射并更新 PTE。正常可用页面走更新 PTE 的路径，失效 USERPTR 的延后恢复另行处理。
 
 映射成功后，两端的输入数值相同，后面的地址翻译过程仍分别进行：
 
@@ -1522,19 +1522,19 @@ flowchart LR
 
 因此，CPU VA 与 GPUVA 同值描述的是访问时输入的虚拟地址数值相同，不要求两种 PTE 保存相同内容。
 
-> **[SOURCE]** 两侧页表与 DMA/IOVA 的关系见 [02 的 2.5“CPU 与 GPU 的两条访问通路”](<./02_GPU 内存管理基础.md#25-cpu-与-gpu-的两条访问通路>)；固定 Linux 的 [`amdgpu_amdkfd_gpuvm.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c>) 第 1295～1314 行先取得设备侧 DMA 映射，再更新 GPU PTE。
+> **[SOURCE]** 两侧页表与 DMA/IOVA 的关系见 [02 的 2.5“CPU 与 GPU 的两条访问通路”](<./02_GPU 内存管理基础.md#25-cpu-与-gpu-的两条访问通路>)；固定 Linux 的 [`amdgpu_amdkfd_gpuvm.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c) 第 1295～1314 行先取得设备侧 DMA 映射，再更新 GPU PTE。
 
 **同值地址怎样用于 Packet 提交。** 主案例的 slot 37 距 Ring 起点 `37 × 64 = 2368 = 0x940` 字节。CPU 使用 `0x10000940` 写这个槽位，GPU 也使用数值 `0x10000940` 读取它，各自通过自己的页表到达同一位置。
 
 Runtime 因而可以把同一个 Ring base 用作 CPU 指针和 Queue 创建参数。
 
-> **[SOURCE]** ROCr `ba56a24c6132`，[`libhsakmt/src/queues.c`](<../2.源码/rocr-runtime/libhsakmt/src/queues.c>) 第 704～707 行将传入的 Ring 地址原样放入 `CREATE_QUEUE` 参数；这里使用的是前面内存分配与 MAP 已经建立的关系。
+> **[SOURCE]** ROCr `ba56a24c6132`，[`libhsakmt/src/queues.c`](../2.源码/rocr-runtime/libhsakmt/src/queues.c) 第 704～707 行将传入的 Ring 地址原样放入 `CREATE_QUEUE` 参数；这里使用的是前面内存分配与 MAP 已经建立的关系。
 
 **[BOUNDARY]** 上述相等关系适用于本文已经完成相应分配和 GPU MAP 的 Ring。普通 CPU 指针只提供 CPU 侧地址，要供 GPU 访问还需要满足相应 Runtime 的登记、映射和权限要求。其他接口可以为同一份数据选择不同的 CPU VA 与 GPUVA，并分别保存两个地址。
 
 #### 2.3.2 可选源码阅读：Ring 的两条分配路径
 
-> **[SOURCE]** ROCr [`runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp`](<../2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp>) 第 518～539 行：
+> **[SOURCE]** ROCr [`runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp`](../2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp) 第 518～539 行：
 
 ```cpp
 518: void AqlQueue::AllocRegisteredRingBuffer(uint32_t queue_size_pkts) {
@@ -1653,10 +1653,10 @@ HSAKMT 在这里处理的是整条 Queue 的创建参数，不会读取或解析
 >
 > 以下使用本文固定的 ROCr `ba56a24c6132` 与 Linux `248951ddc14d`：
 >
-> - ROCr 提供地址：[`runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp`](<../2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp>) 第 130～138、269～273 行，把 `amd_queue_` 中的 rptr/wptr 地址和 `ring_buf_` 交给 Queue 创建路径。
-> - HSAKMT 填写请求：[`libhsakmt/src/queues.c`](<../2.源码/rocr-runtime/libhsakmt/src/queues.c>) 第 704～707 行，把这些数值原样写入 ioctl 参数。
-> - KFD 检查用户参数：[`drivers/gpu/drm/amd/amdkfd/kfd_chardev.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c>) 第 227～287 行，检查用户地址并保存 Queue 属性。
-> - KFD 查找 GPU 映射：[`drivers/gpu/drm/amd/amdkfd/kfd_queue.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_queue.c>) 第 197～220、263～272 行，查询当前 GPUVM 的 mapping，并取得 BO 引用、增加映射使用计数。
+> - ROCr 提供地址：[`runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp`](../2.源码/rocr-runtime/runtime/hsa-runtime/core/runtime/amd_aql_queue.cpp) 第 130～138、269～273 行，把 `amd_queue_` 中的 rptr/wptr 地址和 `ring_buf_` 交给 Queue 创建路径。
+> - HSAKMT 填写请求：[`libhsakmt/src/queues.c`](../2.源码/rocr-runtime/libhsakmt/src/queues.c) 第 704～707 行，把这些数值原样写入 ioctl 参数。
+> - KFD 检查用户参数：[`drivers/gpu/drm/amd/amdkfd/kfd_chardev.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) 第 227～287 行，检查用户地址并保存 Queue 属性。
+> - KFD 查找 GPU 映射：[`drivers/gpu/drm/amd/amdkfd/kfd_queue.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_queue.c) 第 197～220、263～272 行，查询当前 GPUVM 的 mapping，并取得 BO 引用、增加映射使用计数。
 
 > **[BOUNDARY]** “同一个数值同时作为 CPU VA 和 GPUVA”描述的是本文固定的 Linux ROCr/KFD 映射路径。它不是所有设备 API 都必须采用的通用形式；如果某个平台为 CPU 和 GPU 分配不同的虚拟地址，Runtime 就必须保存并传递各自的地址。
 
@@ -1664,7 +1664,7 @@ HSAKMT 在这里处理的是整条 Queue 的创建参数，不会读取或解析
 
 下面两组源码分别验证 ROCr 怎样进入 HSAKMT，以及 HSAKMT 怎样组织 `CREATE_QUEUE`。不熟悉 C/C++ 时，可以先跳到第 2.5 节。
 
-> **[SOURCE]** ROCr [`runtime/hsa-runtime/core/driver/kfd/amd_kfd_driver.cpp`](<../2.源码/rocr-runtime/runtime/hsa-runtime/core/driver/kfd/amd_kfd_driver.cpp>) 第 355～365 行：
+> **[SOURCE]** ROCr [`runtime/hsa-runtime/core/driver/kfd/amd_kfd_driver.cpp`](../2.源码/rocr-runtime/runtime/hsa-runtime/core/driver/kfd/amd_kfd_driver.cpp) 第 355～365 行：
 
 ```cpp
 355: hsa_status_t KfdDriver::CreateQueue(uint32_t node_id, HSA_QUEUE_TYPE type, uint32_t queue_pct,
@@ -1684,7 +1684,7 @@ HSAKMT 在这里处理的是整条 Queue 的创建参数，不会读取或解析
 
 下面的 HSAKMT 函数较长，只保留与 AQL Queue 直接相关的完整分支。省略范围及其作用会在代码块之间明确说明。
 
-> **[SOURCE]** ROCr [`libhsakmt/src/queues.c`](<../2.源码/rocr-runtime/libhsakmt/src/queues.c>) 第 611～642、669～717、719～751 行：
+> **[SOURCE]** ROCr [`libhsakmt/src/queues.c`](../2.源码/rocr-runtime/libhsakmt/src/queues.c) 第 611～642、669～717、719～751 行：
 
 ```c
 611: HSAKMT_STATUS HSAKMTAPI hsaKmtCreateQueueExt(HSAuint32 NodeId,
@@ -1721,7 +1721,7 @@ HSAKMT 在这里处理的是整条 Queue 的创建参数，不会读取或解析
 642:     return HSAKMT_STATUS_NO_MEMORY;
 ```
 
-> **[SOURCE]** libhsakmt [`libhsakmt/src/queues.c`](<../2.源码/rocr-runtime/libhsakmt/src/queues.c>) 第 643～668 行清零私有 `struct queue`，记录 GPU 硬件架构版本，按具体 GPU 芯片选择 EOP buffer 大小，并初始化 CU mask。完成这些 Queue 私有状态后，函数才构造 ioctl 参数：
+> **[SOURCE]** libhsakmt [`libhsakmt/src/queues.c`](../2.源码/rocr-runtime/libhsakmt/src/queues.c) 第 643～668 行清零私有 `struct queue`，记录 GPU 硬件架构版本，按具体 GPU 芯片选择 EOP buffer 大小，并初始化 CU mask。完成这些 Queue 私有状态后，函数才构造 ioctl 参数：
 
 ```c
 669:   struct kfd_ioctl_create_queue_args args = {0};
@@ -1865,7 +1865,7 @@ DQM 即设备队列管理器。它检查设备资源限制，并按设备采用�
 
 这两种管理器都属于 KFD 内核驱动。驱动怎样进一步配置硬件或请求调度固件，在第三章展开。
 
-> **[SOURCE]** Linux `248951ddc14d`：[`kfd_priv.h`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_priv.h>) 第 665～670 行定义 PQM 的进程、列表和 ID 分配记录，第 938～945 行显示它保存在 `kfd_process` 内；[`kfd_device_queue_manager.h`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.h>) 第 231～268 行定义 DQM 的设备级职责和资源记录。
+> **[SOURCE]** Linux `248951ddc14d`：[`kfd_priv.h`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_priv.h) 第 665～670 行定义 PQM 的进程、列表和 ID 分配记录，第 938～945 行显示它保存在 `kfd_process` 内；[`kfd_device_queue_manager.h`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.h) 第 231～268 行定义 DQM 的设备级职责和资源记录。
 
 #### 2.5.2 PDD 与 QPD：保存进程在目标 GPU 上的信息
 
@@ -1892,7 +1892,7 @@ A 创建 Q1 时会复用 Q0 已使用的 PDD 和 QPD。创建成功后，QPD 的
 
 前面的 Ring 分配与映射已经用过 PDD 和 GPUVM，创建 Queue 时继续沿用。内存对象与 GPUVM 的查找关系见 [02 的 2.3.2 节](<./02_GPU 内存管理基础.md#232-同一个-pdd-怎样找到-bo-和当前进程-gpuvm>)。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_priv.h`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_priv.h>) 第 763～787 行：PDD 的类型是 `kfd_process_device`，其中内嵌 `qpd`，并通过 `drm_priv` 保存 GPUVM 上下文入口。QPD 的类型是 `qcm_process_device`，定义在第 672～729 行。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_priv.h`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_priv.h) 第 763～787 行：PDD 的类型是 `kfd_process_device`，其中内嵌 `qpd`，并通过 `drm_priv` 保存 GPUVM 上下文入口。QPD 的类型是 `qcm_process_device`，定义在第 672～729 行。
 
 #### 2.5.3 KFD 创建 Q0 的调用流程
 
@@ -1927,7 +1927,7 @@ sequenceDiagram
 
 **取得 Queue ID 和加入 PQM 列表发生在两个时点。** ID 先取得；DQM 创建成功后，PQM 才把 Q0 加入列表。最后，创建入口把 Queue ID 和 Doorbell mmap 信息返回给 HSAKMT。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_process_queue_manager.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_process_queue_manager.c>) 第 343～373 行查 PDD、检查数量限制、取得 ID，并按首条 Queue 条件登记 QPD；第 417～434 行检查 Compute Queue 的资源条件，再创建内核 Queue 对象并调用 DQM；第 442～452 行拦截创建失败，第 473 行才加入 PQM 列表。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_process_queue_manager.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_process_queue_manager.c) 第 343～373 行查 PDD、检查数量限制、取得 ID，并按首条 Queue 条件登记 QPD；第 417～434 行检查 Compute Queue 的资源条件，再创建内核 Queue 对象并调用 DQM；第 442～452 行拦截创建失败，第 473 行才加入 PQM 列表。
 
 #### 2.5.4 可选源码阅读：创建入口与失败清理
 
@@ -1943,13 +1943,13 @@ sequenceDiagram
 
 本文用 GPU0 指代一个目标 KFD 设备节点。PQM 保存在进程记录中，DQM 由设备节点持有。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_priv.h`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_priv.h>) 第 293～294、665～675、763～772、938～945 行给出上述字段和类型。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_priv.h`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_priv.h) 第 293～294、665～675、763～772、938～945 行给出上述字段和类型。
 
 **入口先找到 PDD，并确认设备可用**
 
 `p` 来自发起 ioctl 的文件上下文。用户态传入目标 `gpu_id`，KFD 据此查找该进程的 PDD；用户态不能在这个请求中任意指定另一个进程。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_chardev.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c>) 第 3586～3603 行从 `filep->private_data` 取得进程并校验调用者；第 338～373 行是下面的 Queue 创建入口前半段。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_chardev.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) 第 3586～3603 行从 `filep->private_data` 取得进程并校验调用者；第 338～373 行是下面的 Queue 创建入口前半段。
 
 ```c
 338: static int kfd_ioctl_create_queue(struct file *filep, struct kfd_process *p,
@@ -2000,11 +2000,11 @@ sequenceDiagram
 
 成功后，函数设置 `runtime_inuse` 并返回 PDD；检查或设备恢复失败则返回错误。这里复用已有 GPUVM，Ring 的分配和映射已经在此前完成。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_process.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_process.c>) 第 1814～1849 行给出上述完整条件和返回路径。这里依据函数体解释绑定操作；函数上方关于 IOMMU 绑定的注释不表示本函数实际执行了该操作。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_process.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_process.c) 第 1814～1849 行给出上述完整条件和返回路径。这里依据函数体解释绑定操作；函数上方关于 IOMMU 绑定的注释不表示本函数实际执行了该操作。
 
 **准备 Doorbell、持有 buffer，再调用 PQM**
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_chardev.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c>) 第 375～385 行只校验 `KFD_QUEUE_TYPE_SDMA_BY_ENG_ID` 的 SDMA 引擎 ID，本文 AQL Compute Queue 路径省略该分支。下面接着展示同一函数第 387～408 行的公共路径。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_chardev.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) 第 375～385 行只校验 `KFD_QUEUE_TYPE_SDMA_BY_ENG_ID` 的 SDMA 引擎 ID，本文 AQL Compute Queue 路径省略该分支。下面接着展示同一函数第 387～408 行的公共路径。
 
 ```c
 387:   if (!pdd->qpd.proc_doorbells) {
@@ -2046,11 +2046,11 @@ sequenceDiagram
 | `page_table_base`                     | 调度所需的 GPU 页表根及相关标志；第三章说明怎样交给硬件或固件           |
 | `vmid` 等调度状态                     | 例如 No-HWS 为该进程在目标设备上分配的 VMID；第 3.2.1 节说明其用途      |
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_priv.h`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_priv.h>) 第 676～683、698～701、724～728 行定义这些字段。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_priv.h`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_priv.h) 第 676～683、698～701、724～728 行定义这些字段。
 
 **成功返回结果，失败按已取得的资源清理**
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_chardev.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c>) 第 409～447 行紧接上面的 PQM 调用，包含返回结果和本函数的全部错误标签。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_chardev.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) 第 409～447 行紧接上面的 PQM 调用，包含返回结果和本函数的全部错误标签。
 
 ```c
 409:
@@ -2124,9 +2124,9 @@ ROCr 还把所有槽位的 Header 设为 `INVALID`，表示这些槽位尚未发
 >
 > 以下均为 Linux `248951ddc14d`：
 >
-> - 创建入口先检查并持有内存，再进入 PQM 创建 Queue：[`kfd_chardev.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c>) 第 395～408 行。
-> - 从当前进程在目标 GPU 上的记录取得 GPUVM，并逐个检查 Queue 地址：[`kfd_queue.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_queue.c>) 第 258～272 行；第 197～226 行完成单个地址的校验与引用获取。
-> - 在驱动保存的映射记录中查找地址：[`amdgpu_vm.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_vm.c>) 第 2134～2138 行。
+> - 创建入口先检查并持有内存，再进入 PQM 创建 Queue：[`kfd_chardev.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) 第 395～408 行。
+> - 从当前进程在目标 GPU 上的记录取得 GPUVM，并逐个检查 Queue 地址：[`kfd_queue.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_queue.c) 第 258～272 行；第 197～226 行完成单个地址的校验与引用获取。
+> - 在驱动保存的映射记录中查找地址：[`amdgpu_vm.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_vm.c) 第 2134～2138 行。
 
 #### 2.6.2 Queue 创建涉及的内存检查范围
 
@@ -2148,7 +2148,7 @@ ROCr 还把所有槽位的 Header 设为 `INVALID`，表示这些槽位尚未发
 
 EOP 和 CWSR 的大小由设备要求决定。EOP 仅在创建参数提供非零地址时检查。CWSR 可以从已有的 GPU 映射取得，也有使用 SVM 范围的路径，后者需要满足额外条件。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_queue.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_queue.c>) 第 263～274 行分别获取 wptr、rptr 和 Ring；第 276～334 行给出 Compute Queue 辅助资源的条件与大小检查。Ring 的大小换算和 CWSR 的 SVM 分支在第 2.6.6 节说明。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_queue.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_queue.c) 第 263～274 行分别获取 wptr、rptr 和 Ring；第 276～334 行给出 Compute Queue 辅助资源的条件与大小检查。Ring 的大小换算和 CWSR 的 SVM 分支在第 2.6.6 节说明。
 
 **[BOUNDARY]** 本节重点检查 Queue 自身使用的内存。每次 Dispatch 使用的 Kernel 代码、Kernarg 和输入输出数组有各自的生命周期，见第 6.5 节。
 
@@ -2173,7 +2173,7 @@ Q0 属于进程 A，目标设备是 GPU0，KFD 就在 A 对应的 GPU0 地址空
 
 这些检查由运行在 CPU 上的 KFD 驱动完成，依据是驱动保存的 mapping 记录。以后 GPU 读取 Ring 时，才按本次访问的 GPUVA 使用 GPU 页表完成地址翻译。创建时查映射记录与执行时查页表，发生在不同阶段。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_queue.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_queue.c>) 第 197～226 行：地址与大小先换算成 GPU 页单位，再查 mapping、比较 `start` 和 `last`；失败时清空输出 BO 并返回 `-EINVAL`。第 258 行限定了本次查找所用的 GPUVM。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_queue.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_queue.c) 第 197～226 行：地址与大小先换算成 GPU 页单位，再查 mapping、比较 `start` 和 `last`；失败时清空输出 BO 并返回 `-EINVAL`。第 258 行限定了本次查找所用的 GPUVM。
 
 #### 2.6.4 BO 引用与映射使用计数的保护范围
 
@@ -2192,7 +2192,7 @@ BO 是驱动用来管理这块内存的对象。“取得 BO 引用”就是增�
 
 每次成功获取资源都会增加相应的 `queue_refcount`，释放时再逐次减少。如果 rptr、wptr 共用同一个 BO 在同一个 GPUVM 中的映射，两次获取会让同一份计数增加两次。因此，这个计数表示累计的 Queue 资源使用记录，不能直接当作 Queue 条数。
 
-> **[SOURCE]** Linux `248951ddc14d`：[`kfd_queue.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_queue.c>) 第 219～220 行取得 BO 引用并增加映射使用计数，第 263～267 行分别获取 wptr、rptr，第 351～360、377～405 行分别归还 BO 引用和映射使用计数；[`amdgpu_amdkfd_gpuvm.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c>) 第 1269～1282 行在 `queue_refcount` 非零时返回 `-EBUSY`，检查通过后才进入解除映射操作。
+> **[SOURCE]** Linux `248951ddc14d`：[`kfd_queue.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_queue.c) 第 219～220 行取得 BO 引用并增加映射使用计数，第 263～267 行分别获取 wptr、rptr，第 351～360、377～405 行分别归还 BO 引用和映射使用计数；[`amdgpu_amdkfd_gpuvm.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gpuvm.c) 第 1269～1282 行在 `queue_refcount` 非零时返回 `-EBUSY`，检查通过后才进入解除映射操作。
 
 #### 2.6.5 检查成功、失败与销毁时的资源处理
 
@@ -2206,17 +2206,17 @@ BO 是驱动用来管理这块内存的对象。“取得 BO 引用”就是增�
 
 这里归还的是本次创建增加的 BO 引用和映射使用记录。Ring 原来的分配和 GPU 映射仍由此前准备这些资源的代码继续清理。检查函数复用了已有内存，因此它的回滚范围也限于本次取得的保护。
 
-> **[SOURCE]** Linux `248951ddc14d`：[`kfd_queue.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_queue.c>) 第 70～81 行把属性复制到内核 Queue，第 336～349 行给出 buffer 获取的成功出口与失败回滚；[`kfd_chardev.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c>) 第 395～408、438～446 行给出调用顺序和 PQM 失败后的清理责任。
+> **[SOURCE]** Linux `248951ddc14d`：[`kfd_queue.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_queue.c) 第 70～81 行把属性复制到内核 Queue，第 336～349 行给出 buffer 获取的成功出口与失败回滚；[`kfd_chardev.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) 第 395～408、438～446 行给出调用顺序和 PQM 失败后的清理责任。
 
 Q0 正常销毁时，KFD 在进程锁保护下先降低映射使用计数，再由 DQM 停止并清理 Queue，最后释放 Queue 持有的 BO 引用。降低计数只改变软件记录，硬件停止仍由 DQM 的对应路径负责。完整调用链见[第 8.1 节](<./03_AMD GPU 队列与 AQL Dispatch（下）.md#81-rocr-到-kfd-的资源释放顺序>)；之后的 GPU UNMAP 与内存释放见 02 的 2.6 节。
 
-> **[SOURCE]** Linux `248951ddc14d`：[`kfd_process_queue_manager.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_process_queue_manager.c>) 第 536～553 行给出用户 Queue 的销毁顺序；[`kfd_chardev.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c>) 第 449～464 行在进程 mutex 保护下调用该路径。这里描述正常销毁，异常返回的处理见第 8.4 节。
+> **[SOURCE]** Linux `248951ddc14d`：[`kfd_process_queue_manager.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_process_queue_manager.c) 第 536～553 行给出用户 Queue 的销毁顺序；[`kfd_chardev.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) 第 449～464 行在进程 mutex 保护下调用该路径。这里描述正常销毁，异常返回的处理见第 8.4 节。
 
 #### 2.6.6 可选源码阅读：Queue buffer 的获取与失败清理
 
 下面用源码核对正文中的地址检查、引用获取和失败回滚。先看检查单个地址的函数，再看谁调用它、怎样处理失败。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`drivers/gpu/drm/amd/amdkfd/kfd_queue.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_queue.c>) 第 197～226 行。输入包括当前 GPUVM、待检查地址和预期大小；`pbo` 指定检查成功后把 BO 指针保存在哪里。
+> **[SOURCE]** Linux `248951ddc14d`，[`drivers/gpu/drm/amd/amdkfd/kfd_queue.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_queue.c) 第 197～226 行。输入包括当前 GPUVM、待检查地址和预期大小；`pbo` 指定检查成功后把 BO 指针保存在哪里。
 
 ```c
 197: int kfd_queue_buffer_get(struct amdgpu_vm *vm, void __user *addr, struct amdgpu_bo **pbo,
@@ -2266,7 +2266,7 @@ Q0 正常销毁时，KFD 在进程锁保护下先降低映射使用计数，再�
 
 接下来，`kfd_queue_acquire_buffers()` 决定每类资源应该检查多大范围，并依次调用上述函数。代码中的 `PAGE_SIZE` 是系统页大小，`PAGE_ALIGN()` 表示按系统页大小向上取整。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_queue.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_queue.c>) 第 234～274 行。下面保留大小换算、GPUVM 来源和三次获取之间的失败跳转。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_queue.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_queue.c) 第 234～274 行。下面保留大小换算、GPUVM 来源和三次获取之间的失败跳转。
 
 ```c
 234: int kfd_queue_acquire_buffers(struct kfd_process_device *pdd, struct queue_properties *properties)
@@ -2322,7 +2322,7 @@ Q0 正常销毁时，KFD 在进程锁保护下先降低映射使用计数，再�
 - 第 258～261 行从 PDD 的 `drm_priv` 取得 GPUVM，再获取根 BO 的 reservation 锁，保护后续 mapping 查找和计数修改。加锁失败时，尚未取得任何 Queue buffer 引用。
 - 第 263～274 行依次获取 wptr、rptr、Ring。成功取得的 BO 指针分别保存在 `wptr_bo`、`rptr_bo` 和 `ring_bo` 中；其中任一步失败，都跳到后面的共同错误出口。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_queue.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_queue.c>) 第 276～334 行继续处理辅助资源，此处不重复摘录：
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_queue.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_queue.c) 第 276～334 行继续处理辅助资源，此处不重复摘录：
 >
 > - 非 Compute Queue 直接进入成功出口。
 > - 提供了 EOP 地址时，先确认大小达到设备要求，再获取对应 BO。
@@ -2333,7 +2333,7 @@ Q0 正常销毁时，KFD 在进程锁保护下先降低映射使用计数，再�
 
 下面接同一函数的公共出口。仍持有 reservation 锁的路径先解锁，再返回成功或回滚；已经解锁的 SVM 失败路径直接进入引用清理。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_queue.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_queue.c>) 第 336～349 行，包含上面各分支使用的成功出口和错误标签。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_queue.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_queue.c) 第 336～349 行，包含上面各分支使用的成功出口和错误标签。
 
 ```c
 336: out_unreserve:
@@ -2409,7 +2409,7 @@ Doorbell 的 `mmap` 建立的是设备 MMIO 窗口的 CPU 映射。第 2.3.1 节
 
 下面先看 KFD 怎样选择 `doorbell_id` 并计算 offset，再看 `mmap` 怎样把整个 Process-Device slice 映射给当前进程。
 
-> **[SOURCE]** Linux [`drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c>) 第 571～643 行完整展示 `allocate_doorbell()` 按 GPU 硬件架构版本和 Queue 类型选择的分支：
+> **[SOURCE]** Linux [`drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c) 第 571～643 行完整展示 `allocate_doorbell()` 按 GPU 硬件架构版本和 Queue 类型选择的分支：
 
 ```c
 571: static int allocate_doorbell(struct qcm_process_device *qpd,
@@ -2499,7 +2499,7 @@ Doorbell 的 `mmap` 建立的是设备 MMIO 窗口的 CPU 映射。第 2.3.1 节
 
 进程随后通过 `kfd_doorbell_mmap()` 映射自己在该设备上的完整 Doorbell slice。
 
-> **[SOURCE]** Linux [`drivers/gpu/drm/amd/amdkfd/kfd_doorbell.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_doorbell.c>) 第 106～146 行：
+> **[SOURCE]** Linux [`drivers/gpu/drm/amd/amdkfd/kfd_doorbell.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_doorbell.c) 第 106～146 行：
 
 ```c
 106: int kfd_doorbell_mmap(struct kfd_node *dev, struct kfd_process *process,
@@ -2676,18 +2676,18 @@ Pipe 读取并处理这个 Kernel Dispatch Packet，命令前端再把分到当�
 
 > **[SPEC]** [AMD GPU specifications](https://rocm.docs.amd.com/en/latest/reference/gpu-specs.html)（核对日期 2026-09-08）“AMD Instinct GPUs”表的 MI300X 行给出启用 CU 数、wave64、每 CU 的 64 KiB LDS、512 KiB 向量寄存器、12.5 KiB 标量寄存器，以及上述各级缓存的容量和共享范围。[ROCm Compute Profiler 3.8.0：Pipeline descriptions](https://rocm.docs.amd.com/projects/rocprofiler-compute/en/latest/conceptual/cdna/pipeline-descriptions.html) 的 VALU、SALU 小节说明 4 个 16 路 SIMD、按 SIMD 划分的寄存器文件和 Wave 槽位；这里采用 MI300 的 128 KiB / SIMD、8 Wave / SIMD 配置，其他代际的数值不用于这张图。
 
-> **[SPEC]** AMD 作者论文 *Realizing the AMD Exascale Heterogeneous Processor Vision*（ISCA 2024）§VII 的 [本地英文版第 11 页](<../3.资料/isca2024_exascale.pdf#page=11>)、[译文第 20 页](<../3.资料/isca2024_exascale_中文全译.pdf#page=20>)给出 MI300X 的 8 个 XCD、304 个 CU，并说明复用 XCD 组件。每个 XCD 的 40 个物理 CU、38 个启用 CU 和 4 MiB L2，结合 §IV-B 的 [英文版第 4 页](<../3.资料/isca2024_exascale.pdf#page=4>)、[译文第 9 页](<../3.资料/isca2024_exascale_中文全译.pdf#page=9>)核对。
+> **[SPEC]** AMD 作者论文 *Realizing the AMD Exascale Heterogeneous Processor Vision*（ISCA 2024）§VII 的 [本地英文版第 11 页](../3.资料/isca2024_exascale.pdf#page=11)、[译文第 20 页](../3.资料/isca2024_exascale_中文全译.pdf#page=20)给出 MI300X 的 8 个 XCD、304 个 CU，并说明复用 XCD 组件。每个 XCD 的 40 个物理 CU、38 个启用 CU 和 4 MiB L2，结合 §IV-B 的 [英文版第 4 页](../3.资料/isca2024_exascale.pdf#page=4)、[译文第 9 页](../3.资料/isca2024_exascale_中文全译.pdf#page=9)核对。
 
 > **[SPEC]** [AMD Instinct MI300 Series microarchitecture](https://rocm.docs.amd.com/en/latest/reference/gpu-arch/mi300.html) 的 XCD 结构图和封装结构图分别给出芯粒内的计算资源、MI300X 的 8 个 XCD。[AMD SMI 27.0.0：GPU partitioning](https://rocmdocs.amd.com/projects/amdsmi/en/latest/conceptual/partition.html#architecture-background) 的“Architecture background / Physical die types / Logical units”说明 MI300X 中一个 XCD 对应一个 XCC。该文称 XCC 为 `Accelerated Compute Core`；本文沿用固定 Linux 术语表的 `Accelerator Core Complex`。
 
 > **[SOURCE]** Linux `248951ddc14d`，结构与数量的源码依据：
 >
-> - 实际启用的 CU：[`gfx_v9_4_3.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c>) 第 4957～4969 行结合硬件和用户禁用位得到活动 CU 掩码，第 5039～5041 行记录活动 CU 数和每 CU 的 SIMD 数。
-> - XCC 名称和 CU 分组：[`amdgpu-glossary.rst`](<../2.源码/linux/Documentation/gpu/amdgpu/amdgpu-glossary.rst>) 第 288～289 行；[`kfd_mqd_manager.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager.c>) 第 176～186 行。
-> - MEC、Pipe 和槽位数量：[`gfx_v9_4_3.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c>) 第 1063～1065 行配置 `2 / 4 / 8`，第 4668～4686 行按 XCC、MEC、Pipe、Queue 四层枚举队列寄存器。
-> - Pipe 与 HQD 的职责：[`driver-core.rst`](<../2.源码/linux/Documentation/gpu/amdgpu/driver-core.rst>) 第 131～149 行说明 Pipe 处理已装载队列的命令、每次选择一条队列，以及 HQD/MQD 分别保存硬件和内存中的队列状态。
+> - 实际启用的 CU：[`gfx_v9_4_3.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c) 第 4957～4969 行结合硬件和用户禁用位得到活动 CU 掩码，第 5039～5041 行记录活动 CU 数和每 CU 的 SIMD 数。
+> - XCC 名称和 CU 分组：[`amdgpu-glossary.rst`](../2.源码/linux/Documentation/gpu/amdgpu/amdgpu-glossary.rst) 第 288～289 行；[`kfd_mqd_manager.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager.c) 第 176～186 行。
+> - MEC、Pipe 和槽位数量：[`gfx_v9_4_3.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c) 第 1063～1065 行配置 `2 / 4 / 8`，第 4668～4686 行按 XCC、MEC、Pipe、Queue 四层枚举队列寄存器。
+> - Pipe 与 HQD 的职责：[`driver-core.rst`](../2.源码/linux/Documentation/gpu/amdgpu/driver-core.rst) 第 131～149 行说明 Pipe 处理已装载队列的命令、每次选择一条队列，以及 HQD/MQD 分别保存硬件和内存中的队列状态。
 
-> **[SPEC]** [MI300 / CDNA 3 ISA](<../3.资料/amd-instinct-mi300-cdna3-instruction-set-architecture.pdf>)（封面日期 2025-08-05）§3.1，原文第 8 页，列出 VGPR、AccVGPR、SGPR、64 位执行掩码和 64 KiB LDS；§3.12，原文第 16 页，区分 SIMD、CU、SE 与 XCC 的执行位置编号；§5.8，原文第 29 页，说明 `XCC_ID`；第 7 章，原文第 40 页，说明矩阵指令及 AccVGPR 的用途。寄存器名称描述程序可见的状态，上图的 KiB 数值描述硬件存储容量，两者分别计数。
+> **[SPEC]** [MI300 / CDNA 3 ISA](../3.资料/amd-instinct-mi300-cdna3-instruction-set-architecture.pdf)（封面日期 2025-08-05）§3.1，原文第 8 页，列出 VGPR、AccVGPR、SGPR、64 位执行掩码和 64 KiB LDS；§3.12，原文第 16 页，区分 SIMD、CU、SE 与 XCC 的执行位置编号；§5.8，原文第 29 页，说明 `XCC_ID`；第 7 章，原文第 40 页，说明矩阵指令及 AccVGPR 的用途。寄存器名称描述程序可见的状态，上图的 KiB 数值描述硬件存储容量，两者分别计数。
 
 #### 3.0.2 为什么一条 Queue 要在多个 XCC 上占用 HQD
 
@@ -2728,11 +2728,11 @@ Q0 在 XCC 7 上的 MQD  ──装载──→  XCC 7 的一个 HQD 槽位
 
 这样，应用可以通过一条 Queue 使用整个逻辑 GPU，无需为每个 XCC 分别创建队列、拆分并提交同一次 Kernel。若计算分区把这些 XCC 分成了不同逻辑设备，队列就只覆盖所属节点内的 XCC；“每个 XCC”始终指这个范围。
 
-> **[SPEC]** 本地 [ISCA 2024 论文 §VII，第 11 页](<../3.资料/isca2024_exascale.pdf#page=11>)确认 MI300X 复用 XCD、IOD 组件；结合 [§VI-A、图 13，第 9 页](<../3.资料/isca2024_exascale.pdf#page=9>)说明这些组件共同取包、分担 Work-group 和协调完成的关系。本节只采用多 XCD 计算部分的机制。具体消息格式和握手时序未在论文中展开。
+> **[SPEC]** 本地 [ISCA 2024 论文 §VII，第 11 页](../3.资料/isca2024_exascale.pdf#page=11)确认 MI300X 复用 XCD、IOD 组件；结合 [§VI-A、图 13，第 9 页](../3.资料/isca2024_exascale.pdf#page=9)说明这些组件共同取包、分担 Work-group 和协调完成的关系。本节只采用多 XCD 计算部分的机制。具体消息格式和握手时序未在论文中展开。
 >
 > 轮转分配的 MI300X 依据见 [AMD：MI300 计算与内存分区模式](https://rocm.blogs.amd.com/software-tools-optimization/compute-memory-modes/README.html)（2025-02-09）“Compute partitioning modes / Workgroup scheduling behavior”：整卡作为单个计算设备时，Work-group 在 8 个 XCD 间分配。本节额外选用 16 个 Work-group，便于画出每个 XCC 分到两组的情况。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_mqd_manager_v9.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c>) 第 727～795 行使用同一份 Queue 属性为各 XCC 初始化 MQD，并分别设置逻辑 XCC 编号、保存区地址等字段；第 905～930 行在 No-HWS 装载路径中遍历节点的 `xcc_mask`，逐个调用 HQD 装载接口。No-HWS 的装载过程见第 3.2.1 节。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_mqd_manager_v9.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 727～795 行使用同一份 Queue 属性为各 XCC 初始化 MQD，并分别设置逻辑 XCC 编号、保存区地址等字段；第 905～930 行在 No-HWS 装载路径中遍历节点的 `xcc_mask`，逐个调用 HQD 装载接口。No-HWS 的装载过程见第 3.2.1 节。
 
 #### 3.0.3 每个 XCC 的 24 个用户计算队列驻留名额
 
@@ -2779,10 +2779,10 @@ Q0：每个 XCC 占一个 HQD
 
 > **[SOURCE]** Linux `248951ddc14d`，用户队列名额的计算依据：
 >
-> - 默认内核预留：[`amdgpu_gfx.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_gfx.c>) 第 1375～1383 行默认返回 8；[`gfx_v9_4_3.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c>) 第 2611～2616 行将其用于内核计算队列数。
-> - 各 XCC 的槽位预留：[`amdgpu_gfx.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_gfx.c>) 第 206～238 行在各 XCC 的第一个 MEC 中标记内核占用槽位。
-> - KFD 可用范围：[`amdgpu_amdkfd.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd.c>) 第 196～207 行去掉已被内核占用的槽位，并只保留第一个 MEC 的范围。
-> - 超额订阅判断：[`kfd_packet_manager.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager.c>) 第 57～75 行比较活动计算队列数和可用槽位数。
+> - 默认内核预留：[`amdgpu_gfx.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_gfx.c) 第 1375～1383 行默认返回 8；[`gfx_v9_4_3.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c) 第 2611～2616 行将其用于内核计算队列数。
+> - 各 XCC 的槽位预留：[`amdgpu_gfx.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_gfx.c) 第 206～238 行在各 XCC 的第一个 MEC 中标记内核占用槽位。
+> - KFD 可用范围：[`amdgpu_amdkfd.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd.c) 第 196～207 行去掉已被内核占用的槽位，并只保留第一个 MEC 的范围。
+> - 超额订阅判断：[`kfd_packet_manager.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager.c) 第 57～75 行比较活动计算队列数和可用槽位数。
 
 > **[SPEC]** AMD ROCm 6.3.0 文档 [Oversubscription of hardware resources in AMD Instinct accelerators](https://rocm.docs.amd.com/en/docs-6.3.0/conceptual/oversubscription.html)（2024-11-08）“What triggers oversubscription?”列出 24 条用户计算队列的硬件上限。本文同时列出固定驱动的计算过程，以限定这个数字的资源范围和预留条件。
 
@@ -2805,10 +2805,10 @@ Q0 的任务尚未完成时，GPU 怎样处理其他 Queue，以及换出后如�
 
 > **[SOURCE] 可选源码索引**，Linux `248951ddc14d`：
 >
-> - 调度方式：[`kgd_kfd_interface.h`](<../2.源码/linux/drivers/gpu/drm/amd/include/kgd_kfd_interface.h>) 第 81～104 行区分 HWS 固件调度和 No-HWS 直接设置寄存器；[`amdgpu_drv.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_drv.c>) 第 737～745 行说明 No-HWS 静态分配 HQD。
-> - 两种队列切换：[`driver-core.rst`](<../2.源码/linux/Documentation/gpu/amdgpu/driver-core.rst>) 第 131～152 行说明 Pipe 在已映射 Queue 中选择队列处理命令，第 154～160 行说明固件请求换出、保存队列状态和装载另一条 Queue 的过程。该通用说明以 MES 举例；本文 MI300 使用前述 HWS/CPSCH 路径，不套用 MES 接口。
-> - Wave 途中抢占：[`amdgpu_drv.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_drv.c>) 第 758～765 行说明 CWSR 允许在 Wave 执行途中抢占，参数默认开启。实际是否启用仍取决于运行配置。
-> - MI300 的 CWSR 配置：[`kfd_device.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device.c>) 第 512～535 行检查 CWSR 开关和设备支持，并为 GFX9.4.3 选择相应处理程序；[`kfd_mqd_manager_v9.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c>) 第 235～245 行在启用 CWSR 且提供保存区时配置队列切换模式，第 727～763 行将这套初始化用于各 XCC，并设置各自的保存区地址。
+> - 调度方式：[`kgd_kfd_interface.h`](../2.源码/linux/drivers/gpu/drm/amd/include/kgd_kfd_interface.h) 第 81～104 行区分 HWS 固件调度和 No-HWS 直接设置寄存器；[`amdgpu_drv.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_drv.c) 第 737～745 行说明 No-HWS 静态分配 HQD。
+> - 两种队列切换：[`driver-core.rst`](../2.源码/linux/Documentation/gpu/amdgpu/driver-core.rst) 第 131～152 行说明 Pipe 在已映射 Queue 中选择队列处理命令，第 154～160 行说明固件请求换出、保存队列状态和装载另一条 Queue 的过程。该通用说明以 MES 举例；本文 MI300 使用前述 HWS/CPSCH 路径，不套用 MES 接口。
+> - Wave 途中抢占：[`amdgpu_drv.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_drv.c) 第 758～765 行说明 CWSR 允许在 Wave 执行途中抢占，参数默认开启。实际是否启用仍取决于运行配置。
+> - MI300 的 CWSR 配置：[`kfd_device.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device.c) 第 512～535 行检查 CWSR 开关和设备支持，并为 GFX9.4.3 选择相应处理程序；[`kfd_mqd_manager_v9.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 235～245 行在启用 CWSR 且提供保存区时配置队列切换模式，第 727～763 行将这套初始化用于各 XCC，并设置各自的保存区地址。
 
 [第 3.1 节](#31-从-queue-属性生成-mqd)说明 Q0 的属性怎样写入 MQD。[第 3.2 节](#32-hqd队列配置寄存器与两种装载方式)接着介绍 HQD 寄存器，以及 No-HWS、HWS 两种装载方式。[第 3.3 节](#33-queue-换出与恢复时的状态保存)说明 Queue 换出后需要保留哪些状态。Packet 的执行阶段和 Wave 分派在第 6 章展开。
 
@@ -2856,13 +2856,13 @@ HQD：GPU 命令前端实际使用的硬件寄存器
 
 MQD manager 是 KFD 内部负责某种硬件 MQD 格式的一组函数，提供分配、初始化、更新、装载和释放等操作。DQM 通过这组函数先取得 MQD 存储，再填写 Q0 的配置。第二章中由 Runtime 准备的 Ring 继续使用原来的内存和 GPUVM 映射。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_device_queue_manager.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c>) 第 819～834 行和第 2163～2186 行分别展示两条创建路径中分配、初始化 MQD 的调用。[`kfd_mqd_manager_v9.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c>) 第 133～182 行的 `allocate_mqd()` 取得 MQD 内存：启用 CWSR 的 Compute 分支申请带控制栈空间的缓冲区，其他分支使用 KFD 的 GTT 子分配接口。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_device_queue_manager.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c) 第 819～834 行和第 2163～2186 行分别展示两条创建路径中分配、初始化 MQD 的调用。[`kfd_mqd_manager_v9.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 133～182 行的 `allocate_mqd()` 取得 MQD 内存：启用 CWSR 的 Compute 分支申请带控制栈空间的缓冲区，其他分支使用 KFD 的 GTT 子分配接口。
 
 #### 3.1.3 MQD 中的 Ring 地址、容量与索引地址
 
 下面使用本仓库固定源码中的 GFX9 MQD 字段说明换算。GFX9 是驱动使用的 IP 版本系列；MI300 的 GFX9.4.3 路径复用 `v9_mqd` 和公共初始化函数，再补充各 XCC 的配置。这里的 GFX9.4.3 是驱动 IP 版本，须与工具链目标名分开理解。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_mqd_manager_v9.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c>) 第 727～795 行的 `init_mqd_v9_4_3()` 按 XCC 调用公共 `init_mqd()`；公共函数在第 256 行调用下面分析的 `update_mqd()`。本节只展开公共字段的填写方式。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_mqd_manager_v9.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 727～795 行的 `init_mqd_v9_4_3()` 按 XCC 调用公共 `init_mqd()`；公共函数在第 256 行调用下面分析的 `update_mqd()`。本节只展开公共字段的填写方式。
 
 **Ring 基址：按字段单位填写。** 假设 Ring GPUVA 为 `0x10000000`，源码先将地址右移 8 位，再写入基址字段：
 
@@ -2906,7 +2906,7 @@ rptr report 地址字段也是同样的地址含义，只是数据流方向不�
 
 前面的例子已经给出了输入与结果。下面核对负责换算的 `update_mqd()`：`q` 指向 Q0 的软件属性，`mqd` 指向已经分配的 MQD。函数通过 `m` 向内存中的 `v9_mqd` 写入配置；这些赋值完成后，后续驻留过程才能继续使用所填的配置。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c>) 第 271～293 行。这段入口与字段赋值证明 Queue 属性怎样进入 GFX9 MQD。
+> **[SOURCE]** Linux `248951ddc14d`，[`drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 271～293 行。这段入口与字段赋值证明 Queue 属性怎样进入 GFX9 MQD。
 
 ```c
 271: static void update_mqd(struct mqd_manager *mm, void *mqd,
@@ -2942,7 +2942,7 @@ rptr report 地址字段也是同样的地址含义，只是数据流方向不�
 
 紧接着的第 294～321 行处理调试输出、IB 和 EOP 字段。其中 EOP 大小根据设备限制编码，不能照搬成 AQL Packet 数量。函数随后写 VMID，并仅对 AQL Queue 设置对应的进度和满队列控制位：
 
-> **[SOURCE]** Linux `248951ddc14d`，[`drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c>) 第 322～331 行。外围 AQL 条件限定了这些控制位的适用范围。
+> **[SOURCE]** Linux `248951ddc14d`，[`drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 322～331 行。外围 AQL 条件限定了这些控制位的适用范围。
 
 ```c
 322: 	m->cp_hqd_vmid = q->vmid;
@@ -2961,7 +2961,7 @@ rptr report 地址字段也是同样的地址含义，只是数据流方向不�
 
 **[BOUNDARY]** 上述字段布局和移位来自固定源码中的 GFX9 实现。第 332～346 行还处理 CWSR、性能计数、CU mask 和优先级；GFX9.4.3 初始化路径另有各 XCC 的配置，不能把公共函数中的每个位值都当成 MI300 最终 MQD 的完整状态。HWS/CPSCH 最终选择的 VMID 与驻留过程有关，创建时写入的 VMID 也不能用来断言 Queue 永久使用哪个硬件上下文。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_mqd_manager_v9.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c>) 第 727～795 行。`init_mqd_v9_4_3()` 逐 XCC 调用公共初始化，设置 MQD stride、每个实例的 CWSR 地址和逻辑 XCC ID；AQL 的第一个 XCC 还会清除 `NO_UPDATE_RPTR`。第 1024～1033 行将 GFX9.4.3 的 MQD 操作绑定到这些函数。因此前面的公共字段是初始化过程的一部分。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_mqd_manager_v9.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 727～795 行。`init_mqd_v9_4_3()` 逐 XCC 调用公共初始化，设置 MQD stride、每个实例的 CWSR 地址和逻辑 XCC ID；AQL 的第一个 XCC 还会清除 `NO_UPDATE_RPTR`。第 1024～1033 行将 GFX9.4.3 的 MQD 操作绑定到这些函数。因此前面的公共字段是初始化过程的一部分。
 
 ### 3.2 HQD：队列配置寄存器与两种装载方式
 
@@ -2990,11 +2990,11 @@ HWS
 
 **[BOUNDARY]** 本文固定版本中的 MI300 主线是 HWS/CPSCH，CPSCH 表示命令处理器调度路径。No-HWS 在固定源码中被标为调试用途；下面用它展示驱动如何直接写寄存器，再讲 HWS 如何把这项工作交给固件。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kgd_kfd_interface.h`](<../2.源码/linux/drivers/gpu/drm/amd/include/kgd_kfd_interface.h>) 第 81～104 行区分 HWS 固件调度和 No-HWS 直接设置寄存器，并将 No-HWS 标为仅用于调试；[`amdgpu_drv.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_drv.c>) 第 737～745 行说明 No-HWS 静态分配 HQD。
+> **[SOURCE]** Linux `248951ddc14d`，[`kgd_kfd_interface.h`](../2.源码/linux/drivers/gpu/drm/amd/include/kgd_kfd_interface.h) 第 81～104 行区分 HWS 固件调度和 No-HWS 直接设置寄存器，并将 No-HWS 标为仅用于调试；[`amdgpu_drv.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_drv.c) 第 737～745 行说明 No-HWS 静态分配 HQD。
 
 具体写哪些寄存器，可以直接看 MI300 使用的 GFX9.4.3 定义。先看激活状态和地址空间：
 
-> **[SOURCE]** Linux `248951ddc14d`，[`gc_9_4_3_offset.h`](<../2.源码/linux/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_offset.h>) 第 3286～3289 行。以下定义仅缩短对齐空格，保留原始行号、宏名和数值。MI300 装载代码在 [`amdgpu_amdkfd_gc_9_4_3.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gc_9_4_3.c>) 第 26～27 行包含这组寄存器偏移和位域头文件。
+> **[SOURCE]** Linux `248951ddc14d`，[`gc_9_4_3_offset.h`](../2.源码/linux/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_offset.h) 第 3286～3289 行。以下定义仅缩短对齐空格，保留原始行号、宏名和数值。MI300 装载代码在 [`amdgpu_amdkfd_gc_9_4_3.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gc_9_4_3.c) 第 26～27 行包含这组寄存器偏移和位域头文件。
 
 ```c
 3286: #define regCP_HQD_ACTIVE          0x1247
@@ -3027,7 +3027,7 @@ No-HWS 下，这个编号先记录在 KFD 的 `qpd->vmid` 和 `q->properties.vmi
 
 **下面这组寄存器让 GPU 知道：Q0 的任务放在哪里、应用提交到了哪里，以及读取进度要报告到哪里。** 先列出定义，再沿 Q0 的提交和取包过程看它们怎样配合。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`gc_9_4_3_offset.h`](<../2.源码/linux/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_offset.h>) 第 3298～3315 行，保留连续定义，仅缩短对齐空格。
+> **[SOURCE]** Linux `248951ddc14d`，[`gc_9_4_3_offset.h`](../2.源码/linux/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_offset.h) 第 3298～3315 行，保留连续定义，仅缩短对齐空格。
 
 ```c
 3298: #define regCP_HQD_PQ_BASE                        	0x124d
@@ -3128,12 +3128,12 @@ Ring 的 GPU 地址 0x10000000
 
 > **[SOURCE]** Linux `248951ddc14d`：
 >
-> - 配置值的来源：[`kfd_mqd_manager_v9.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c>) 第 279～293 行填写基址、容量、进度地址和 Doorbell offset，第 322 行填写 VMID。
-> - No-HWS 的 VMID 记录：[`kfd_device_queue_manager.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c>) 第 700～713 行将编号记入 QPD 和 Queue 属性，并配置该 VMID 对应的页表根。
-> - 寄存器位域：[`gc_9_4_3_sh_mask.h`](<../2.源码/linux/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_sh_mask.h>) 第 16330～16338 行定义 `ACTIVE` 和 VMID，第 16407～16417 行定义 Doorbell offset 与使能位，第 16420、16438 行定义 `QUEUE_SIZE`。
-> - 寄存器寻址：[`soc15_common.h`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/soc15_common.h>) 第 36 行选择基址；[`amdgpu_amdkfd_gfx_v9.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gfx_v9.c>) 第 50～70 行选择目标队列。
-> - 字节偏移换算：[`amdgpu_reg_access.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_reg_access.c>) 第 554～580 行的 `amdgpu_device_xcc_wreg()` 在直接 MMIO 分支中使用 `reg * 4` 计算访问位置，关键写入在第 575 行。
-> - 从内存读取写进度：[`amdgpu_amdkfd_gc_9_4_3.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gc_9_4_3.c>) 第 311～348 行在提供写索引地址时准备写进度、设置轮询地址并触发一次读取。
+> - 配置值的来源：[`kfd_mqd_manager_v9.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 279～293 行填写基址、容量、进度地址和 Doorbell offset，第 322 行填写 VMID。
+> - No-HWS 的 VMID 记录：[`kfd_device_queue_manager.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c) 第 700～713 行将编号记入 QPD 和 Queue 属性，并配置该 VMID 对应的页表根。
+> - 寄存器位域：[`gc_9_4_3_sh_mask.h`](../2.源码/linux/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_sh_mask.h) 第 16330～16338 行定义 `ACTIVE` 和 VMID，第 16407～16417 行定义 Doorbell offset 与使能位，第 16420、16438 行定义 `QUEUE_SIZE`。
+> - 寄存器寻址：[`soc15_common.h`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/soc15_common.h) 第 36 行选择基址；[`amdgpu_amdkfd_gfx_v9.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gfx_v9.c) 第 50～70 行选择目标队列。
+> - 字节偏移换算：[`amdgpu_reg_access.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_reg_access.c) 第 554～580 行的 `amdgpu_device_xcc_wreg()` 在直接 MMIO 分支中使用 `reg * 4` 计算访问位置，关键写入在第 575 行。
+> - 从内存读取写进度：[`amdgpu_amdkfd_gc_9_4_3.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gc_9_4_3.c) 第 311～348 行在提供写索引地址时准备写进度、设置轮询地址并触发一次读取。
 
 </details>
 
@@ -3159,7 +3159,7 @@ XCC 0 中 Q0 的 HQD                  XCC 1 中 Q0 的 HQD
 
 各 XCC 的 MQD 还记录不同的逻辑 XCC 编号；启用 CWSR 并提供保存区时，各 XCC 使用各自的现场保存区。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_mqd_manager_v9.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c>) 第 279～293 行从 Queue 属性填写 Ring 基址、容量、进度地址和 Doorbell，第 324～330 行为 AQL 设置 `NO_UPDATE_RPTR`；第 740～743 行为各 XCC 使用同一份 Queue 属性初始化 MQD，第 753～769 行设置各自的保存区地址和逻辑 XCC 编号，第 771～779 行只为 Master XCC 清除 `NO_UPDATE_RPTR`。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_mqd_manager_v9.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 279～293 行从 Queue 属性填写 Ring 基址、容量、进度地址和 Doorbell，第 324～330 行为 AQL 设置 `NO_UPDATE_RPTR`；第 740～743 行为各 XCC 使用同一份 Queue 属性初始化 MQD，第 753～769 行设置各自的保存区地址和逻辑 XCC 编号，第 771～779 行只为 Master XCC 清除 `NO_UPDATE_RPTR`。
 
 再看 Packet 0。假设它描述一次包含 16 个 Work-group 的 Kernel，各 XCC 都读取这个 Packet，再分别启动自己负责的 Work-group：
 
@@ -3189,7 +3189,7 @@ Packet 0：执行这个 Kernel，共 16 个 Work-group
 一个指定的 XCC 发出整个 Kernel 的完成通知
 ```
 
-> **[SPEC]** 本地 [ISCA 2024 论文 §VII，第 11 页](<../3.资料/isca2024_exascale.pdf#page=11>)确认 MI300X 复用 XCD、IOD 组件；结合 [§VI-A、图 13，第 9 页](<../3.资料/isca2024_exascale.pdf#page=9>)说明这些组件共同取包、分担 Work-group 和协调完成的关系。本节只采用多 XCD 计算部分的机制。具体消息格式和握手时序未在论文中展开。
+> **[SPEC]** 本地 [ISCA 2024 论文 §VII，第 11 页](../3.资料/isca2024_exascale.pdf#page=11)确认 MI300X 复用 XCD、IOD 组件；结合 [§VI-A、图 13，第 9 页](../3.资料/isca2024_exascale.pdf#page=9)说明这些组件共同取包、分担 Work-group 和协调完成的关系。本节只采用多 XCD 计算部分的机制。具体消息格式和握手时序未在论文中展开。
 
 对外读进度和 Kernel 完成通知仍是两件事：读进度用于管理 Ring 槽位的复用，Completion Signal 表示任务完成。本例中，CPU 发布 Packet 并更新写进度，GPU 报告读进度；Master XCC 对读进度的更新权限，不表示它负责修改 CPU 的写索引。两种进度与任务完成的关系在第 5～7 章继续展开。
 
@@ -3225,7 +3225,7 @@ CPU 上的 KFD 驱动
 
 若 A 再创建 Q1，Q1 可以复用 A 在这个节点上的 VMID，但有自己的 Doorbell、各 XCC 的 MQD 和另一组 HQD 槽位。No-HWS 使用静态分配；没有空闲 HQD 时，创建会返回 `-EBUSY`，而不会把 Q1 留给 HWS 轮流安排驻留。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_device_queue_manager.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c>) 第 673～715 行分配 VMID、配置页表根，第 781～849 行准备并装载队列，第 884～915 行分配 HQD、无槽位时返回 `-EBUSY`；[`kfd_mqd_manager_v9.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c>) 第 905～930 行逐 XCC 选择 MQD，向底层接口传入相同的 `pipe_id`、硬件 `queue_id` 和不同的 XCC 编号。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_device_queue_manager.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c) 第 673～715 行分配 VMID、配置页表根，第 781～849 行准备并装载队列，第 884～915 行分配 HQD、无槽位时返回 `-EBUSY`；[`kfd_mqd_manager_v9.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 905～930 行逐 XCC 选择 MQD，向底层接口传入相同的 `pipe_id`、硬件 `queue_id` 和不同的 XCC 编号。
 
 ##### 3.2.1.1 可选源码阅读：驱动写 HQD 的位置与装载条件
 
@@ -3247,15 +3247,15 @@ kgd_gfx_v9_4_3_hqd_load()    选择该 XCC 的槽位、写 HQD 寄存器
 - Q0 不允许活动，或者驱动调度尚未运行：跳过 HQD 装载，继续登记软件 Queue。这条返回路径已经创建软件对象，硬件装载留待后续处理。
 - Q0 允许活动且调度已运行：检查当前线程与 Q0 所属进程是否使用同一份 CPU 地址空间（`mm`）。一致才调用 `load_mqd()`；不一致返回 `-EFAULT`。资源分配或装载出错时，沿错误路径清理已取得的资源。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_device_queue_manager.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c>) 第 763～882 行给出完整创建函数：第 827～849 行初始化或恢复 MQD，并区分跳过装载、地址空间不匹配和实际装载；第 851～881 行完成软件登记或错误清理。第 3131～3163 行按调度策略选择创建函数。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_device_queue_manager.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c) 第 763～882 行给出完整创建函数：第 827～849 行初始化或恢复 MQD，并区分跳过装载、地址空间不匹配和实际装载；第 851～881 行完成软件登记或错误清理。第 3131～3163 行按调度策略选择创建函数。
 
 第二层 `load_mqd_v9_4_3()` 为每个 XCC 取出对应 MQD，调用第三层。这里的 `queue_id` 是 HQD 的硬件槽位号，PQM 分配的进程内 Queue ID 用于查找软件对象。循环中某个 XCC 装载失败就停止并返回错误；所有底层调用成功才返回 `0`。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_mqd_manager_v9.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c>) 第 905～930 行。第 909～910 行还处理写索引单位：AQL 按 64 字节 Packet 计数，PM4/CP 按 4 字节计数，因此 AQL 的移位量为 4。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_mqd_manager_v9.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 905～930 行。第 909～910 行还处理写索引单位：AQL 按 64 字节 Packet 计数，PM4/CP 按 4 字节计数，因此 AQL 的移位量为 4。
 
 第三层直接执行寄存器写入。它的输入包括对应 XCC 的 MQD、Pipe 和 HQD 槽位号，以及 XCC 实例编号 `inst`：
 
-> **[SOURCE]** Linux `248951ddc14d`，[`amdgpu_amdkfd_gc_9_4_3.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gc_9_4_3.c>) 第 284～309 行。第 533～537 行将 `hqd_load` 回调绑定到这个函数。
+> **[SOURCE]** Linux `248951ddc14d`，[`amdgpu_amdkfd_gc_9_4_3.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gc_9_4_3.c) 第 284～309 行。第 533～537 行将 `hqd_load` 回调绑定到这个函数。
 
 ```c
 284: static int kgd_gfx_v9_4_3_hqd_load(struct amdgpu_device *adev, void *mqd,
@@ -3292,7 +3292,7 @@ kgd_gfx_v9_4_3_hqd_load()    选择该 XCC 的槽位、写 HQD 寄存器
 
 接下来的第 311～348 行在提供 `wptr` 地址时恢复写进度、配置进度地址并触发 CP 从内存读取进度。下面继续同一函数的结尾，省略的进度处理发生在这两段代码之间：
 
-> **[SOURCE]** Linux `248951ddc14d`，[`amdgpu_amdkfd_gc_9_4_3.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gc_9_4_3.c>) 第 350～360 行，完成 EOP 初始化和 HQD 激活，再释放寄存器选择并返回。
+> **[SOURCE]** Linux `248951ddc14d`，[`amdgpu_amdkfd_gc_9_4_3.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gc_9_4_3.c) 第 350～360 行，完成 EOP 初始化和 HQD 激活，再释放寄存器选择并返回。
 
 ```c
 350: 	/* Start the EOP fetcher */
@@ -3340,7 +3340,7 @@ CP/MEC 依据 HQD 读取 Q0 的 AQL Ring，处理可执行的 Packet
 
 **KFD 提交 runlist 后，Q0 何时得到 HQD 由固件安排。** 装载成功后，Q0 仍按第 3.0 节的方式在所属节点各 XCC 上占用 HQD，各 XCC 分担同一次 Dispatch 的 Work-group。应用后续提交 Kernel 时，继续写 Q0 的 AQL Ring 和 Doorbell。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_device_queue_manager.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c>) 第 2151～2199 行准备资源、登记队列并按活动条件进入调度路径；[`kfd_packet_manager.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager.c>) 第 182～243 行构造进程与活动 Queue 的清单，第 359～399 行通过特权 Queue 提交指向 runlist 的控制包。[`kfd_pm4_headers_ai.h`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_pm4_headers_ai.h>) 第 30～42 行定义 Type-3 包头中的类型、操作码和长度字段；[`kfd_packet_manager_v9.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager_v9.c>) 第 101～110 行实际填入 `MAP_PROCESS` 的包头与 PASID。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_device_queue_manager.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c) 第 2151～2199 行准备资源、登记队列并按活动条件进入调度路径；[`kfd_packet_manager.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager.c) 第 182～243 行构造进程与活动 Queue 的清单，第 359～399 行通过特权 Queue 提交指向 runlist 的控制包。[`kfd_pm4_headers_ai.h`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_pm4_headers_ai.h) 第 30～42 行定义 Type-3 包头中的类型、操作码和长度字段；[`kfd_packet_manager_v9.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager_v9.c) 第 101～110 行实际填入 `MAP_PROCESS` 的包头与 PASID。
 
 HWS 还可以让多条 Queue 轮流使用有限的驻留名额。在第 3.0.3 节的默认资源预留下，一个节点有 24 条用户计算队列的驻留名额。允许超额订阅且满足软件资源限制时，可以创建更多待调度 Queue；暂时没有名额的 Queue 保留 Ring、MQD 和待处理 Packet，等待固件安排。
 
@@ -3355,11 +3355,11 @@ HWS 还可以让多条 Queue 轮流使用有限的驻留名额。在第 3.0.3 �
 
 下面核对 KFD 怎样完成资源准备、更新队列列表并发送控制包。这里能够看到 CPU 驱动交给固件的内容；固件内部怎样选择和装载 HQD，需要对应固件与硬件资料，不能用 No-HWS 的驱动调用链替代。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c>) 第 2126～2178 行。create_queue_cpsch() 接收 Queue 与 QPD，完成资源限制检查、按类型取得辅助资源，并分配 Doorbell 和 MQD。
+> **[SOURCE]** Linux `248951ddc14d`，[`drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c) 第 2126～2178 行。create_queue_cpsch() 接收 Queue 与 QPD，完成资源限制检查、按类型取得辅助资源，并分配 Doorbell 和 MQD。
 
 该公共函数接下来初始化或恢复 MQD，先把 Queue 加入 QPD 的设备队列列表，再在允许活动时检查 `enable_mes`。本地 MI300 使用下面的 CPSCH 分支，`enable_mes` 的适用范围在本折叠说明末尾交代：
 
-> **[SOURCE]** Linux `248951ddc14d`，[`drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c>) 第 2179～2199 行。外围 is_active 和 enable_mes 分支限定了实际向哪种调度路径提交。
+> **[SOURCE]** Linux `248951ddc14d`，[`drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c) 第 2179～2199 行。外围 is_active 和 enable_mes 分支限定了实际向哪种调度路径提交。
 
 ```c
 2179: 	if (qd)
@@ -3389,7 +3389,7 @@ HWS 还可以让多条 Queue 轮流使用有限的驻留名额。在第 3.0.3 �
 
 这里修改的是 DQM 管理的 QPD 列表。第 2.5.3 节所说的“DQM 成功后才加入 PQM 列表”，发生在外层 `pqm_create_queue()` 中；两份列表的用途和加入时点不同。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c>) 第 2202～2232 行。成功路径更新设备 Queue 总数；cleanup_queue 及后续错误标签撤销列表、活动计数、MQD、Doorbell 和相关 SDMA 资源，并返回原错误。
+> **[SOURCE]** Linux `248951ddc14d`，[`drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c) 第 2202～2232 行。成功路径更新设备 Queue 总数；cleanup_queue 及后续错误标签撤销列表、活动计数、MQD、Doorbell 和相关 SDMA 资源，并返回原错误。
 
 从上面的 `execute_queues_cpsch()` 到真正发送 runlist，中间还有停止旧调度状态和检查新状态的过程：
 
@@ -3403,17 +3403,17 @@ execute_queues_cpsch()
 
 这里的 unmap/map 针对 Queue 调度状态，不是在拆除和重建 Ring 的 GPUVM PTE。`map_queues_cpsch()` 在调度未运行或暂停、没有活动 Queue 或进程、或者已有活动 runlist 时会直接返回 `0`。只有通过这些判断，才发送 runlist，并在发送成功后设置 `active_runlist`。外层返回 `0` 时，可能已经发送新 runlist，也可能沿前述条件直接返回；确认本次提交结果需要检查实际分支。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_device_queue_manager.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c>) 第 2643～2657 行给出 Reset 锁与先 unmap、再 map 的调用关系；第 2266～2287 行给出 `map_queues_cpsch()` 的提前返回条件、发送调用和成功后的状态更新。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_device_queue_manager.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c) 第 2643～2657 行给出 Reset 锁与先 unmap、再 map 的调用关系；第 2266～2287 行给出 `map_queues_cpsch()` 的提前返回条件、发送调用和成功后的状态更新。
 
 控制包字段的来源也可以直接在源码中核对：
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_packet_manager_v9.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager_v9.c>) 第 89～143 行。MI300 实际使用 `pm_map_process_aldebaran()`，从 QPD/PDD 取得页表根和 PASID，并编码进 `MAP_PROCESS`。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_packet_manager_v9.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager_v9.c) 第 89～143 行。MI300 实际使用 `pm_map_process_aldebaran()`，从 QPD/PDD 取得页表根和 PASID，并编码进 `MAP_PROCESS`。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_packet_manager.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager.c>) 第 294～301 行。GFX9.4.3 明确选择 `kfd_aldebaran_pm_funcs`；该表在 `kfd_packet_manager_v9.c` 第 486～495 行绑定上述进程函数和公共 `pm_map_queues_v9()`。函数名保留了历史设备名，但适用于 MI300 的依据是此处实际选用它，不能由名称推定整个旧架构。
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_packet_manager.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager.c) 第 294～301 行。GFX9.4.3 明确选择 `kfd_aldebaran_pm_funcs`；该表在 `kfd_packet_manager_v9.c` 第 486～495 行绑定上述进程函数和公共 `pm_map_queues_v9()`。函数名保留了历史设备名，但适用于 MI300 的依据是此处实际选用它，不能由名称推定整个旧架构。
 
 对于一条 Queue，`pm_map_queues_v9(pm, buffer, q, is_static)` 在第 227～247 行取得输出 Packet，建立 Header 并设置默认计算引擎。第 249～280 行按 Queue 类型选择引擎，非法类型直接返回；完成选择后，才执行下面的公共字段赋值：
 
-> **[SOURCE]** Linux `248951ddc14d`，[`drivers/gpu/drm/amd/amdkfd/kfd_packet_manager_v9.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager_v9.c>) 第 281～297 行。同一个 q 提供 Doorbell、MQD 和 wptr 地址，最后返回控制包构造结果。
+> **[SOURCE]** Linux `248951ddc14d`，[`drivers/gpu/drm/amd/amdkfd/kfd_packet_manager_v9.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager_v9.c) 第 281～297 行。同一个 q 提供 Doorbell、MQD 和 wptr 地址，最后返回控制包构造结果。
 
 ```c
 281: 	packet->bitfields3.doorbell_offset =
@@ -3441,7 +3441,7 @@ execute_queues_cpsch()
 
 读取通用 `create_queue_cpsch()` 时会看到 `enable_mes` 判断。MES 是其他受支持架构使用的固件调度接口，通过 Add Queue 等操作提交队列状态；本地固定版本的 MI300 使用上面的 HWS/CPSCH 分支，不执行 `add_queue_mes()`。PM4 结构体名称中的 `mes` 也不能单独证明启用了 MES，应检查实际回调表和条件分支。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`amdgpu_discovery.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_discovery.c>) 第 2716～2755 行的 MES 模块选择覆盖列出的 GFX11/GFX12 设备，未覆盖 GFX9.4.3。MES 的 Gang、时间参数和固件接口细节不用于解释本节 MI300 的驻留过程。
+> **[SOURCE]** Linux `248951ddc14d`，[`amdgpu_discovery.c`](../2.源码/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_discovery.c) 第 2716～2755 行的 MES 模块选择覆盖列出的 GFX11/GFX12 设备，未覆盖 GFX9.4.3。MES 的 Gang、时间参数和固件接口细节不用于解释本节 MI300 的驻留过程。
 
 </details>
 
@@ -3468,7 +3468,7 @@ KFD 的 Q0.properties
 
 这个判断检查 Ring 的配置和软件状态，不读取 Ring 中是否已有有效 Packet。即使 Q0 的 `read_index = write_index`，上述条件仍可成立。`queue_percent = 100` 也不是一次“占满所有 CU”的实测结果；这里用到的只是该配置值大于 0。
 
-> **[SOURCE]** Linux `248951ddc14d`，[`kfd_priv.h`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_priv.h>) 第 510～527 行定义这些 Queue 属性，第 556～560 行给出完整的活动条件：
+> **[SOURCE]** Linux `248951ddc14d`，[`kfd_priv.h`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_priv.h) 第 510～527 行定义这些 Queue 属性，第 556～560 行给出完整的活动条件：
 
 ```c
 556: #define QUEUE_IS_ACTIVE(q) ((q).queue_size > 0 &&	\
@@ -3480,7 +3480,7 @@ KFD 的 Q0.properties
 
 宏本身只返回条件是否成立。第 556～558 行要求 Ring 大小和配置比例大于 0、地址非 0；第 559～560 行排除驱逐与挂起状态。MQD 更新代码用这个结果填写 `is_active`，runlist 构造代码再按 `is_active` 选取 Queue。
 
-> **[SOURCE]** 同一 Linux 基线：[`kfd_mqd_manager_v9.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c>) 第 256、271～358 行连接 MQD 初始化、更新与 `is_active` 赋值，MI300 的逐 XCC 初始化入口见第 727～743 行；[`kfd_packet_manager.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager.c>) 第 223～241 行跳过非活动 Queue，并为活动 Queue 构造控制包。
+> **[SOURCE]** 同一 Linux 基线：[`kfd_mqd_manager_v9.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 256、271～358 行连接 MQD 初始化、更新与 `is_active` 赋值，MI300 的逐 XCC 初始化入口见第 727～743 行；[`kfd_packet_manager.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager.c) 第 223～241 行跳过非活动 Queue，并为活动 Queue 构造控制包。
 
 接下来还要经过设备调度和 Packet 自身的执行条件。下图按正常成功路径展开；“已创建”表示软件对象和资源已建立，后续状态由各层分别推进：
 
@@ -3527,9 +3527,9 @@ KFD 驱逐进程 A 在 GPU0 上的 Queue
 
 > **[SOURCE] 可选源码索引**，Linux `248951ddc14d`：
 >
-> - 驱逐与恢复：[`kfd_device_queue_manager.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c>) 第 1330～1389、1473～1533 行，分别设置驱逐状态、撤销活动计数，以及在最后一次恢复时重查条件并更新调度。
-> - 调试挂起与恢复：同文件第 1202～1277 行修改单 Queue 的标志和活动计数，第 3492～3583、3597～3685 行由外层批量更新 HWS 调度；接口入口见 [`kfd_chardev.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c>) 第 3196～3206 行。
-> - 设备级发送条件：[`kfd_device_queue_manager.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c>) 第 2266～2287 行。`active_runlist` 记录驱动侧的运行列表状态，不能据此逐条确认 HQD 驻留。
+> - 驱逐与恢复：[`kfd_device_queue_manager.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c) 第 1330～1389、1473～1533 行，分别设置驱逐状态、撤销活动计数，以及在最后一次恢复时重查条件并更新调度。
+> - 调试挂起与恢复：同文件第 1202～1277 行修改单 Queue 的标志和活动计数，第 3492～3583、3597～3685 行由外层批量更新 HWS 调度；接口入口见 [`kfd_chardev.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_chardev.c) 第 3196～3206 行。
+> - 设备级发送条件：[`kfd_device_queue_manager.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c) 第 2266～2287 行。`active_runlist` 记录驱动侧的运行列表状态，不能据此逐条确认 HQD 驻留。
 
 **[BOUNDARY]** 上述宏是正常创建、更新和恢复路径使用的活动条件。销毁、Reset 等路径还会直接更新 Queue 状态，不能把这个宏当作覆盖全部异常的状态机。`is_evicted` 表示 KFD 发起的驱逐状态；固件正常轮换 HQD 名额时，应按实际驻留变化判断，不因“暂时未驻留”就推定该标志为 true。
 
@@ -3602,7 +3602,7 @@ CU 上执行的 Wave
 
 **HQD 保存的是“保存区在哪里”，现场数据保存在地址 `S` 指向的内存区域中。** 所以 Q0 让出 HQD 槽位后，仍可保留这块内存，供以后恢复。CWSR 还涉及控制栈，它与 Wave 现场数据区的布局见本节末尾的可选说明。
 
-> **[SOURCE]** ROCr `ba56a24c6132`，[`queues.c`](<../2.源码/rocr-runtime/libhsakmt/src/queues.c>) 第 516～582 行分配保存区，并把地址传给 KFD。Linux `248951ddc14d`，[`kfd_mqd_manager_v9.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c>) 第 235～245 行将保存区地址写入 MQD，第 753～763 行为各 XCC 设置各自的地址。
+> **[SOURCE]** ROCr `ba56a24c6132`，[`queues.c`](../2.源码/rocr-runtime/libhsakmt/src/queues.c) 第 516～582 行分配保存区，并把地址传给 KFD。Linux `248951ddc14d`，[`kfd_mqd_manager_v9.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 235～245 行将保存区地址写入 MQD，第 753～763 行为各 XCC 设置各自的地址。
 
 **② Q2 运行时：Q0 的硬件名额让出，内存中的内容继续保留。**
 
@@ -3658,9 +3658,9 @@ MI300 按所属节点的 XCC 保存和恢复相应状态。启用 CWSR 并提供
 
 > **[SOURCE] 可选源码索引**，Linux `248951ddc14d`：
 >
-> - Pipe 切换与 Queue 换出：[`driver-core.rst`](<../2.源码/linux/Documentation/gpu/amdgpu/driver-core.rst>) 第 131～152 行说明 Pipe 选择已装载队列处理命令；第 154～160 行说明固件等待队列停止、保存状态并装载另一条 Queue 的过程。该通用说明以 MES 举例；本文 MI300 使用第 3.2.2 节的 HWS/CPSCH 路径。
-> - MI300 的保存区配置：[`kfd_mqd_manager_v9.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c>) 第 133～162 行说明带控制栈的 MQD 缓冲区布局，第 235～245 行在 CWSR 条件满足时填写保存区配置，第 727～763 行初始化各 XCC 的 MQD，并设置各自的现场保存区地址。
-> - Wave 现场的保存与恢复：[`cwsr_trap_handler_gfx9.asm`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/cwsr_trap_handler_gfx9.asm>) 第 37～39 行给出 GFX9.4.3 的生成入口；第 421～499 行保存执行位置等硬件状态和 SGPR，第 537～625 行处理 LDS 保存，第 630～728 行处理 VGPR 与 AccVGPR 保存，第 739～953 行恢复现场并返回原程序。这些分支证明执行现场包含哪些内容。
+> - Pipe 切换与 Queue 换出：[`driver-core.rst`](../2.源码/linux/Documentation/gpu/amdgpu/driver-core.rst) 第 131～152 行说明 Pipe 选择已装载队列处理命令；第 154～160 行说明固件等待队列停止、保存状态并装载另一条 Queue 的过程。该通用说明以 MES 举例；本文 MI300 使用第 3.2.2 节的 HWS/CPSCH 路径。
+> - MI300 的保存区配置：[`kfd_mqd_manager_v9.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 133～162 行说明带控制栈的 MQD 缓冲区布局，第 235～245 行在 CWSR 条件满足时填写保存区配置，第 727～763 行初始化各 XCC 的 MQD，并设置各自的现场保存区地址。
+> - Wave 现场的保存与恢复：[`cwsr_trap_handler_gfx9.asm`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/cwsr_trap_handler_gfx9.asm) 第 37～39 行给出 GFX9.4.3 的生成入口；第 421～499 行保存执行位置等硬件状态和 SGPR，第 537～625 行处理 LDS 保存，第 630～728 行处理 VGPR 与 AccVGPR 保存，第 739～953 行恢复现场并返回原程序。这些分支证明执行现场包含哪些内容。
 
 **[BOUNDARY]** 暂时换出仍需保留恢复所需的内存与映射。第 2.6.4 节介绍的 BO 引用和映射使用记录，不能仅因 Q0 暂时没有驻留就归还。
 
@@ -3669,4 +3669,3 @@ MI300 按所属节点的 XCC 保存和恢复相应状态。启用 CWSR 并提供
 </details>
 
 继续阅读[下篇第 4 章](<./03_AMD GPU 队列与 AQL Dispatch（下）.md#4-一次-kernel-调用的-aql-packet-编码>)，从一次 `vector_add` 调用出发，说明应用怎样把 Kernel 任务写成 Ring 中的 AQL Packet。
-

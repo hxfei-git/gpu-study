@@ -211,7 +211,7 @@
 
 接口关系从 HSA/ROCr 层展开，便于看清驱动请求。高层 Runtime 应用会由其实现完成相应底层调用，[下篇 §3.4](<./06_AQL 应用的完整运行流程：驱动初始化、执行与资源释放（下）.md#34-host-线程与-runtime-安排本轮软件提交>) 再接上 CLR 的提交路径。图中的接口不要求 HIP 应用逐个显式调用，也不把 Stream 与底层 AQL Queue 固定画成一一对应。
 
-源码基线为 Linux `248951ddc14de84de3910f9b13f51491a8cd91df`、ROCr `ba56a24c6132c5d195686ae4adf969ca1222fbba`、CLR `81277d69e3352e7144ced2ee9601484f9b48d950`，后文使用其前 12 位。目录见[源码基线说明](<../2.源码/README.md>)。`[SOURCE]` 标记实现事实，`[SPEC]` 标记规范语义，`[DESIGN]` 标记教学条件，`[INFERENCE]` 标记条件推演，`[BOUNDARY]` 说明适用范围。
+源码基线为 Linux `248951ddc14de84de3910f9b13f51491a8cd91df`、ROCr `ba56a24c6132c5d195686ae4adf969ca1222fbba`、CLR `81277d69e3352e7144ced2ee9601484f9b48d950`，后文使用其前 12 位。目录见[源码基线说明](../2.源码/README.md)。`[SOURCE]` 标记实现事实，`[SPEC]` 标记规范语义，`[DESIGN]` 标记教学条件，`[INFERENCE]` 标记条件推演，`[BOUNDARY]` 说明适用范围。
 
 源码文件名链接定位到该处引用的第一段，行号链接分别定位到对应片段的起始行。可在 VS Code 的 Markdown 编辑区中 Ctrl＋左键点击，或在预览中直接点击。本地源码定位采用 VS Code 原生链接，按当前仓库的绝对路径生成；移动仓库目录后需更新这些定位路径。
 
@@ -1228,10 +1228,10 @@ GEM（Graphics Execution Manager）是 DRM 的通用对象管理代码。在本�
 699: 		bo->tbo.priority = 2;
 700: 	else if (!(bp->flags & AMDGPU_GEM_CREATE_DISCARDABLE))
 701: 		bo->tbo.priority = 1;
-702: 
+702:
 703: 	if (!bp->destroy)
 704: 		bp->destroy = &amdgpu_bo_destroy;
-705: 
+705:
 706: 	r = ttm_bo_init_reserved(&adev->mman.bdev, &bo->tbo, bp->type,
 707: 				 &bo->placement, page_align, &ctx,  NULL,
 708: 				 bp->resv, bp->destroy);
@@ -1337,16 +1337,16 @@ struct ttm_tt {
 126: 	struct ttm_device *bdev = bo->bdev;
 127: 	bool old_use_tt, new_use_tt;
 128: 	int ret;
-129: 
+129:
 130: 	old_use_tt = !bo->resource || ttm_manager_type(bdev, bo->resource->mem_type)->use_tt;
 131: 	new_use_tt = ttm_manager_type(bdev, mem->mem_type)->use_tt;
-132: 
+132:
 133: 	ttm_bo_unmap_virtual(bo);
-134: 
+134:
 135: 	/*
 136: 	 * Create and bind a ttm if required.
 137: 	 */
-138: 
+138:
 139: 	if (new_use_tt) {
 140: 		/* Zero init the new TTM structure if the old location should
 141: 		 * have used one as well.
@@ -1354,18 +1354,18 @@ struct ttm_tt {
 143: 		ret = ttm_tt_create(bo, old_use_tt);
 144: 		if (ret)
 145: 			goto out_err;
-146: 
+146:
 147: 		if (mem->mem_type != TTM_PL_SYSTEM) {
 148: 			ret = ttm_bo_populate(bo, ctx);
 149: 			if (ret)
 150: 				goto out_err;
 151: 		}
 152: 	}
-153: 
+153:
 154: 	ret = dma_resv_reserve_fences(bo->base.resv, 1);
 155: 	if (ret)
 156: 		goto out_err;
-157: 
+157:
 158: 	ret = bdev->funcs->move(bo, evict, ctx, mem, hop);
 159: 	if (ret) {
 160: 		if (ret == -EMULTIHOP)
@@ -1689,22 +1689,22 @@ Linux 已有的 pci_dev（pdev）
 2424: 	adev = devm_drm_dev_alloc(&pdev->dev, &amdgpu_kms_driver, typeof(*adev), ddev);
 2425: 	if (IS_ERR(adev))
 2426: 		return PTR_ERR(adev);
-2427: 
+2427:
 2428: 	adev->dev  = &pdev->dev;
 2429: 	adev->pdev = pdev;
 2430: 	ddev = adev_to_drm(adev);
-2431: 
+2431:
 2432: 	if (!supports_atomic)
 2433: 		ddev->driver_features &= ~DRIVER_ATOMIC;
-2434: 
+2434:
 2435: 	ret = pci_enable_device(pdev);
 2436: 	if (ret)
 2437: 		return ret;
-2438: 
+2438:
 2439: 	pci_set_drvdata(pdev, ddev);
-2440: 
+2440:
 2441: 	amdgpu_init_debug_options(adev);
-2442: 
+2442:
 2443: 	ret = amdgpu_driver_load_kms(adev, flags);
 2444: 	if (ret)
 2445: 		goto err_pci;
@@ -2069,11 +2069,11 @@ Host CPU 执行 gmc_v9_0_sw_init()
 2328: {
 2329: 	bool init_badpage;
 2330: 	int i, r;
-2331: 
+2331:
 2332: 	r = amdgpu_ras_init(adev);
 2333: 	if (r)
 2334: 		return r;
-2335: 
+2335:
 2336: 	for (i = 0; i < adev->num_ip_blocks; i++) {
 2337: 		if (!adev->ip_blocks[i].status.valid)
 2338: 			continue;
@@ -2088,11 +2088,11 @@ Host CPU 执行 gmc_v9_0_sw_init()
 2347: 			}
 2348: 		}
 2349: 		adev->ip_blocks[i].status.sw = true;
-2350: 
+2350:
 2351: 		if (!amdgpu_ip_member_of_hwini(
 2352: 			    adev, adev->ip_blocks[i].version->type))
 2353: 			continue;
-2354: 
+2354:
 2355: 		if (adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_COMMON) {
 2356: 			/* need to do common hw init early so everything is set up for gmc */
 2357: 			r = adev->ip_blocks[i].version->funcs->hw_init(&adev->ip_blocks[i]);
@@ -2107,7 +2107,7 @@ Host CPU 执行 gmc_v9_0_sw_init()
 2366: 			/* Try to reserve bad pages early */
 2367: 			if (amdgpu_sriov_vf(adev))
 2368: 				amdgpu_virt_exchange_data(adev);
-2369: 
+2369:
 2370: 			r = amdgpu_device_mem_scratch_init(adev);
 2371: 			if (r) {
 2372: 				dev_err(adev->dev,
@@ -2270,7 +2270,129 @@ gfx_v9_4_3_sw_init()：准备当前设备的 GFX 软件资源
 
 #### 1.3.4 软件循环结束后建立 IB 池与微码暂存 BO
 
-其余有效 IP 的软件回调完成后，公共代码离开循环，继续建立 IB 池和公共微码 BO。IB 是 Indirect Buffer（间接命令缓冲）：驱动可以把一批命令放在独立缓冲中，再由 Ring 上的命令引用它。本节先建立公共池，具体任务怎样组织和提交这类命令留在相应使用路径展开。
+其余有效 IP 的软件回调完成后，公共代码离开循环，继续建立 IB 池和公共微码 BO。先看 IB 池以后要支持的操作：Host 驱动准备一批设备命令，设备需要找到并处理这批命令。驱动可以把命令连续写进一段独立内存，再向选定的 Ring 提交这段内存的地址和长度。这段保存命令的内存就是 IB（Indirect Buffer，间接命令缓冲区）。
+
+下面展示引用关系与读取顺序，用来区分“引用 IB 的命令”和“IB 里的命令包”；这是通用组织方式的示意，不是某一引擎的实际字段布局。假设相关队列和地址映射已准备好，驱动正在提交一批命令：
+
+```text
+Host 驱动选择目标 Ring / Queue
+    │ 写入一条引用 IB 的命令
+    ▼
+Ring / Queue 中的命令
+    ├─ 命令头：本通路如何识别这条请求
+    ├─ IB 的 GPU 地址：去哪里读取命令
+    ├─ IB 的长度：读取多长的一段内容
+    └─ 本命令所需的其他控制字段
+    │
+    │ Host 发布写指针并按该队列协议通知设备
+    ▼
+该通路的设备侧命令处理单元读取请求
+    │ 根据 IB 地址和长度访问内存
+    ▼
+IB：连续存放命令包的内存
+    ├─ 命令包 A：包头 + 参数
+    ├─ 命令包 B：包头 + 参数
+    └─ ……
+    ↓ 按该通路的命令协议解析
+设备执行命令要求的操作
+```
+
+“间接”指设备先从 Ring 中取得 IB 的地址，再到另一段内存读取实际命令。Ring 中保存的引用命令与 IB 本身位于不同位置；IB 保存命令，命令中的地址还可以继续指向要访问的数据或配置。
+
+**KIQ 可以直接存放命令，IB 用来存放被命令引用的另一批命令。** KIQ 是 AMDGPU 内核使用的一条控制队列。以本章后续建立 HIQ 的过程为例：Host 已准备好 HIQ 的 MQD，要让设备装载这条队列，就直接向 KIQ 写入 `MAP_QUEUES` 命令。下面只展示命令与配置的关系，省略实际字段编码；具体装载步骤继续见 §1.7.6。
+
+```text
+KIQ 的 Ring 内存
+    MAP_QUEUES 命令
+        操作：映射 HIQ
+        参数：HIQ 的 MQD 地址、目标队列位置等
+                    │
+                    │ 设备读取命令，再按 MQD 地址访问
+                    ▼
+内存中的 HIQ MQD
+    保存 HIQ 的 Ring 地址、队列配置等
+                    ↓
+设备装载 HIQ，使这条内部管理队列可以使用
+```
+
+这条 `MAP_QUEUES` 本身就在 KIQ 中，引用的是保存配置的 MQD，没有额外经过一份 IB。因此，KIQ 与 IB 不是必须成对出现的对象；不能把 KIQ 理解成只保存 IB 地址的队列。
+
+HIQ 可用以后，KFD 再通过 HIQ 交给设备一批进程、队列管理命令。这时采用运行列表 IB：先把具体命令写在另一段内存里，再向 HIQ 写入引用它的 `RUN_LIST`。**[DESIGN]** 假设要管理进程 P 及其队列 Q0、Q1，省略其他控制命令，引用关系如下：
+
+```text
+HIQ 的 Ring 内存
+    RUN_LIST 命令
+        IB 地址 ──────────────→ 另一段内存：运行列表 IB
+        IB 长度                     MAP_PROCESS：描述进程 P
+                                    MAP_QUEUES：描述队列 Q0
+                                    MAP_QUEUES：描述队列 Q1
+
+设备先从 HIQ 读到 RUN_LIST
+    → 按地址找到运行列表 IB
+    → 读取其中的具体管理命令并处理
+```
+
+两种地址指向的内容不同：`MAP_QUEUES` 中的 MQD 地址指向一份队列配置；`RUN_LIST` 中的 IB 地址指向一批待处理的命令。这就是 IB 在这里的用途：让一批命令保存在独立内存中，通过队列里的命令按地址引用。用户 AQL Ring 则保存应用发布的 Dispatch Packet，与这两条内部管理队列分别使用各自的存储。
+
+**IB 的内容与格式由提交通路确定。** IB 是容器，每条命令包才有具体的操作码和参数布局。上述 IB 从第一条命令包开始，不需要再套一个通用的“IB 总包头”，也没有一个统一的 `type = KFD / SDMA` 字段用于选择解析器。KFD 是 Host 上的软件驱动组件，SDMA 是设备上的搬运引擎，两者本身也不是同一类对象。
+
+处理顺序是：先通过提交通路确定接收方及命令协议，再根据包头中的 `opcode` 判断当前命令要做什么。以本章会遇到的两种用途为例：
+
+```text
+KFD 提交运行列表：
+    HIQ（KFD 向设备发送管理命令的内部队列）
+      → CP 的计算侧 MEC / 队列管理固件处理 RUN_LIST
+      → 按 RUN_LIST 中的地址和长度读取运行列表 IB
+      → 按该管理通路的 PM4 格式处理进程、队列管理命令
+
+驱动提交 SDMA 搬运命令：
+    SDMA Ring
+      → SDMA 引擎处理 INDIRECT
+      → 按 INDIRECT 中的地址和长度读取 SDMA IB
+      → 按 SDMA 格式处理复制等命令
+```
+
+**[DESIGN]** 下面用“管理进程 P 的两条队列”和“两次数据复制”展示 IB 内部的内容，省略实际字段编码、对齐和其他控制命令。两份 IB 分别交给对应通路处理，图中的包头也遵守各自的协议。
+
+```text
+KFD 运行列表 IB
+    MAP_PROCESS 包：描述进程 P
+        包头 + 进程标识、页表地址等参数
+    MAP_QUEUES 包：描述队列 Q0
+        包头 + MQD 地址、Doorbell 等参数
+    MAP_QUEUES 包：描述队列 Q1
+        包头 + MQD 地址、Doorbell 等参数
+
+SDMA IB
+    COPY 包：把数据从 A 复制到 B
+        包头 + 复制长度编码、控制字段、源地址 A、目标地址 B
+    COPY 包：把数据从 C 复制到 D
+        包头 + 复制长度编码、控制字段、源地址 C、目标地址 D
+```
+
+运行列表 IB 中的 MQD 地址指向保存队列配置的另一块内存；SDMA IB 中的源地址、目标地址指向被搬运的数据。IB 中保存这些地址与操作要求，不把整份 MQD 或待复制的数据当作上述命令包的内容。运行列表 IB 服务于队列管理，是 IB 的一种用途；SDMA IB 则可以直接描述数据搬运任务。应用日常提交的 AQL Dispatch Packet 仍放在用户 AQL Ring 中，不会因为 KFD 使用运行列表 IB，就改成经这份 IB 提交。
+
+命令包的长度取决于各自格式，IB 的长度是这段命令流的长度。例如后文用 `uint32_t commands[64]` 示意存储时，表示能容纳 64 个 32 位字，即 256 字节，而不是 64 条命令。命令如何占据这段空间，要由实际包格式决定。
+
+**MEC 与 SDMA 都有固件，命令格式是驱动必须遵守的设备接口。** SDMA 也需要微码，不能把两条路径理解成“MEC 的命令完全由软件定义，SDMA 的命令完全由硬件固定”。驱动按目标 IP 版本和配套固件支持的协议填写操作码、地址、长度及控制字段，设备侧按该协议处理。
+
+**[BOUNDARY]** 有固件说明部分行为由设备侧程序实现，不代表只修改固件就能任意改变命令格式。公开驱动源码能够证明命令如何编码、SDMA 如何取得微码；仅凭这些代码，不能把每个命令字段的解析工作精确划分给硬件逻辑或固件。
+
+本节建立的是 AMDGPU 公共 IB 池，当前还没有向设备提交上述任务。KFD 运行列表使用的管理池在 §1.7.3 另行准备，不应把两处申请当成同一个池。运行列表 IB 的地址与读取过程见 [§1.7.3.2](#1732-设备从-hiq-取得地址并读取运行列表-ib)，与应用 AQL Queue 的关系见 [§1.7.3.3](#1733-管理通路与应用-aql-queue-的关联)。本节只用 SDMA 说明 IB 还有其他用途，普通任务提交的完整调度流程仍按第七章展开。
+
+<details>
+<summary>可选源码索引：IB 引用、命令格式与 SDMA 微码</summary>
+
+> **[SOURCE]** 以下均为 Linux `248951ddc14d` 固定源码基线。
+>
+> - KFD 将进程、队列命令依次写入运行列表 IB：[kfd_packet_manager.c](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager.c:181:1) 第 [181～240](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager.c:181:1) 行；`RUN_LIST` 的地址和长度编码见 [kfd_packet_manager_v9.c](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager_v9.c:175:1) 第 [175～188](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager_v9.c:175:1) 行。
+> - HIQ 引用运行列表 IB：[kfd_packet_manager.c](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager.c:359:1) 第 [359～390](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager.c:359:1) 行 先取得运行列表 IB，再申请内部队列中的命令空间，填入引用 IB 的 `RUN_LIST` 并提交。
+> - 本例 GFX9.4.3 选用的命令构造实现：[kfd_packet_manager.c](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager.c:294:1) 第 [294～301](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager.c:294:1) 行；函数表 [kfd_packet_manager_v9.c](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager_v9.c:486:1) 第 [486～498](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdkfd/kfd_packet_manager_v9.c:486:1) 行 指定 `MAP_PROCESS`、`MAP_QUEUES` 的构造函数及大小。实际 `MAP_QUEUES` 包布局见 [kfd_pm4_headers_ai.h](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdkfd/kfd_pm4_headers_ai.h:275:1) 第 [275～311](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdkfd/kfd_pm4_headers_ai.h:275:1) 行。
+> - KIQ 直接提交映射 HIQ 的 `MAP_QUEUES`：[amdgpu_amdkfd_gfx_v9.c](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gfx_v9.c:301:1) 第 [301～344](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gfx_v9.c:301:1) 行；本例 GC 9.4.3 的回调表 [amdgpu_amdkfd_gc_9_4_3.c](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gc_9_4_3.c:533:1) 第 [533～539](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gc_9_4_3.c:533:1) 行 选用此实现。这里向 KIQ 写入命令及 MQD 地址，没有构造额外的 IB。
+> - SDMA Ring 中引用 IB 的 `INDIRECT` 命令：[sdma_v4_4_2.c](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdgpu/sdma_v4_4_2.c:373:1) 第 [373～390](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdgpu/sdma_v4_4_2.c:373:1) 行；IB 中线性复制命令的编码见 [sdma_v4_4_2.c](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdgpu/sdma_v4_4_2.c:2270:1) 第 [2270～2285](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdgpu/sdma_v4_4_2.c:2270:1) 行。两处分别写入 Ring 和 IB，证明两种存储内容的区别。
+> - SDMA 微码准备：[sdma_v4_4_2.c](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdgpu/sdma_v4_4_2.c:192:1) 第 [192～209](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdgpu/sdma_v4_4_2.c:192:1) 行 调用公共微码初始化；[amdgpu_sdma.c](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_sdma.c:203:1) 第 [203～224](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_sdma.c:203:1) 行 按 IP 版本申请固件文件，[amdgpu_sdma.c](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_sdma.c:249:1) 第 [249～276](vscode://file/home/book/2.study/gpu-study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/amd/amdgpu/amdgpu_sdma.c:249:1) 行 在本例 PSP 加载路径中登记 SDMA 微码。
+
+</details>
 
 微码暂存 BO 接着使用 §1.2 已累计的 `adev->firmware.fw_size` 申请空间。沿本例正常物理设备、PSP 装载、`debug_use_vram_fw_buf` 关闭的条件，分配选择 GTT 域，返回 BO、Host 基址和设备基址。
 
@@ -2302,11 +2424,11 @@ amdgpu_ucode_init_bo() 将微码字节填入 BO，再进入 PSP 装载
 2419: 		amdgpu_vf_error_put(adev, AMDGIM_ERROR_VF_IB_INIT_FAIL, 0, r);
 2420: 		goto init_failed;
 2421: 	}
-2422: 
+2422:
 2423: 	r = amdgpu_ucode_create_bo(adev); /* create ucode bo when sw_init complete*/
 2424: 	if (r)
 2425: 		goto init_failed;
-2426: 
+2426:
 2427: 	r = amdgpu_device_ip_hw_init_phase1(adev);
 2428: 	if (r)
 2429: 		goto init_failed;
@@ -2997,9 +3119,9 @@ GPU 从配置的 Ring 地址出发
 2117: 	struct amdgpu_device *adev = ring->adev;
 2118: 	struct v9_mqd *mqd = ring->mqd_ptr;
 2119: 	struct v9_mqd *tmp_mqd;
-2120: 
+2120:
 2121: 	gfx_v9_4_3_xcc_kiq_setting(ring, xcc_id);
-2122: 
+2122:
 2123: 	/* GPU could be in bad state during probe, driver trigger the reset
 2124: 	 * after load the SMU, in this case , the mqd is not be initialized.
 2125: 	 * driver need to re-init the mqd.
@@ -3010,7 +3132,7 @@ GPU 从配置的 Ring 地址出发
 2130: 		/* for GPU_RESET case , reset MQD to a clean status */
 2131: 		if (adev->gfx.kiq[xcc_id].mqd_backup)
 2132: 			memcpy(mqd, adev->gfx.kiq[xcc_id].mqd_backup, sizeof(struct v9_mqd_allocation));
-2133: 
+2133:
 2134: 		/* reset ring buffer */
 2135: 		ring->wptr = 0;
 2136: 		amdgpu_ring_clear_ring(ring);
@@ -3031,11 +3153,11 @@ GPU 从配置的 Ring 地址出发
 2151: 		gfx_v9_4_3_xcc_kiq_init_register(ring, xcc_id);
 2152: 		soc15_grbm_select(adev, 0, 0, 0, 0, GET_INST(GC, xcc_id));
 2153: 		mutex_unlock(&adev->srbm_mutex);
-2154: 
+2154:
 2155: 		if (adev->gfx.kiq[xcc_id].mqd_backup)
 2156: 			memcpy(adev->gfx.kiq[xcc_id].mqd_backup, mqd, sizeof(struct v9_mqd_allocation));
 2157: 	}
-2158: 
+2158:
 2159: 	return 0;
 2160: }
 ```
@@ -3065,17 +3187,17 @@ GPU 从配置的 Ring 地址出发
 1888: 	/* set the pointer to the MQD */
 1889: 	mqd->cp_mqd_base_addr_lo = ring->mqd_gpu_addr & 0xfffffffc;
 1890: 	mqd->cp_mqd_base_addr_hi = upper_32_bits(ring->mqd_gpu_addr);
-1891: 
+1891:
 1892: 	/* set MQD vmid to 0 */
 1893: 	tmp = RREG32_SOC15(GC, GET_INST(GC, xcc_id), regCP_MQD_CONTROL);
 1894: 	tmp = REG_SET_FIELD(tmp, CP_MQD_CONTROL, VMID, 0);
 1895: 	mqd->cp_mqd_control = tmp;
-1896: 
+1896:
 1897: 	/* set the pointer to the HQD, this is similar CP_RB0_BASE/_HI */
 1898: 	hqd_gpu_addr = ring->gpu_addr >> 8;
 1899: 	mqd->cp_hqd_pq_base_lo = hqd_gpu_addr;
 1900: 	mqd->cp_hqd_pq_base_hi = upper_32_bits(hqd_gpu_addr);
-1901: 
+1901:
 1902: 	/* set up the HQD, this is similar to CP_RB0_CNTL */
 1903: 	tmp = RREG32_SOC15(GC, GET_INST(GC, xcc_id), regCP_HQD_PQ_CONTROL);
 1904: 	tmp = REG_SET_FIELD(tmp, CP_HQD_PQ_CONTROL, QUEUE_SIZE,
@@ -3090,7 +3212,7 @@ GPU 从配置的 Ring 地址出发
 1913: 	tmp = REG_SET_FIELD(tmp, CP_HQD_PQ_CONTROL, PRIV_STATE, 1);
 1914: 	tmp = REG_SET_FIELD(tmp, CP_HQD_PQ_CONTROL, KMD_QUEUE, 1);
 1915: 	mqd->cp_hqd_pq_control = tmp;
-1916: 
+1916:
 1917: 	/* set the wb address whether it's enabled or not */
 1918: 	wb_gpu_addr = adev->wb.gpu_addr + (ring->rptr_offs * 4);
 1919: 	mqd->cp_hqd_pq_rptr_report_addr_lo = wb_gpu_addr & 0xfffffffc;
@@ -3114,7 +3236,7 @@ Doorbell 字段在这段之前填写；函数末尾还单独为 KIQ 设置待写
 1954: 	 */
 1955: 	if (ring->funcs->type == AMDGPU_RING_TYPE_KIQ)
 1956: 		mqd->cp_hqd_active = 1;
-1957: 
+1957:
 1958: 	return 0;
 1959: }
 ```
@@ -3132,7 +3254,7 @@ Doorbell 字段在这段之前填写；函数末尾还单独为 KIQ 设置待写
 1964: 	struct amdgpu_device *adev = ring->adev;
 1965: 	struct v9_mqd *mqd = ring->mqd_ptr;
 1966: 	int j;
-1967: 
+1967:
 1968: 	/* disable wptr polling */
 1969: 	WREG32_FIELD15_PREREG(GC, GET_INST(GC, xcc_id), CP_PQ_WPTR_POLL_CNTL, EN, 0);
 ```
@@ -3147,21 +3269,21 @@ Doorbell 字段在这段之前填写；函数末尾还单独为 KIQ 设置待写
 2004: 	       mqd->cp_mqd_base_addr_lo);
 2005: 	WREG32_SOC15_RLC(GC, GET_INST(GC, xcc_id), regCP_MQD_BASE_ADDR_HI,
 2006: 	       mqd->cp_mqd_base_addr_hi);
-2007: 
+2007:
 2008: 	/* set MQD vmid to 0 */
 2009: 	WREG32_SOC15_RLC(GC, GET_INST(GC, xcc_id), regCP_MQD_CONTROL,
 2010: 	       mqd->cp_mqd_control);
-2011: 
+2011:
 2012: 	/* set the pointer to the HQD, this is similar CP_RB0_BASE/_HI */
 2013: 	WREG32_SOC15_RLC(GC, GET_INST(GC, xcc_id), regCP_HQD_PQ_BASE,
 2014: 	       mqd->cp_hqd_pq_base_lo);
 2015: 	WREG32_SOC15_RLC(GC, GET_INST(GC, xcc_id), regCP_HQD_PQ_BASE_HI,
 2016: 	       mqd->cp_hqd_pq_base_hi);
-2017: 
+2017:
 2018: 	/* set up the HQD, this is similar to CP_RB0_CNTL */
 2019: 	WREG32_SOC15_RLC(GC, GET_INST(GC, xcc_id), regCP_HQD_PQ_CONTROL,
 2020: 	       mqd->cp_hqd_pq_control);
-2021: 
+2021:
 2022: 	/* set the wb address whether it's enabled or not */
 2023: 	WREG32_SOC15_RLC(GC, GET_INST(GC, xcc_id), regCP_HQD_PQ_RPTR_REPORT_ADDR,
 2024: 				mqd->cp_hqd_pq_rptr_report_addr_lo);
@@ -3178,26 +3300,26 @@ Doorbell 字段在这段之前填写；函数末尾还单独为 KIQ 设置待写
 ```c
 2050: 	WREG32_SOC15_RLC(GC, GET_INST(GC, xcc_id), regCP_HQD_PQ_DOORBELL_CONTROL,
 2051: 	       mqd->cp_hqd_pq_doorbell_control);
-2052: 
+2052:
 2053: 	/* reset read and write pointers, similar to CP_RB0_WPTR/_RPTR */
 2054: 	WREG32_SOC15_RLC(GC, GET_INST(GC, xcc_id), regCP_HQD_PQ_WPTR_LO,
 2055: 	       mqd->cp_hqd_pq_wptr_lo);
 2056: 	WREG32_SOC15_RLC(GC, GET_INST(GC, xcc_id), regCP_HQD_PQ_WPTR_HI,
 2057: 	       mqd->cp_hqd_pq_wptr_hi);
-2058: 
+2058:
 2059: 	/* set the vmid for the queue */
 2060: 	WREG32_SOC15_RLC(GC, GET_INST(GC, xcc_id), regCP_HQD_VMID, mqd->cp_hqd_vmid);
-2061: 
+2061:
 2062: 	WREG32_SOC15_RLC(GC, GET_INST(GC, xcc_id), regCP_HQD_PERSISTENT_STATE,
 2063: 	       mqd->cp_hqd_persistent_state);
-2064: 
+2064:
 2065: 	/* activate the queue */
 2066: 	WREG32_SOC15_RLC(GC, GET_INST(GC, xcc_id), regCP_HQD_ACTIVE,
 2067: 	       mqd->cp_hqd_active);
-2068: 
+2068:
 2069: 	if (ring->use_doorbell)
 2070: 		WREG32_FIELD15_PREREG(GC, GET_INST(GC, xcc_id), CP_PQ_STATUS, DOORBELL_ENABLE, 1);
-2071: 
+2071:
 2072: 	return 0;
 2073: }
 ```
@@ -3213,16 +3335,16 @@ Doorbell 字段在这段之前填写；函数末尾还单独为 KIQ 设置待写
 2227: {
 2228: 	struct amdgpu_ring *ring;
 2229: 	int i;
-2230: 
+2230:
 2231: 	gfx_v9_4_3_xcc_cp_compute_enable(adev, true, xcc_id);
-2232: 
+2232:
 2233: 	for (i = 0; i < adev->gfx.num_compute_rings; i++) {
 2234: 		ring = &adev->gfx.compute_ring[i + xcc_id *
 2235: 			adev->gfx.num_compute_rings];
-2236: 
+2236:
 2237: 		gfx_v9_4_3_xcc_kcq_init_queue(ring, xcc_id, false);
 2238: 	}
-2239: 
+2239:
 2240: 	return amdgpu_gfx_enable_kcq(adev, xcc_id);
 2241: }
 ```
@@ -3271,29 +3393,29 @@ Host 驱动轮询同一个寄存器
 420: 	uint32_t tmp = 0;
 421: 	unsigned i;
 422: 	int r;
-423: 
+423:
 424: 	/* Use register offset which is local to XCC in the packet */
 425: 	xcc_offset = SOC15_REG_OFFSET(GC, 0, regSCRATCH_REG0);
 426: 	scratch_reg0_offset = SOC15_REG_OFFSET(GC, GET_INST(GC, ring->xcc_id), regSCRATCH_REG0);
 427: 	WREG32(scratch_reg0_offset, 0xCAFEDEAD);
 428: 	tmp = RREG32(scratch_reg0_offset);
-429: 
+429:
 430: 	r = amdgpu_ring_alloc(ring, 3);
 431: 	if (r)
 432: 		return r;
-433: 
+433:
 434: 	amdgpu_ring_write(ring, PACKET3(PACKET3_SET_UCONFIG_REG, 1));
 435: 	amdgpu_ring_write(ring, xcc_offset - PACKET3_SET_UCONFIG_REG_START);
 436: 	amdgpu_ring_write(ring, 0xDEADBEEF);
 437: 	amdgpu_ring_commit(ring);
-438: 
+438:
 439: 	for (i = 0; i < adev->usec_timeout; i++) {
 440: 		tmp = RREG32(scratch_reg0_offset);
 441: 		if (tmp == 0xDEADBEEF)
 442: 			break;
 443: 		udelay(1);
 444: 	}
-445: 
+445:
 446: 	if (i >= adev->usec_timeout)
 447: 		r = -ETIMEDOUT;
 448: 	return r;
@@ -3423,10 +3545,10 @@ amdgpu_device_init_schedulers(adev)
 2255: 	};
 2256: 	long timeout;
 2257: 	int r, i;
-2258: 
+2258:
 2259: 	for (i = 0; i < AMDGPU_MAX_RINGS; ++i) {
 2260: 		struct amdgpu_ring *ring = adev->rings[i];
-2261: 
+2261:
 2262: 		/* No need to setup the GPU scheduler for rings that don't need it */
 2263: 		if (!ring || ring->no_scheduler)
 2264: 			continue;
@@ -3443,7 +3565,7 @@ amdgpu_device_init_schedulers(adev)
 2282: 		args.credit_limit = ring->num_hw_submission;
 2283: 		args.score = ring->sched_score;
 2284: 		args.name = ring->name;
-2285: 
+2285:
 2286: 		r = drm_sched_init(&ring->sched, &args);
 2287: 		if (r) {
 2288: 			dev_err(adev->dev,
@@ -5046,27 +5168,27 @@ T0 在 P 中执行用户态库函数
 ```cpp
 111 hsa_status_t Runtime::Acquire() {
 112   ScopedAcquire<KernelMutex> boot(&bootstrap_lock());
-113 
+113
 114   if (runtime_singleton_ == NULL) {
 115     memset(log_flags, 0, sizeof(log_flags));
 116     runtime_singleton_ = new Runtime();
 117   }
-118 
+118
 119   if (runtime_singleton_->ref_count_ == INT32_MAX) {
 120     return HSA_STATUS_ERROR_REFCOUNT_OVERFLOW;
 121   }
-122 
+122
 123   runtime_singleton_->ref_count_++;
 124   MAKE_NAMED_SCOPE_GUARD(refGuard, [&]() { runtime_singleton_->ref_count_--; });
-125 
+125
 126   if (runtime_singleton_->ref_count_ == 1) {
 127     hsa_status_t status = runtime_singleton_->Load();
-128 
+128
 129     if (status != HSA_STATUS_SUCCESS) {
 130       return HSA_STATUS_ERROR_OUT_OF_RESOURCES;
 131     }
 132   }
-133 
+133
 134   refGuard.Dismiss();
 135   return HSA_STATUS_SUCCESS;
 136 }
