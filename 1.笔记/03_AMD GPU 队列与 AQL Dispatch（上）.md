@@ -40,6 +40,7 @@
 | HIP     | Heterogeneous-Compute Interface for Portability | AMD GPU 编程接口                                                      |
 | hipamd  | HIP implementation on AMD platform              | AMD 平台上的 HIP API 实现组件；`hipamd` 是项目名，不是首字母缩写    |
 | HMM     | Heterogeneous Memory Management                 | 异构内存管理                                                          |
+| HIQ     | HSA Interface Queue                             | HSA 接口队列；KFD 使用的管理队列                                      |
 | HQD     | Hardware Queue Descriptor                       | 硬件中一条活动 Queue 的寄存器状态                                     |
 | HSA     | Heterogeneous System Architecture               | 异构系统架构；本文指 HSA 规范与执行模型，不是具体软件组件             |
 | HSAKMT  | HSA Kernel Mode Thunk                           | ROCr 使用的 HSA 用户态内核接口层                                      |
@@ -52,6 +53,7 @@
 | IP      | Intellectual Property                           | 芯片中的可复用硬件功能模块                                            |
 | ISA     | Instruction Set Architecture                    | 指令集架构                                                            |
 | KFD     | Kernel Fusion Driver                            | Linux AMD GPU 计算驱动接口                                            |
+| KIQ     | Kernel Interface Queue                          | 内核接口队列；驱动使用的管理队列                                      |
 | KMD     | Kernel Mode Driver                              | 内核态驱动                                                            |
 | KMT     | Kernel Mode Thunk                               | 用户态 Runtime 到内核驱动之间的封装层                                 |
 | LDS     | Local Data Share                                | AMD GPU 上供同一 Work-group 共享的片上存储                            |
@@ -2858,6 +2860,41 @@ MQD manager 是 KFD 内部负责某种硬件 MQD 格式的一组函数，提供�
 
 > **[SOURCE]** Linux `248951ddc14d`，[`kfd_device_queue_manager.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_device_queue_manager.c) 第 819～834 行和第 2163～2186 行分别展示两条创建路径中分配、初始化 MQD 的调用。[`kfd_mqd_manager_v9.c`](../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c) 第 133～182 行的 `allocate_mqd()` 取得 MQD 内存：启用 CWSR 的 Compute 分支申请带控制栈空间的缓冲区，其他分支使用 KFD 的 GTT 子分配接口。
 
+<a id="mqd-ring-vmid"></a>
+
+**MQD 与用户 Ring 使用的地址空间**
+
+驱动已经为进程 A 的 Q0 分配了 MQD，Runtime 则准备了 Q0 的 Ring。两块内存服务于同一条队列，但由不同的软件层管理：MQD 保存驱动填写的配置，Ring 保存应用提交的命令。沿用第 02 篇的例子，假设进程 A 当前使用 VMID 5：
+
+```text
+驱动的 GPU 管理地址空间：VMID 0
+  ├─ KIQ Ring    保存内核接口队列的管理命令
+  ├─ HIQ Ring    保存 HSA 接口队列的管理命令
+  └─ Q0 的 MQD   由驱动分配，保存 Q0 的配置
+       ├─ Ring 地址 = Q0 的 Ring 地址
+       └─ 队列 VMID = 5
+                         │ 指定 Q0 的命令从哪个地址空间读取
+                         ▼
+进程 A 的 GPU 地址空间：VMID 5
+  ├─ Q0 的 Ring  保存应用提交的 AQL Packet
+  ├─ Kernel 代码
+  └─ 应用数据
+```
+
+KIQ 和 HIQ 都是驱动使用的管理队列。固定源码中，它们读取自身 Ring 所用的 VMID 都设为 0；用户 Q0 的 MQD 也按 VMID 0 访问。**Q0 属于进程 A，但 Q0 的 MQD 是驱动管理的内存对象，不必放入进程 A 的 GPU 地址空间。** 这里没有另一个用户进程接管 Q0。
+
+装入 HQD 后，`CP_MQD_BASE_ADDR / HI` 提供 MQD 自身的地址，`CP_MQD_CONTROL.VMID` 提供访问 MQD 使用的上下文；`CP_HQD_PQ_BASE / HI` 提供 Ring 基址配置，`CP_HQD_VMID` 提供读取 Ring 使用的上下文。本例中前一组使用 VMID 0，后一组使用 VMID 5。
+
+驱动按内核内存管理规则分配 MQD，再取得 GPU 可访问的地址。MQD 与 KIQ／HIQ 使用同一个管理地址空间，不表示分配 MQD 时需要读取管理队列的 VMID，也不能据此推定 MQD 访问会自动继承管理队列的 VMID。
+
+**[BOUNDARY]** “内核管理资源使用 VMID 0”指 GPU 访问驱动自身的管理资源。用户队列虽然也由内核驱动创建和配置，读取用户 Ring、执行用户任务时仍使用对应进程的 GPU 地址空间。VMID 0 也不是 Host CPU 的内核虚拟地址空间。其特殊映射方式见 [02 的 1.5.6 节](<./02_GPU 内存管理基础.md#156-vmid-0-不属于普通-aql-进程地址空间>)，不能把所有 VMID 0 访问都画成普通用户页表遍历。
+
+> **[SOURCE]** Linux 固定版本 `248951ddc14de84de3910f9b13f51491a8cd91df`：
+>
+> - VMID 0 供驱动管理资源使用：[drivers/gpu/drm/amd/amdgpu/amdgpu_vm.c](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/amdgpu_vm.c#L73-L85)，[73–85 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/amdgpu_vm.c#L73-L85)。
+> - KIQ 和 HIQ 的队列 VMID：[drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c#L1932-L1933)，[1932–1933 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c#L1932-L1933)；[drivers/gpu/drm/amd/amdkfd/kfd_kernel_queue.c](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdkfd/kfd_kernel_queue.c#L115-L142)，[115–142 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdkfd/kfd_kernel_queue.c#L115-L142)。
+> - MQD 的分配及地址空间配置：[drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c#L133-L179)，[133–179 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c#L133-L179)分配 MQD；[213–216 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c#L213-L216)初始化 MQD 访问控制和地址，`cp_mqd_control` 只设置 `PRIV_STATE`，VMID 字段为 0；[322 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c#L322)另外填写队列 VMID。GC 9.4.3 的 `CP_MQD_CONTROL.VMID` 字段位置见 [gc_9_4_3_sh_mask.h 的 16587–16599 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_sh_mask.h#L16587-L16599)。
+
 #### 3.1.3 MQD 中的 Ring 地址、容量与索引地址
 
 下面使用本仓库固定源码中的 GFX9 MQD 字段说明换算。GFX9 是驱动使用的 IP 版本系列；MI300 的 GFX9.4.3 路径复用 `v9_mqd` 和公共初始化函数，再补充各 XCC 的配置。这里的 GFX9.4.3 是驱动 IP 版本，须与工具链目标名分开理解。
@@ -3023,7 +3060,23 @@ GPU 的 VMID 5 上下文
 
 HQD 中保存编号 `5`，VMID 5 对应的另一组上下文寄存器保存页表根地址 `R`。GPU 根据 Q0 的 VMID 选择上下文，再从该上下文取得 `R`，找到翻译 Q0 内存访问所需的页表。
 
-No-HWS 下，这个编号先记录在 KFD 的 `qpd->vmid` 和 `q->properties.vmid` 中，再填入内存中的 MQD 字段 `cp_hqd_vmid`，最后由驱动装入 HQD。HWS 下，实际驻留时使用的 VMID 由调度固件安排，HQD 保存 Queue 当前使用的编号。
+<a id="hqd-slot-vmid"></a>
+
+**HQD 槽位编号与 VMID 是两套独立编号。** 槽位编号选择哪一组队列寄存器，寄存器里的 VMID 则选择访问 Ring 使用的地址空间。下面用两个逻辑槽位举例，编号不代表 AMD 固定的 KIQ／HIQ 硬件槽位分配：
+
+```text
+HQD 槽位 0：KIQ
+  Ring 地址 = R_KIQ，CP_HQD_VMID = 0
+  → 按 VMID 0 的地址映射，读取 R_KIQ 处的命令
+
+HQD 槽位 1：HIQ
+  Ring 地址 = R_HIQ，CP_HQD_VMID = 0
+  → 按 VMID 0 的地址映射，读取 R_HIQ 处的命令
+```
+
+两条 Ring 地址不同，可以共用 VMID 0；HIQ 放在槽位 1，不要求 VMID 也填 1。同一进程的多条用户队列也可以共用该进程当前的 VMID。KIQ／HIQ 与用户 MQD 使用管理地址空间的原因及源码，见前面的 [MQD 与用户 Ring 使用的地址空间](#mqd-ring-vmid)。
+
+No-HWS 下，Q0 使用的 VMID 先记录在 KFD 的 `qpd->vmid` 和 `q->properties.vmid` 中，再填入内存中的 MQD 字段 `cp_hqd_vmid`，最后由驱动装入 HQD。HWS 下，实际驻留时使用的 VMID 由调度固件安排，HQD 保存 Queue 当前使用的编号。
 
 **下面这组寄存器让 GPU 知道：Q0 的任务放在哪里、应用提交到了哪里，以及读取进度要报告到哪里。** 先列出定义，再沿 Q0 的提交和取包过程看它们怎样配合。
 
