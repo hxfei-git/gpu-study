@@ -492,7 +492,7 @@ do {
 
 **[DESIGN]** 第一版采用本节的 9 个功能寄存器，用于定位 Ring、保存消费进度、交换读写进度，以及配置 Doorbell 和 Ring 控制。规格表中 `0x1255` 对应保留位置，继续留空。
 
-本节已确认寄存器的用途、新通知只更新生产进度，以及 CP 在 AQL Dispatch 正常完成并收尾后推进和回报消费位置的规则；具体位域、计数单位、回绕规则和异常处理仍需后续讨论。
+本节已确认 CP 从内存读取软件写进度，用固件变量保存所需的值，不采用 `CP_HQD_PQ_WPTR_LO / HI`。新通知只更新生产进度，CP 在 AQL Dispatch 正常完成并收尾后推进和回报消费位置；具体位域、计数单位、回绕规则和异常处理仍需后续讨论。
 
 **[DESIGN]** 第一版不采用 `CP_HQD_AQL_DISPATCH_ID / HI`。已采用的 `CP_HQD_PQ_RPTR` 和读进度内存回报接口继续保留，具体计数与回报规则仍待确定，见[第 21 节](#21-aql-读进度与内存回报)。
 
@@ -560,25 +560,39 @@ CP_HQD_PQ_RPTR_REPORT_ADDR 与对应 HI
 
 **[DESIGN]** 第一版保留向该地址回报消费进度的功能。驻留期间的当前消费位置由 `CP_HQD_PQ_RPTR` 保存，CP 推进后再发布内存副本；AQL Dispatch 正常成功路径的时序见[第 6.5 节](#65-dispatch-完成后的读进度与-ring-槽复用)。回报值与寄存器编码的换算关系、位宽仍待确定；不再通过 `CP_HQD_AQL_DISPATCH_ID / HI` 提供这份值，见[第 21 节](#21-aql-读进度与内存回报)。
 
-写进度的传递方向相反。Host 发布命令时维护写进度，设备从指定地址读取这个数字：
+写进度的传递方向相反。Host 发布命令时维护写进度，CP 根据 HQD 中的读取地址取得这个数字。沿用本节按包计数、尚未回绕的例子：
 
 ```text
-Host 把写进度数字写入一个内存位置
-例如：内存地址 0x9000_0008 中保存 5
-                ▲
-                │ 设备根据这个地址读取写进度
-                │
-CP_HQD_PQ_WPTR_POLL_ADDR 与对应 HI
-合起来保存：0x9000_0008
+Host 已按顺序发布包 0、1、2、3、4
+  → 将写进度 5 写入内存地址 0x9000_0008
+
+Queue A 的 HQD
+  CP_HQD_PQ_WPTR_POLL_ADDR / HI 合起来保存：0x9000_0008
+    → CP 根据这个地址读取内存
+    → 读到写进度 5，保存在固件变量 wptr 中
+    → 结合 HQD 中的 CP_HQD_PQ_RPTR = 3
+    → 检查包的发布状态，依次处理包 3、4
+    → 按消费协议推进 CP_HQD_PQ_RPTR
+
+需要刷新写进度时
+  → CP 重新读取软件写进度，更新固件变量 wptr
 ```
 
-这对寄存器保存的是**“到哪里读取写进度”**。例子中的 `5` 表示 Host 已发布到编号 4 的包；设备结合自己的读进度 `3`，知道接下来还有编号 3、4 的包可检查。
+`CP_HQD_PQ_WPTR_POLL_ADDR / HI` 保存写进度的读取地址，本例为 `0x9000_0008`；内存中的 `5` 才是进度值，表示 Host 已发布到编号 4 的包。CP 读取后，用固件变量 `wptr` 保存本次处理所需的值。
+
+**[DESIGN]** 第一版不采用 `CP_HQD_PQ_WPTR_LO / HI`。AMD 参考表中的这两个寄存器保存写进度数值，与轮询地址的用途不同；本版采用上述内存读取流程，因此不再增加 HQD 中的写进度副本。
+
+何时重新读取、是否由 Doorbell 通知触发读取，以及进度的位宽、计数单位和一致性访问规则仍待确定；保留轮询地址不要求 CP 一直轮询。新读到的写进度只更新固件掌握的生产进度，消费位置仍由 CP 按消费协议推进。
 
 两个进度存放位置不要求处于 Ring 命令区内。图中地址均为假定的设备可访问地址；Host 通过自己的映射访问相应内存，不要求双方使用相同的虚拟地址。具体放在什么内存、使用哪种地址及如何保证可见性，仍由后续接口定义。
 
 **[BOUNDARY]** 本例中的包编号只用于讲清“进度值、Ring 内偏移、进度存放地址”三者的关系，不规定 AMD HQD 寄存器的原始编码，也不确定实验的计数单位。第一版正常成功路径在整个 Dispatch 完成后推进消费进度；这个进度用于复用 Ring 槽，任务结果仍按 Signal 和错误协议判断。
 
-> **[SOURCE]** 同一固定 Linux 版本，[drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c#L259-L269) 的 [259–269 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c#L259-L269)在 `load_mqd()` 中根据 AQL 格式设置写指针换算参数。注释区分了按 64 字节包计数的软件 AQL 写指针和按 32 位字计数的 CP 写指针，说明不能把所有位置的进度数值直接视为同一种单位。
+> **[SOURCE]** 仓库固定 Linux 版本 `248951ddc14de84de3910f9b13f51491a8cd91df`：
+>
+> - 写指针的单位换算：[drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c#L259-L269) 的 [259–269 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c#L259-L269)在 `load_mqd()` 中根据 AQL 格式设置换算参数。注释区分了按 64 字节包计数的软件 AQL 写指针和按 32 位字计数的 CP 写指针，说明不能把所有位置的进度数值直接视为同一种单位。
+> - 设备写进度字段：[drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_sh_mask.h](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_sh_mask.h#L16733-L16738) 的 [16733–16738 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_sh_mask.h#L16733-L16738)给出 `CP_HQD_PQ_WPTR_LO / HI` 的两个 32 位字段。
+> - 轮询地址与写进度值的分别配置：[drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c#L2029-L2057) 的 [2029–2057 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c#L2029-L2057)展示 KIQ 初始化中的两组寄存器写入。
 
 ### 6.3 Doorbell 与 Ring 控制
 
@@ -586,7 +600,7 @@ CP_HQD_PQ_WPTR_POLL_ADDR 与对应 HI
 
 `CP_HQD_PQ_CONTROL` 保存 Ring 容量和相关处理模式。采用这个寄存器后，仍需逐项确定第一版实际支持哪些字段；AMD 定义中的读指针回报、写指针模式、执行限制、权限等功能，不会仅因采用寄存器名称就全部成为本版要求。
 
-**[DESIGN]** 第一版保留写进度轮询地址，也保留 Doorbell 控制。新通知只更新生产进度、消费位置由 CP 推进的规则已确定，具体过程见[第 6.4 节](#64-新通知更新生产进度cp-推进消费位置)。生产进度由 Doorbell 直接携带，还是由通知触发 CP 读取内存中的写进度，仍待确认；也尚未要求 CP 一直轮询。后续需明确通知编码、读取写进度的时机及命令包的发布顺序。AQL Dispatch 正常成功后的读进度回报按第 6.5 节执行。
+**[DESIGN]** 第一版保留写进度轮询地址，也保留 Doorbell 控制。CP 按第 6.2 节从内存读取写进度，用固件变量保存所需的值；新通知只更新生产进度、消费位置由 CP 推进的规则见[第 6.4 节](#64-新通知更新生产进度cp-推进消费位置)。后续需明确通知编码、读取写进度的时机及命令包的发布顺序。AQL Dispatch 正常成功后的读进度回报按第 6.5 节执行。
 
 > **[SOURCE]** 仓库固定 Linux 版本 `248951ddc14de84de3910f9b13f51491a8cd91df`，[drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_sh_mask.h](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_sh_mask.h#L16383-L16455) 的 [16383–16455 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_sh_mask.h#L16383-L16455)给出本组寄存器的字段定义，包括 Doorbell 偏移与使能、Ring 容量、写指针模式和读指针更新控制。这些定义用于核对 AMD 字段；完整提交协议还需结合驱动和队列规范确认。
 
@@ -616,7 +630,7 @@ CP 继续处理 Queue A
 
 首次配置 KIQ 或从 MQD 恢复队列时，需要按配置、恢复协议设置初始消费位置；上述规则约束的是队列运行期间的新通知。`CP_HQD_PQ_RPTR` 继续保留，`CP_HQD_AQL_DISPATCH_ID / HI` 继续不采用。
 
-**[BOUNDARY]** 图中说明通知与消费进度的更新关系，以及包的处理顺序。AQL Dispatch 正常成功后的消费位置推进时机见第 6.5 节；索引位宽、计数单位、回绕规则，以及生产进度保存在哪个寄存器或固件变量中，仍待后续确定。本节不记录 gem5 或 AMD 的硬件行为。
+**[BOUNDARY]** 图中说明通知与消费进度的更新关系，以及包的处理顺序；不要求每次通知到达时立即读取写进度。生产进度按第 6.2 节从内存读取并保存到固件变量，AQL Dispatch 正常成功后的消费位置推进时机见第 6.5 节；索引位宽、计数单位、回绕规则和读取时机仍待确定。本节不记录 gem5 或 AMD 的硬件行为。
 
 ### 6.5 Dispatch 完成后的读进度与 Ring 槽复用
 
@@ -1619,6 +1633,14 @@ KIQ 的正常初始化路径先清零 MQD，再填写所需字段，没有修改
 > - AMD 字段布局：[drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_sh_mask.h](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_sh_mask.h#L16724-L16732) 的 [16724–16732 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_sh_mask.h#L16724-L16732)。
 > - AQL 队列的初始化取值：[drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c#L227-L229) 的 [227–229 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c#L227-L229)；GC 9.4.3 对公共初始化函数的调用见同文件 [727–743 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c#L727-L743)。
 > - KIQ 清零 MQD 并初始化：[drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c#L2142-L2151) 的 [2142–2151 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c#L2142-L2151)；MQD 初始化函数见同文件 [1826–1958 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c#L1826-L1958)，KIQ 直接写寄存器的函数见 [1961–2073 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c#L1961-L2073)。
+
+### 20.3 第一版不采用 AQL 扩展控制位置
+
+**[DESIGN]** 第一版不采用 `CP_HQD_AQL_CONTROL_1`，其 AMD 偏移为 `0x127d`，槽内偏移为 `0x0e0`。CP 继续按第 20.1 节读取 `CP_HQD_AQL_CONTROL` 的值，选择非 AQL 或 AQL 命令解析流程；本版没有需要由扩展控制位置配置的功能。
+
+GC 9.4.3 的固定版本头文件将 `CP_HQD_AQL_CONTROL_1` 的全部 32 位定义为 `RESERVED`（保留位），没有公开有效控制字段。规格表保留这一参考名称和偏移，并标记为“不采用”。
+
+> **[SOURCE]** 仓库固定 Linux 版本 `248951ddc14de84de3910f9b13f51491a8cd91df`，[drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_offset.h](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_offset.h#L3398-L3399) 的 [3398–3399 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_offset.h#L3398-L3399)给出寄存器名称与偏移；[drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_sh_mask.h](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_sh_mask.h#L16739-L16741) 的 [16739–16741 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_sh_mask.h#L16739-L16741)定义全 32 位保留字段。
 
 ## 21. AQL 读进度与内存回报
 
