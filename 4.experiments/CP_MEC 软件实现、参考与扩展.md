@@ -5,8 +5,14 @@
 | CP    | Command Processor                                      | 命令处理器                                                                     |
 | CPU   | Central Processing Unit                                | 中央处理器                                                                     |
 | PCIe  | Peripheral Component Interconnect Express              | 高速外设互连总线                                                               |
+| PCI   | Peripheral Component Interconnect                      | 外设互连总线                                                                   |
 | BAR   | Base Address Register                                  | PCIe 基址寄存器；用于描述设备资源窗口                                          |
 | DMA   | Direct Memory Access                                   | 直接内存访问                                                                   |
+| IOVA  | I/O Virtual Address                                    | 设备访存使用的虚拟地址                                                         |
+| IOMMU | Input/Output Memory Management Unit                    | 设备访存的地址翻译与权限检查单元                                               |
+| SMMUv3 | System Memory Management Unit version 3              | Arm 系统内存管理单元第三版                                                    |
+| BH    | Bottom Half                                            | QEMU 主循环中延后执行的回调                                                    |
+| FD    | File Descriptor                                        | 文件描述符                                                                     |
 | EOP   | End Of Pipe                                            | 管线结束；本文指执行结束相关处理                                               |
 | MEC   | Micro Engine Compute                                   | 计算命令处理微引擎                                                             |
 | HQD   | Hardware Queue Descriptor                              | 硬件队列描述；用于保存队列驻留状态                                             |
@@ -94,6 +100,63 @@ A57 的指令由对应 QEMU 目标的 TCG 推进。原生 CP 的 RISC-V 指令�
 当前 CP 地址 `0～vram_size-1` 映射到同一份 VRAM。Host 经 BAR2 写入固件，CP 按 VRAM 偏移取指。原生 CP 与计算解释器使用 RISC-V 代码，不说明 AMD MEC 使用 RISC-V，也不提供 AMD 固件二进制兼容性。
 
 例如固件位于 VRAM 偏移 `0x4000`，Host 写入 `BAR2 基址 + 0x4000`，CP 的入口填写 `0x4000`。在同一地址替换固件时，BAR、DMA、计算解释器写入及冷复位清零需要使相关 TCG 指令翻译失效，避免继续执行旧翻译块。当前基础接入共用 VRAM，没有永久预留固件分区；队列软件接口需要明确固件、堆栈和数据的分配范围。
+
+<a id="cp-host-window-implementation"></a>
+
+#### 1.1.1 CP 读取 Host RAM 的实现路径
+
+Host 已准备好一段内存，并建立设备可用的 IOVA 映射。CP 要读取其中的 Ring 字段时，先配置窗口基址，再执行普通读取指令。窗口的地址、访问宽度和复位规则见[规格 2.1 节](<./CP_MEC 第一版规格.md#cp-host-window>)；这里沿一次读取说明代码怎样配合。
+
+```text
+CP 执行窗口地址上的 load
+  → gpgpu_cp_host_read：用基址和窗口偏移计算 64 位 IOVA
+  → vfu_object_dma_rw：沿 gpu0 的 PCI DMA 地址空间访存
+  → libvfio-user：向进程 A 发出 VFIO_USER_DMA_READ
+  → A 的 vfio-user-pci 代理：使用该设备的 PCI DMA 接口
+  → SMMUv3 翻译、检查权限（启用时）→ Host RAM
+  → 回复数据或错误 → CP 取得读值或进入原生访问异常
+```
+
+协议中的 `DMA_READ` 表示设备向 Host 读取内存。CP 固件只执行窗口 `load/store`，不填写 Host 的批量搬运描述符，也不改变 `DMA_STATUS` 或发送 DMA 完成中断。Host 仍可经 BAR2 读写 VRAM，也可使用原 DMA 在 Host RAM 与 VRAM 之间搬运；CP 运行期间，Host 可以继续使用这两条路径。
+
+CP 的本地地址空间容器负责按地址选择 VRAM 或 Host 窗口。VRAM 区域是原显存的别名，窗口把访问交给上图中的回调，两者都不额外分配数据存储。Host 访问自己的 RAM 使用 CPU 映射，访问设备 VRAM 才使用 BAR2；CP 访问 Host RAM 使用 IOVA，访问 VRAM 仍使用原本的本地偏移。
+
+**消息交错。** CP 可以主动访存，因此 Host 的 BAR 请求可能夹在访存回复前面。固定版本的 libvfio-user 原先会把下一条收到的消息当作 DMA 回复，需要增加下面的处理：
+
+```text
+B 等待 DMA 回复
+  → 先收到 A 的 BAR 请求：完整暂存请求、正文与 FD
+  → 收到匹配的 DMA 回复：完成本次 CP 访存
+  → QEMU 调度 BH：按顺序处理暂存的 Host 请求
+```
+
+等待期间不执行暂存请求的设备回调，避免重入正在进行的访存。即使 DMA 回复后没有新字节到达 socket，BH 也会处理已经暂存的请求。依赖修正保存在 `0002-queued-dma-requests.diff`，仍使用原同步传输接口。
+
+卸载 DMA 映射时，还要保证旧地址映射不再引用对象后才释放它。映射对象现在拥有自己的引用计数，旧 `FlatView` 持有的引用全部释放后，才销毁对应内存区域。这个修正用于消除断开连接时检测到的释放后访问。
+
+**[BOUNDARY]** 这条线路提供普通数据读写。队列的建立、Ring 格式、VMID 选页表、Signal 原子操作及动态 64 位进度协议仍需接入。固件代码和栈继续使用 VRAM；窗口访问成功也不代表相关队列功能已经实现。
+
+> **[SOURCE] 本次实现的源码入口**：实验子仓库基于 `fd2719636bb903ee2815e359dc9af5af7f0202a4` 的 2026-10-14 工作区改动，尚未提交。
+>
+> - 窗口读写与基址寄存器：[hw/riscv/gpgpu-cp.c，44–133 行](/home/book/2.study/gpu-study/4.experiments/gpu-study-qemu/hw/riscv/gpgpu-cp.c:44)；本地地址空间与 VRAM 别名：[232–251 行](/home/book/2.study/gpu-study/4.experiments/gpu-study-qemu/hw/riscv/gpgpu-cp.c:232)。
+> - PCI DMA 路由与暂存请求唤醒：[hw/remote/vfio-user-obj.c，134–187 行](/home/book/2.study/gpu-study/4.experiments/gpu-study-qemu/hw/remote/vfio-user-obj.c:134)；映射对象的引用与释放：[407–464 行](/home/book/2.study/gpu-study/4.experiments/gpu-study-qemu/hw/remote/vfio-user-obj.c:407)。
+> - 消息交错修正：[0002-queued-dma-requests.diff](./gpu-study-qemu/subprojects/packagefiles/libvfio-user/0002-queued-dma-requests.diff)，应用于 libvfio-user 固定版本 `0b28d205572c80b568a1003db2c8f37ca333e4d7`，接在原 `0001` 后面。
+> - 原生固件访存、异常恢复和 Host DMA 并用：[tests/qtest/gpgpu-cp-test.c，318–516 行](/home/book/2.study/gpu-study/4.experiments/gpu-study-qemu/tests/qtest/gpgpu-cp-test.c:318)；确定性消息交错：[tests/qtest/gpgpu-vfio-user-test.h，115–250 行](/home/book/2.study/gpu-study/4.experiments/gpu-study-qemu/tests/qtest/gpgpu-vfio-user-test.h:115)。
+
+2026-10-14 实测：CP 用例 8/8、双进程 IOMMU 2/2、单进程 IOMMU 2/2、原有 A57 GPGPU 用例 21/21 通过。CP 用例使用真实 RV32 指令，覆盖 1/2/4 字节读写、超过 32 位的 IOVA、非恒等翻译、基址复位、访问异常与恢复，以及 CP 访存期间 Host DMA 继续工作。设备进程启用 AddressSanitizer、固定进程地址布局后，这 8 项也全部通过，未报告内存访问错误。
+
+libvfio-user 的新增交错用例 6/6、包含这些用例的相关 Python 测试 35/35、原 C 单测 18/18 通过。本轮未重跑 Linux 客体的驱动和运行时端到端测试。
+
+在子仓库中，准备好同时启用 `aarch64-softmmu`、`riscv32-softmmu` 和 `vfio-user-server` 的构建目录后，使用下面的入口。本次构建目录为 `build/cp-window`：
+
+```bash
+make -f Makefile.camp test-gpgpu-cp ARM64_BUILD_DIR="$PWD/build/cp-window"
+make -f Makefile.camp test-gpgpu-remote-iommu ARM64_BUILD_DIR="$PWD/build/cp-window"
+make -f Makefile.camp test-gpgpu-iommu ARM64_BUILD_DIR="$PWD/build/cp-window"
+QTEST_QEMU_BINARY="$PWD/build/cp-window/qemu-system-aarch64" \
+  build/cp-window/tests/qtest/qos-test --tap \
+  -p /aarch64/virt/generic-pcihost/pci-bus-generic/pci-bus/gpgpu/gpgpu-tests
+```
 
 ### 1.2 同步计算路径与尚待接入的固件接口
 

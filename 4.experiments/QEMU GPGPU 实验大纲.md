@@ -23,6 +23,8 @@
 | BAR | Base Address Register | PCI 基址寄存器；用于描述设备资源窗口 |
 | VRAM | Video RAM | 设备显存 |
 | DMA | Direct Memory Access | 直接内存访问 |
+| IOVA | I/O Virtual Address | 设备访存使用的虚拟地址 |
+| RAM | Random Access Memory | 随机存取存储器；本文分别说明 Host RAM 和 VRAM |
 | IOMMU | Input/Output Memory Management Unit | 输入输出内存管理单元 |
 | SMMUv3 | System Memory Management Unit version 3 | Arm 系统内存管理单元第三版 |
 | MSI-X | Message Signaled Interrupts Extended | 扩展消息中断 |
@@ -40,7 +42,9 @@
 
 根据用户反馈，前 10 个基础实验和第一阶段“进阶实验一：设计类 CUDA 的 GPGPU 软件栈”已完成，并已搭配 A57、支持 SMMUv3 系统 IOMMU。第一阶段成果继续使用，当前进入第二阶段：用户 AQL Queue、Doorbell、CP 与 Signal。
 
-2026-10-11 已完成双进程设备与原生 RV32 CP 基础接入，包括复位、固件装载、启动和同地址替换固件。队列部分已确认第一版架构，软件接口仍需逐项补齐；尚未记录队列功能实现完成或第二阶段整体验收通过。第一阶段的软件栈和构建入口见[子仓库软件栈说明](<./gpu-study-qemu/software/gpgpu/README.md>)。
+2026-10-11 已完成双进程设备与原生 RV32 CP 基础接入，包括复位、固件装载、启动和同地址替换固件。2026-10-14 完成 CP Host 访存窗口：CP 用普通读写指令经 IOVA 访问 Host RAM，Host 继续通过 BAR2 和原 DMA 访问 VRAM。CP 回归通过 8/8，双进程和单进程 IOMMU 回归各通过 2/2，原有 A57 GPGPU 设备测试通过 21/21；实现与复现命令见[窗口实现说明](<./CP_MEC 软件实现、参考与扩展.md#cp-host-window-implementation>)。
+
+队列部分已确认第一版架构，软件接口仍需逐项补齐；尚未记录队列功能实现完成或第二阶段整体验收通过。第一阶段的软件栈和构建入口见[子仓库软件栈说明](<./gpu-study-qemu/software/gpgpu/README.md>)。
 
 本目录的三篇文档分别用于安排实验、查阅约定和理解实现：
 

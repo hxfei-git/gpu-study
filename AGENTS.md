@@ -158,6 +158,6 @@ Keep each pull request focused. Describe the reader-facing change, identify upda
 
 学习部分已完成第 06 阶段上下篇的学习：[06_AQL 应用的完整运行流程：驱动初始化、执行与资源释放（上）](<./1.笔记/06_AQL 应用的完整运行流程：驱动初始化、执行与资源释放（上）.md>)与[下篇](<./1.笔记/06_AQL 应用的完整运行流程：驱动初始化、执行与资源释放（下）.md>)。第七章仍是后续学习阶段，按[第七章大纲](<./1.笔记/07_AMDGPU 通用内存管理与 DRM 任务提交（大纲）.md>)继续；已有章节的补充按当前问题就地完成。
 
-根据用户反馈，实验第一阶段已完成，并已搭配 A57、支持 SMMUv3 系统 IOMMU。当前进入第二阶段：用户 AQL Queue、Doorbell、CP 与 Signal，实验范围见 [QEMU GPGPU 四阶段实验大纲](<./4.experiments/QEMU GPGPU 实验大纲.md>)，已确认约定见 [CP/MEC 第一版规格](<./4.experiments/CP_MEC 第一版规格.md>)。2026-10-11 已完成双进程设备与原生 RISC-V CP 基础接入及回归，当前状态见 [大纲进度说明](<./4.experiments/QEMU GPGPU 实验大纲.md#current-progress>)。第二阶段的队列功能尚未记录实现完成或整体运行验收通过；后续随实验进展同步更新此处的阶段记录与大纲。
+根据用户反馈，实验第一阶段已完成，并已搭配 A57、支持 SMMUv3 系统 IOMMU。当前进入第二阶段：用户 AQL Queue、Doorbell、CP 与 Signal，实验范围见 [QEMU GPGPU 四阶段实验大纲](<./4.experiments/QEMU GPGPU 实验大纲.md>)，已确认约定见 [CP/MEC 第一版规格](<./4.experiments/CP_MEC 第一版规格.md>)。2026-10-11 已完成双进程设备与原生 RISC-V CP 基础接入，2026-10-14 完成 CP Host 访存窗口及回归，当前状态见 [大纲进度说明](<./4.experiments/QEMU GPGPU 实验大纲.md#current-progress>)。第二阶段的队列功能尚未记录实现完成或整体运行验收通过；后续随实验进展同步更新此处的阶段记录与大纲。
 
 学习进度按用户反馈记录；文档已写入、源码已核对、实验已运行验证和用户已掌握分别判断，不以文件存在替代学习或实验完成记录。
