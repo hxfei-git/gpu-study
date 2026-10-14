@@ -1,147 +1,58 @@
 # CP/MEC 第一版规格
 
-| 缩写 | 英文全称                          | 中文含义                           |
-| ---- | --------------------------------- | ---------------------------------- |
-| CP   | Command Processor                 | 命令处理器                         |
-| MEC  | Micro Engine Compute              | 计算命令处理微引擎                 |
-| HQD  | Hardware Queue Descriptor         | 硬件队列描述；用于保存队列驻留状态 |
-| MQD  | Memory Queue Descriptor           | 内存中的队列描述对象               |
-| KIQ  | Kernel Interface Queue            | 内核接口队列                       |
-| HIQ  | HSA Interface Queue               | HSA 接口队列                       |
-| HSA  | Heterogeneous System Architecture | 异构系统架构                       |
-| AQL  | Architected Queuing Language      | HSA 定义的队列包格式与提交协议     |
-| PCIe | Peripheral Component Interconnect Express | 高速外设互连总线 |
-| BAR | Base Address Register | PCIe 基址寄存器；用于描述设备资源窗口 |
-| QEMU | Quick Emulator | 仿真与虚拟化工具 |
-| CPU | Central Processing Unit | 中央处理器 |
-| RV32 | 32-bit RISC-V | 本版 CP 使用的原生 32 位 RISC-V 模型 |
-| PMU | Platform Management Unit | 平台管理单元；后续裸机事件循环参考 ZynqMP PMU Firmware |
-| TCG | Tiny Code Generator | QEMU 的动态代码生成基础设施 |
-| VRAM | Video RAM | 教学设备的显存后备存储 |
-| RAM | Random Access Memory | 随机存取存储器；Host RAM 与设备 VRAM 分开 |
-| DMA | Direct Memory Access | 直接内存访问 |
-| IOMMU | Input/Output Memory Management Unit | 输入输出内存管理单元 |
-| SMMUv3 | System Memory Management Unit version 3 | Arm 系统内存管理单元第三版 |
-| MSI-X | Message Signaled Interrupts Extended | 扩展消息中断 |
-| PC | Program Counter | 程序计数器，保存取指地址 |
-| GC | Graphics and Compute | AMD 图形与计算模块；本清单采用 GC 9.4.3 寄存器定义 |
-| VMID | Virtual Memory Identifier | 虚拟地址空间标识；用于选择设备地址翻译上下文 |
-| IB | Indirect Buffer | 间接命令缓冲区，由队列中的命令引用 |
-| EOP | End of Pipe | 执行结束相关处理；本清单涉及其缓冲区、指针与状态 |
-| GDS | Global Data Share | 全局数据共享；本清单涉及相关资源状态寄存器 |
-| IQ | 未核实 | 寄存器名称中的内部对象缩写；其英文展开与处理流程待核实 |
-| RPTR | Read Pointer | 读指针，记录队列或缓冲区的消费进度 |
-| WPTR | Write Pointer | 写指针，记录队列或缓冲区的生产进度 |
+| 缩写   | 英文全称                                  | 中文含义                                    |
+| ------ | ----------------------------------------- | ------------------------------------------- |
+| CP     | Command Processor                         | 命令处理器                                  |
+| MEC    | Micro Engine Compute                      | 计算命令处理微引擎                          |
+| HQD    | Hardware Queue Descriptor                 | 硬件队列描述；保存驻留队列的状态            |
+| MQD    | Memory Queue Descriptor                   | 内存中的队列描述对象                        |
+| KIQ    | Kernel Interface Queue                    | 内核接口队列；本版的队列配置入口            |
+| HIQ    | HSA Interface Queue                       | HSA 接口队列；本版保留的另一条管理队列      |
+| HSA    | Heterogeneous System Architecture         | 异构系统架构                                |
+| AQL    | Architected Queuing Language              | HSA 定义的队列包格式与提交协议              |
+| PCIe   | Peripheral Component Interconnect Express | 高速外设互连总线                            |
+| BAR    | Base Address Register                     | PCIe 基址寄存器；描述设备资源窗口           |
+| QEMU   | Quick Emulator                            | 仿真与虚拟化工具                            |
+| CPU    | Central Processing Unit                   | 中央处理器                                  |
+| RV32   | 32-bit RISC-V                             | 本版 CP 使用的原生 32 位 RISC-V 模型        |
+| TCG    | Tiny Code Generator                       | QEMU 的动态代码生成基础设施                 |
+| VRAM   | Video RAM                                 | 教学设备的显存后备存储                      |
+| RAM    | Random Access Memory                      | 随机存取存储器；Host RAM 与设备 VRAM 分开   |
+| DMA    | Direct Memory Access                      | 直接内存访问                                |
+| SMMUv3 | System Memory Management Unit version 3   | Arm 系统内存管理单元第三版                  |
+| MSI-X  | Message Signaled Interrupts Extended      | 扩展消息中断                                |
+| PC     | Program Counter                           | 程序计数器，保存取指地址                    |
+| VMID   | Virtual Memory Identifier                 | 虚拟地址空间标识；选择设备地址翻译上下文    |
+| IB     | Indirect Buffer                           | 间接命令缓冲区；本版不引入                  |
+| IQ     | 未核实                                    | AMD 寄存器中的内部对象缩写；本版不引入      |
+| EOP    | End of Pipe                               | 执行结束相关处理；本版不建立独立 EOP 缓冲区 |
+| RPTR   | Read Pointer                              | 读指针，记录消费进度                        |
+| WPTR   | Write Pointer                             | 写指针，记录生产进度                        |
 
-## 1. 已确定的槽位分工
+本文集中保存本实验已经确认的架构、行为与接口约束；尚未确定的接口统一列在[第 9 节](#spec-open-interfaces)。寄存器名称参考 AMD，实验语义以本文的 `[DESIGN]` 为准，不声明兼容 AMD 的完整硬件协议。
 
-**[DESIGN]** 第一版设置 4 个 HQD 槽位，分别用于 1 个 KIQ、1 个 HIQ 和 2 个用户 AQL Queue。
+实验阶段和完成状态见[实验大纲](<./QEMU GPGPU 实验大纲.md>)。对象关系、设计取舍、AMD/gem5 证据，以及当前代码与接口接入说明见[软件实现、参考与扩展](<./CP_MEC 软件实现、参考与扩展.md#implementation>)。本文中的队列方案是待实现规格；2026-10-11 已完成的是双进程设备与原生 RV32 CP 的基础接入及回归。
 
-```text
-4 个 HQD 槽位
-  ├─ KIQ：1 个
-  ├─ HIQ：1 个
-  ├─ AQL Queue A：1 个
-  └─ AQL Queue B：1 个
-```
+<a id="spec-overview"></a>
 
-这里的槽位指保存队列驻留状态的位置；HIQ 是其中一条队列的名称。
+## 1. 整体架构与执行路径
 
-### 1.1 HQD 保存队列状态，CP 访问并处理队列命令
-
-**[DESIGN]** 每个 HQD 槽位是一组寄存器，四个槽位组成保存四条队列状态的寄存器数组。每组保存对应 Queue 的 Ring 地址、容量、消费进度、写进度读取地址和启用状态等信息；命令包保存在 Ring 中。
-
-**CP 是这份队列状态的使用者：CP 访问 HQD，根据其中的信息找到 Ring，再读取、解析并处理命令包。** 管理命令与计算任务的处理过程如下：
+**[DESIGN]** 第一版使用一个 QEMU 原生 RV32 CP，由 TCG 执行裸机固件；现有 RV32 计算解释器继续执行应用 Kernel。4 个 HQD 槽位分别保存 1 个 KIQ、1 个 HIQ 和 2 个用户 AQL Queue（A、B）的驻留状态。计算执行器一次处理一个完整 Dispatch。
 
 ```text
-KIQ 中的 MAP_QUEUES 命令
-  → CP 解析命令，取得 MQD 地址和队列映射信息
-  → 读取 MQD 中的 Ring 地址、容量、索引地址和 Doorbell 配置
-  → 将队列配置装入目标 HQD 槽位
-  → 建立目标队列的驻留状态
-
-用户 AQL 队列中的 Kernel Dispatch Packet
-  → CP 解析包，取得任务规模、参数地址和完成 Signal
-  → 根据 kernel_object 读取 Kernel 描述对象，取得代码入口和资源要求
-  → 准备并派发 kernel，让计算单元执行
+Host 准备 KIQ 的 Ring、MQD 与 HQD，启动 CP
+  → 经 KIQ 提交 MAP_QUEUES
+  → CP 读取目标队列的 MQD，配置并激活对应 HQD
+  → Host 向用户 AQL Ring 发布 Dispatch 并通知设备
+  → CP 根据 HQD 找到 Ring，读取并解析 Dispatch
+  → CP 通过现有分发接口提交计算，等待执行器完成
+  → CP 发布完成 Signal，释放包槽并回报消费进度
+  → Host 读取结果，复用已经消费的 Ring 槽
 ```
 
-向 KIQ 写入 `MAP_QUEUES`，称为“提交一条管理命令”；向用户 AQL 队列写入 Kernel Dispatch Packet，称为“提交计算任务”。
+HQD 保存状态，CP 读取状态并执行命令，计算执行器执行 Kernel。管理命令与 AQL Packet 直接保存在各自的 Ring 中，本版不引入 IB 间接命令执行，也不建立 IQ 或 EOP 缓冲区。不提供可配置的队列／管线优先级和时间片，也不实现运行中的抢占和计算现场保存；取舍详解见[AMD 寄存器对照](<./CP_MEC 软件实现、参考与扩展.md#amd-registers>)，后期方向见[扩展项](<./CP_MEC 软件实现、参考与扩展.md#extensions>)。
 
-**[DESIGN]** 第一版采用 `CP_HQD_AQL_CONTROL` 记录队列格式，整个寄存器的值定义为：`0` 表示非 AQL，`1` 表示 AQL。KIQ、HIQ 配置为 `0`，用户 AQL Queue A、B 配置为 `1`；CP 根据该值选择命令解析流程。该约定是本版的自定义语义，具体流程和 AMD 参考依据见[队列格式选择说明](<./CP_MEC 第一版寄存器定义.md#20-aql-与非-aql-队列的格式选择>)。
-
-本版不采用 `CP_HQD_AQL_CONTROL_1`，队列格式选择继续使用上述寄存器；取舍依据见[第一版不采用 AQL 扩展控制位置](<./CP_MEC 第一版寄存器定义.md#203-第一版不采用-aql-扩展控制位置>)。
-
-**[DESIGN]** 第一版不引入 IB。管理命令和 AQL Packet 直接放入各自的 Ring，CP 从 Ring 读取并处理；本版不实现引用 IB 的间接命令执行。`CP_HQD_IB_BASE_ADDR`、`CP_HQD_IB_BASE_ADDR_HI`、`CP_HQD_IB_RPTR` 和 `CP_HQD_IB_CONTROL` 均不采用。KIQ、AQL 与 IB 的关系及取舍依据见[第一版不引入 IB](<./CP_MEC 第一版寄存器定义.md#7-第一版不引入-ib>)。
-
-HQD 的填充分为两个阶段：
-
-- **首次 CP 启动前，由 Host 配置 KIQ。** Host 准备 KIQ 的 MQD、Ring 和相关内存，并直接填写 KIQ 对应的 HQD，使设备能够找到 KIQ Ring。
-- **启动后，由 CP 通过 KIQ 命令配置。** Host 准备内存中的 MQD，通过 KIQ 提交相应管理命令；CP 读取描述信息并填写目标 HQD。Host 不再直接改写 HQD 中的队列配置，访问方式及配置权限见[第 2.5 节](#25-host-选槽窗口与-cp-直接访问)。
-
-队列运行期间，CP 使用并维护队列进度。HQD 保存状态，CP 执行固件、处理队列命令，计算执行器执行 kernel。
-
-### 1.2 固定轮流选择与阻塞执行
-
-**[DESIGN]** 第一版由裸机 CP 固件按固定规则选择队列：每轮先检查 KIQ、HIQ，各处理至多一条可处理的管理命令，再轮流检查 A、B。每次提交一个完整 Dispatch，阻塞等待计算执行器完成，处理结果后再选择下一条队列；不在执行中途抢占。未激活或没有可处理命令的队列直接跳过。等待计算完成期间，CP 暂不处理其他队列，包括 KIQ、HIQ。
-
-本版暂不采用 `CP_HQD_PERSISTENT_STATE`、`CP_HQD_PIPE_PRIORITY`、`CP_HQD_QUEUE_PRIORITY` 和 `CP_HQD_QUANTUM`。完整流程、限制与后续扩展见[队列选择与调度扩展说明](<./CP_MEC 第一版寄存器定义.md#5-第一版队列选择与后续调度扩展>)；后续裸机事件循环参考 AMD/Xilinx ZynqMP PMU Firmware。这里确认的是实现方案，队列功能仍待接入和验证。
-
-**[DESIGN]** 第一版也不采用 `CP_HQD_IQ_TIMER` 和 `CP_HQD_IQ_RPTR`。等待计算完成由 CP 固件轮询执行器状态实现，本版不建立 IQ 命令缓冲区或维护 IQ 读取进度。以后可先用裸机事件循环和固件内存中的状态推进等待任务；是否需要独立的 IQ 硬件机制及寄存器，按实际需求另行确认。当前等待流程、限制与扩展条件见[第一版不引入 IQ](<./CP_MEC 第一版寄存器定义.md#8-第一版不引入-iq>)。
-
-### 1.3 新通知更新生产进度，CP 推进消费位置
-
-**[DESIGN]** 第一版由 CP 根据 `CP_HQD_PQ_WPTR_POLL_ADDR / HI` 读取软件写进度，并用固件变量保存本次处理所需的值，不采用 `CP_HQD_PQ_WPTR_LO / HI`。地址、内存中的进度和固件变量之间的关系见[读位置与进度存放地址](<./CP_MEC 第一版寄存器定义.md#62-ring-内的读位置与进度存放地址>)；读取时机和通知编码仍待确定。
-
-**[DESIGN]** 队列运行期间，新通知只更新设备掌握的生产进度；消费位置由 CP 根据实际消费情况推进，不能用新通知中的进度覆盖。CP 继续从自己保存的位置按顺序处理命令，即使通知已经指向更后面的包，也不能跳过尚未消费的包。
-
-例如，CP 下一待消费包是 10，Host 连续发布包 10、11、12 并发出通知。设备掌握的生产进度可以更新到“已发布至包 12”，消费位置仍保留为 10；CP 随后按 10、11、12 的顺序处理并自行推进。这个例子及首次配置、恢复队列与运行时更新的区别，见[生产进度与消费位置的更新规则](<./CP_MEC 第一版寄存器定义.md#64-新通知更新生产进度cp-推进消费位置>)。
-
-### 1.4 Dispatch 完成后推进读进度并回报
-
-**[DESIGN]** 队列驻留期间，以 `CP_HQD_PQ_RPTR` 保存的消费位置为依据，由 CP 推进；读进度回报内存保存 CP 发布的副本，MQD 在卸载保存时接收需要恢复的进度。Host 不根据新通知改写消费位置，也不独立推进这些副本。
-
-第一版 AQL Dispatch 的正常成功路径采用以下顺序：
-
-```text
-读取并解析 Dispatch，保持原消费位置
-  → 提交计算，阻塞等待整个 Dispatch 完成
-  → 确认结果写回，完成任务清理
-  → 按完成协议发布 Signal，此后不再访问该任务的参数等资源
-  → 将原 Ring 包槽标为 INVALID
-  → 推进 CP_HQD_PQ_RPTR
-  → 向 RPTR_REPORT_ADDR 指向的内存回报新进度
-  → Host 观察到新进度后，可以复用已消费包占用的 Ring 槽
-```
-
-读进度用于判断 Ring 槽是否可复用，任务结果按 Signal 和错误协议判断。上述时序不确定索引的位宽、计数单位或回绕编码，也不规定异常时是否推进；具体例子和状态副本关系见[消费位置与 Ring 槽复用](<./CP_MEC 第一版寄存器定义.md#65-dispatch-完成后的读进度与-ring-槽复用>)。
-
-### 1.5 管理命令后追加写完成标记命令
-
-**[DESIGN]** 第一版采用在同一个 KIQ 中，先提交管理命令、随后追加一条写完成标记命令的方式确认管理操作完成。完成地址和预期值由后面的写标记命令携带；Host 读取该地址，等待本次预期值出现。
-
-以正常成功的队列配置为例：
-
-```text
-Host 准备完成标记内存，并保证初始化对 CP 可见
-  → 向 KIQ 提交 MAP_QUEUES
-  → 在同一 KIQ 中追加写完成标记命令
-
-CP 按 KIQ 中的命令顺序处理
-  → 完整配置目标 HQD，并使目标队列可用
-  → 执行后面的写标记命令，将预期值写到指定内存
-
-Host 观察到本次完成标记
-  → 按管理命令的结果协议确认队列配置完成
-```
-
-CP 必须先让前面的管理操作达到规定的完成条件，才能发布后面的标记；仅发起异步操作后立即写标记，不能满足这个约定。卸载操作的完成条件还须包括目标队列相关访问已经结束、必要状态已经保存。标记确认的是前面的管理操作，用户 AQL Kernel 的完成仍由各自的 Signal 协议处理。
-
-本节确定命令组织方式和正常成功路径的先后关系。写标记命令的名称、编码、地址类型、标记位宽、访问与复用规则，以及失败后是否继续执行后续命令、怎样报告失败，仍待确定。具体例子、卸载边界与 AMD 参考路径见[管理命令后的完成标记](<./CP_MEC 第一版寄存器定义.md#94-管理命令后追加写完成标记命令>)。
-
-## 2. 远端设备与 CP 固件启动
-
-**[DESIGN]** 本轮先让 A57 Linux 通过 PCIe 代理访问远端设备，并装载、启动和替换 CP 固件。CP 使用 QEMU 原生 `rv32` 模型，由 TCG 执行；现有计算解释器继续执行应用 kernel。本轮只接入复位、入口和基本固件运行，队列、Doorbell 事件和 CP 派发接口另行讨论。
+现有双进程设备关系如下。图中的传输层已经接入，队列、Doorbell 与 CP 派发仍需按后续章节接入：
 
 ```text
 进程 A：A57 Linux
@@ -157,59 +68,31 @@ CP 必须先让前面的管理操作达到规定的完成条件，才能发布�
 
 `none` 与 `smmuv3` 都采用消息 DMA：B 请求访问设备 DMA 地址，A 调用代理设备的 PCI DMA 接口，再返回数据或错误。SMMUv3 的翻译、权限检查和故障记录发生在 A。启动选项 `x-dma-via-socket=on` 控制传输方式，不增加硬件寄存器。原单进程入口继续使用现有设备。
 
-### 2.1 Host 与 CP 访问同一份 VRAM
+**[BOUNDARY]** 双进程模式本版不支持断线重连和迁移。现有基础实现中的 CP 只访问设备本地 VRAM，尚未接入异步 Host DMA、队列或计算派发。上述设备接口属于 QEMU 教学设备，不能作为 MI300X 的寄存器或内部核实现结论。
 
-CP 地址 `0～vram_size-1` 对应 VRAM 的相同字节偏移。Host 通过 BAR2 访问这份存储；例如固件入口在 VRAM 偏移 `0x1000`，Host 写 `BAR2 基址 + 0x1000`，CP 从地址 `0x1000` 取指。Host 的 BAR 总线地址不能直接填入 CP 入口寄存器。
+<a id="spec-objects-addresses"></a>
 
-本轮不新增私有存储，也不永久划出固件分区。固件测试与原软件栈测试分别运行，并各自明确代码和结果地址。BAR 写入、DMA 写入、计算解释器写入和冷复位清零都应使对应 TCG 指令翻译失效，支持在相同地址替换固件。
+## 2. 队列对象、地址空间与 HQD 访问
 
-### 2.2 BAR0 控制寄存器
-
-`0x0500 CP_CTRL` 与 `0x0504 CP_RESET_VECTOR` 都采用对齐、小端的 32 位访问。
-
-`CP_CTRL` 的 bit 0 是可读写的 `RESET_HOLD`，默认 1；bit 1 是只读的 `PRESENT`。连接 CP 的设备默认读回 3，解除复位后读回 2。写入相同复位状态不会重新启动 CPU，保留位读零、写入忽略，`PRESENT` 的写入也忽略。置位 `RESET_HOLD` 恢复 CP 的原生复位状态，并持续阻止取指；清零后从已配置的入口运行。
-
-`CP_RESET_VECTOR` 保存 CP 地址空间中的 32 位入口，默认 0。只有保持复位时可以修改；入口必须位于 VRAM 内且按 2 字节对齐。有效修改同步更新 CPU 的复位向量和复位态 PC。非法地址或运行期间修改入口会保留原值，并置位已有 `ERROR_STATUS.INVALID_CMD`。
-
-没有连接 CP 的单进程设备对这两个寄存器读零、写入忽略。
-
-### 2.3 固件装载与复位顺序
+Host 建立一条队列时，需要准备 Ring、MQD 和进度内存。MQD 保存队列配置与需要恢复的状态；装入 HQD 后，CP 使用 HQD 中的活动状态读取 Ring。卸载保存时，需要保留的状态写回原 MQD，供以后恢复。
 
 ```text
-Host 写 CP_CTRL.RESET_HOLD = 1，读回确认
-  → 经 BAR2 写入固件和所需数据
-  → 写 CP_RESET_VECTOR
-  → 执行访问屏障，读回确认写入完成
-  → 写 CP_CTRL.RESET_HOLD = 0
-  → CP 从指定入口执行，把结果写回 VRAM
-  → Host 经 BAR2 读取结果
+驱动管理地址空间 VMID 0
+  ├─ KIQ Ring、HIQ Ring
+  └─ MQD_A：保存 Queue A 的配置与可恢复状态
+       │ CP 读取配置；卸载时保存必要状态
+       ▼
+HQD 槽位 2：Queue A 当前的活动状态
+  ├─ MQD 地址 → 仍按 VMID 0 访问 MQD_A
+  ├─ Ring 地址 + 队列 VMID → 读取进程 A 的 Ring
+  ├─ PQ_RPTR → 保存当前消费位置
+  ├─ RPTR_REPORT_ADDR → 指定向哪里回报消费进度
+  └─ WPTR_POLL_ADDR → 指定从哪里读取软件生产进度
 ```
 
-复位与启动在目标 CPU 线程中同步完成。`GLOBAL_CTRL.ENABLE` 只控制原有设备功能；CP 通过自己的控制位解除复位。
+**[DESIGN]** KIQ、HIQ 以及所有 MQD 固定使用管理地址空间 VMID 0；用户 Ring、Kernel 代码和应用数据使用所属进程的地址空间。`CP_HQD_VMID` 选择队列的地址上下文，不参与选择 MQD 的上下文。HQD 槽位编号不决定 VMID；本版不采用 `CP_MQD_CONTROL`。VMID 数量、各对象的存储位置及具体地址类型留在第 9 节确认；地址空间关系详见[MQD 与管理地址空间](<./CP_MEC 软件实现、参考与扩展.md#mqd-vmid>)。
 
-CP 单独复位保留 VRAM、入口，以及原 DMA、派发和中断状态。`GLOBAL_CTRL.RESET` 复位设备状态并使 CP 回到保持复位、入口为 0 的默认值，VRAM 保留。设备冷复位先停止 CP，再清零 VRAM 并恢复全部默认状态。
-
-**[BOUNDARY]** 双进程模式本版不支持断线重连和迁移。CP 目前只访问设备本地 VRAM，尚未接入异步 Host DMA、队列或计算派发。以上接口属于 QEMU 教学设备，不能作为 MI300X 的寄存器或内部核实现结论。
-
-2026-10-11 的基础实现与测试结果见 [远端设备与 CP 验收记录](<./远端 GPGPU 与 RISC-V CP 验收记录.md>)。队列功能的完成状态仍按实验大纲记录。
-
-### 2.4 配置并激活 KIQ 后启动 CP
-
-**[DESIGN]** 队列功能接入后，采用先配置并激活 KIQ、再启动 CP 的顺序。在第 2.3 节的固件启动流程中，Host 应在解除 CP 复位前完成 KIQ 配置：
-
-```text
-Host 保持 CP 复位（CP_CTRL.RESET_HOLD = 1）
-  → 装载固件，设置 CP_RESET_VECTOR
-  → 准备 KIQ Ring、MQD 和相关内存，保持 KIQ 槽位 ACTIVE = 0
-  → 填写 KIQ 对应的 HQD，保证配置和内存初始化对 CP 可见
-  → 最后设置 KIQ 槽位 ACTIVE = 1
-  → 解除 CP 复位（CP_CTRL.RESET_HOLD = 0）
-  → CP 固件检查 KIQ 槽位的 ACTIVE，再检查并处理可用命令
-```
-
-这里的 KIQ 就绪，是指 Host 已准备好 Ring，并完成 HQD 配置和激活。CP 固件在 `ACTIVE = 0` 时暂不处理该队列，在 `ACTIVE = 1` 时检查是否有可处理的命令；Ring 可以暂时为空，CP 启动后等待后续提交。完整启动图和 AMD 参考事实见[队列激活状态说明](<./CP_MEC 第一版寄存器定义.md#2-队列激活状态>)。无需额外增加“通知 CP 检查 KIQ 配置”的寄存器；HQD 的访问方式与启动后的配置权限按第 2.5 节执行。
-
-### 2.5 Host 选槽窗口与 CP 直接访问
+`RPTR_REPORT_ADDR / HI` 与 `WPTR_POLL_ADDR / HI` 保存的是地址，各地址指向的内存保存进度数值。进度位置不要求位于 Ring 命令区内，Host 通过自己的映射访问相应内存。消费位置、生产进度的更新规则见第 5、6 节。
 
 **[DESIGN]** Host 和 CP 通过两个入口访问同一份 HQD 状态：
 
@@ -223,110 +106,450 @@ CP 直接按槽位访问：
   地址 = CP_HQD_BASE + 槽位编号 × 0x100 + 字段偏移
 ```
 
-Host 选择槽位 2 时，窗口显示 Queue A 的状态；改选槽位 3 后，同一窗口显示 Queue B 的状态。选择只改变 Host 接下来访问哪份状态，不改变 CP 正在处理哪条队列。Host 驱动用锁保护选择和窗口访问；CP 使用普通寄存器读写指令按槽位寻址，QEMU 将访问转到对应 HQD，CP 不使用 `HQD_SELECT`。
+Host 选择槽位 2 时，窗口显示 Queue A 的状态；改选槽位 3 后，同一窗口显示 Queue B 的状态。选择只改变 Host 接下来访问哪份状态，不改变 CP 正在处理哪条队列。Host 驱动用锁保护选择和窗口访问；CP 使用普通寄存器读写指令按槽位寻址，QEMU 将访问转到对应 HQD，CP 不使用 `HQD_SELECT`。窗口与槽位的例子见[HQD 访问说明](<./CP_MEC 软件实现、参考与扩展.md#hqd-window>)。
 
-首次 CP 启动前，Host 通过窗口配置 KIQ；启动后，HQD 的队列配置统一由 CP 按 KIQ 命令顺序填写。Host 可以选槽查看状态，后续配置请求仍走 KIQ。Host 准备的 MQD 是命令输入，提交后须保证 CP 读取期间内容稳定；CP 将地址的高低位及其余配置填写完整后，再启用队列。
+首次启动前 Host 配置 KIQ；启动后所有 HQD 队列配置由 CP 按 KIQ 命令顺序填写。Host 可以选槽查看状态，需要使用正在配置的地址时须等待该次配置完成。这确定了地址配置的唯一写方；持续变化的进度若采用 64 位，仍需另定 RV32 分次访问的一致性规则，Host 的选槽锁不能替代它。
 
-这一约定确定了地址配置的唯一写方，不增加运行期间 Host 与 CP 交替填写地址的流程。动态进度若最终采用 64 位，读方与写方之间的一致性规则仍需结合所选格式确定；本节不据此确定进度位宽。详细过程见[首次 KIQ 配置与运行期间的配置权限](<./CP_MEC 第一版寄存器定义.md#23-首次-kiq-配置与运行期间的配置权限>)。
+<a id="spec-boot"></a>
 
-## 3. 后续讨论与补充
+## 3. 固件装载、KIQ 配置与 CP 启动
 
-以下为待讨论清单。逐项讨论，经用户确认后，将结论补入本文的已确定规格，并删除对应条目。
+### 3.1 固件存储与已有控制寄存器
 
-1. **HQD 的其余字段与访问细则。** 首次 KIQ 的配置与激活顺序已在第 2.4 节确定；Host 选槽窗口、CP 直接寻址，以及启动后统一由 CP 按 KIQ 命令配置的权限已在第 2.5 节确定。继续确认各字段的复位值、访问宽度、非法访问处理和运行状态的读取规则。AMD 参考清单见[第 3.1 节](#31-amd-gc-943-队列装载寄存器清单)，按行记录是否采用。
+CP 地址 `0～vram_size-1` 对应 VRAM 的相同字节偏移。Host 通过 BAR2 访问这份存储；例如固件入口在 VRAM 偏移 `0x1000`，Host 写 `BAR2 基址 + 0x1000`，CP 从地址 `0x1000` 取指。Host 的 BAR 总线地址不能直接填入 CP 入口寄存器。
 
-2. **KIQ／HIQ 管理命令的最小接口。** 队列配置已确定通过 KIQ 交给 CP，完成确认采用第 1.5 节的后续写标记命令。继续确定管理命令及写标记命令的编码和字段、目标槽位的选择方式、标记的访问与复用规则、其他管理操作的分工，以及失败报告方式。
+现有基础实现不新增私有存储，也不永久划出固件分区。固件测试与原软件栈测试分别运行，并各自明确代码和结果地址。BAR 写入、DMA 写入、计算解释器写入和冷复位清零都应使对应 TCG 指令翻译失效，支持在相同地址替换固件。
 
-3. **CP 的取包地址与发布规则。** 第 1.3 节已确定新通知只更新生产进度、消费位置由 CP 推进；第 1.4 节已确定 AQL Dispatch 正常成功路径中的推进与回报时序。继续确定 Ring、MQD、参数的存储位置和地址类型，索引的位宽、单位、回绕与一致性访问，以及 Doorbell 与队列的对应关系、通知携带的内容。明确 CP 怎样判断包已准备好，避免读取尚未写完的内容。`CP_HQD_VMID` 已确定采用；实验支持多少个 VMID 上下文（“槽位”），待 MEC 规格确定后再讨论，见[队列地址空间标识说明](<./CP_MEC 第一版寄存器定义.md#3-队列地址空间标识>)。
+`0x0500 CP_CTRL` 与 `0x0504 CP_RESET_VECTOR` 都采用对齐、小端的 32 位访问。
 
-4. **CP 与计算执行器的交接。** 补入已讨论的“保留现有分发寄存器及 PCIe BAR 映射，正常任务改由 CP 访问”约定。队列选择与阻塞等待规则已在第 1.2 节确定；进一步明确提交、忙、完成与错误状态的接口，以及执行结果怎样返回 CP 并更新 Signal。
+`CP_CTRL` 的 bit 0 是可读写的 `RESET_HOLD`，默认 1；bit 1 是只读的 `PRESENT`。连接 CP 的设备默认读回 3，解除复位后读回 2。写入相同复位状态不会重新启动 CPU，保留位读零、写入忽略，`PRESENT` 的写入也忽略。置位 `RESET_HOLD` 恢复 CP 的原生复位状态，并持续阻止取指；清零后从已配置的入口运行。
 
-5. **队列停止和出错后的收尾。** 卸载完成通过后续写标记命令确认；继续确定停止取包、结束在途访问和保存状态的具体流程，以及命令非法或计算失败时的结果报告。`CP_HQD_ERROR` 先保留为每条驻留队列的错误记录入口，具体异常见[队列错误记录说明](<./CP_MEC 第一版寄存器定义.md#19-队列错误记录与第一版保留范围>)；错误编码、清除、通知和 MQD 保存规则继续讨论。结合卸载结果与失败处理，明确队列内存何时可以释放。
+`CP_RESET_VECTOR` 保存 CP 地址空间中的 32 位入口，默认 0。只有保持复位时可以修改；入口必须位于 VRAM 内且按 2 字节对齐。有效修改同步更新 CPU 的复位向量和复位态 PC。非法地址或运行期间修改入口会保留原值，并置位已有 `ERROR_STATUS.INVALID_CMD`。
 
-### 3.1 AMD GC 9.4.3 队列装载寄存器清单
+没有连接 CP 的单进程设备对这两个寄存器读零、写入忽略。
 
-本节列出 AMD GC 9.4.3 驱动装载 HQD 时使用的连续寄存器区间，供后续逐行讨论本实验的取舍。表中“采用/不采用”一列记录已确认的决定；留空表示尚未决定。
+### 3.2 配置并激活 KIQ 后解除复位
 
-“详细说明”列链接到[第一版寄存器定义](<./CP_MEC 第一版寄存器定义.md>)中的对应小节，保存讨论中的解释与图示；尚未补充说明的行先留空。
-
-区间从 `CP_MQD_BASE_ADDR`（`0x1245`）到 `CP_HQD_AQL_DISPATCH_ID_HI`（`0x127f`），共 59 个 32 位位置、236 字节，包含保留位置和同址别名。“AMD 偏移”是寄存器段内以 32 位字为单位的偏移；“槽内偏移”是相对于区间起点换算出的字节偏移：
+**[DESIGN]** 队列功能接入后，在现有固件启动流程中加入 KIQ 配置，顺序如下：
 
 ```text
-槽内偏移 =（AMD 偏移 − 0x1245）× 4
+Host 写 CP_CTRL.RESET_HOLD = 1，读回确认
+  → 经 BAR2 装载固件和所需数据，设置 CP_RESET_VECTOR
+  → 准备 KIQ Ring、MQD 和相关内存，保持 KIQ 槽位 ACTIVE = 0
+  → 通过 HQD 窗口填写 Ring 地址、容量、指针、MQD 地址和队列格式
+  → 保证配置和内存初始化对 CP 可见
+  → 最后设置 KIQ 槽位 ACTIVE = 1
+  → 执行访问屏障，读回确认写入完成
+  → 写 CP_CTRL.RESET_HOLD = 0
+  → CP 从入口执行固件，检查 KIQ 的 ACTIVE 和可用命令
 ```
 
-例如 `CP_HQD_PQ_CONTROL` 的 AMD 偏移为 `0x1256`，换算后的槽内偏移为 `0x044`。
+Host 必须同时准备内存中的 KIQ MQD 和对应 HQD；只准备 MQD，尚未运行的 CP 无法据此找到 KIQ Ring。`ACTIVE = 0` 时暂不处理该队列；`ACTIVE = 1` 时检查可用命令。Ring 可以为空，激活不要求 Kernel 已开始执行。无需额外增加“通知 CP 检查 KIQ 配置”的寄存器。
 
-表中的主 Ring 是软件提交命令的环形缓冲区，IB 是命令引用的间接命令缓冲区，EOP 指执行结束相关处理。
+`CP_HQD_AQL_CONTROL` 的整个 32 位值定义为：`0` 表示非 AQL，`1` 表示 AQL。KIQ、HIQ 配置为 `0`，用户 AQL Queue A、B 配置为 `1`；CP 据此选择解析流程。其他数值未定义，不能把任意非零值都当作 AQL。队列格式须在激活前配置好，具体非法编码与访问处理统一在第 9 节确认；解释与 AMD 参考见[队列格式选择](<./CP_MEC 软件实现、参考与扩展.md#queue-format>)。
 
-**[BOUNDARY]** 部分寄存器只公开了字段名称，缺少完整行为说明。这些条目标注“待核实”，表示其具体用途或行为仍需核对；该标记不代替“采用/不采用”的决定。
+### 3.3 复位的影响范围
 
-| AMD 偏移 | 槽内偏移 | 寄存器原名 | 中文名称与用途 | 采用/不采用 | 详细说明 |
-|---|---|---|---|---|---|
-| `0x1245` | `0x000` | `CP_MQD_BASE_ADDR` | MQD 基址低位：保存内存中队列描述对象的地址低位，供设备定位 MQD。 | 采用 | [MQD 基址](<./CP_MEC 第一版寄存器定义.md#1-mqd-基址>) |
-| `0x1246` | `0x004` | `CP_MQD_BASE_ADDR_HI` | MQD 基址高位：与前一个寄存器共同确定 MQD 地址。 | 采用 | [MQD 基址](<./CP_MEC 第一版寄存器定义.md#1-mqd-基址>) |
-| `0x1247` | `0x008` | `CP_HQD_ACTIVE` | 队列激活状态：标记该槽位中的队列是否已启用；激活后仍需检查是否有可处理的命令，AMD 驱动卸载队列时也会检查此状态。 | 采用 | [队列激活状态](<./CP_MEC 第一版寄存器定义.md#2-队列激活状态>) |
-| `0x1248` | `0x00c` | `CP_HQD_VMID` | 队列地址空间标识：保存队列及 IB 使用的虚拟地址空间编号等信息，供设备选择地址翻译上下文。 | 采用 | [队列地址空间标识](<./CP_MEC 第一版寄存器定义.md#3-队列地址空间标识>) |
-| `0x1249` | `0x010` | `CP_HQD_PERSISTENT_STATE` | 队列持久状态与控制：包含预加载请求、预加载量，以及队列切换、恢复和重新启动 wave 等相关字段。 | 不采用 | [取舍与执行方案](<./CP_MEC 第一版寄存器定义.md#5-第一版队列选择与后续调度扩展>) |
-| `0x124a` | `0x014` | `CP_HQD_PIPE_PRIORITY` | 管线优先级：保存管线层面的调度优先级配置。 | 不采用 | [取舍与执行方案](<./CP_MEC 第一版寄存器定义.md#5-第一版队列选择与后续调度扩展>) |
-| `0x124b` | `0x018` | `CP_HQD_QUEUE_PRIORITY` | 队列优先级：保存这条队列的调度优先级配置。 | 不采用 | [取舍与执行方案](<./CP_MEC 第一版寄存器定义.md#5-第一版队列选择与后续调度扩展>) |
-| `0x124c` | `0x01c` | `CP_HQD_QUANTUM` | 调度时间片控制：配置时间片的使能、尺度和持续长度，并包含时间片活动状态。 | 不采用 | [取舍与执行方案](<./CP_MEC 第一版寄存器定义.md#5-第一版队列选择与后续调度扩展>) |
-| `0x124d` | `0x020` | `CP_HQD_PQ_BASE` | 主 Ring 基址编码低位：用于定位命令 Ring；驱动将 Ring 字节地址右移 8 位后填写。 | 采用 | [Ring 的定位与命令消费](<./CP_MEC 第一版寄存器定义.md#61-ring-的定位与命令消费>) |
-| `0x124e` | `0x024` | `CP_HQD_PQ_BASE_HI` | 主 Ring 基址编码高位：与前一个寄存器共同保存 Ring 基址编码。 | 采用 | [Ring 的定位与命令消费](<./CP_MEC 第一版寄存器定义.md#61-ring-的定位与命令消费>) |
-| `0x124f` | `0x028` | `CP_HQD_PQ_RPTR` | 主 Ring 读指针：保存设备对主 Ring 的消费进度；本版 AQL Dispatch 正常完成并收尾后由 CP 推进，新通知不覆盖消费位置。 | 采用 | [读位置与进度存放地址](<./CP_MEC 第一版寄存器定义.md#62-ring-内的读位置与进度存放地址>) |
-| `0x1250` | `0x02c` | `CP_HQD_PQ_RPTR_REPORT_ADDR` | 读指针回报地址低位：指定设备把消费进度写回到哪块内存，供软件读取；本版 AQL 正常路径先完成任务、释放包槽，再推进并回报进度，位宽与编码待定。 | 采用 | [读位置与进度存放地址](<./CP_MEC 第一版寄存器定义.md#62-ring-内的读位置与进度存放地址>) |
-| `0x1251` | `0x030` | `CP_HQD_PQ_RPTR_REPORT_ADDR_HI` | 读指针回报地址高位：与前一个寄存器共同确定回报目标地址。 | 采用 | [读位置与进度存放地址](<./CP_MEC 第一版寄存器定义.md#62-ring-内的读位置与进度存放地址>) |
-| `0x1252` | `0x034` | `CP_HQD_PQ_WPTR_POLL_ADDR` | 写指针轮询地址低位：指定设备从哪块内存读取软件维护的写指针。 | 采用 | [读位置与进度存放地址](<./CP_MEC 第一版寄存器定义.md#62-ring-内的读位置与进度存放地址>) |
-| `0x1253` | `0x038` | `CP_HQD_PQ_WPTR_POLL_ADDR_HI` | 写指针轮询地址高位：与前一个寄存器共同确定写指针的读取地址。 | 采用 | [读位置与进度存放地址](<./CP_MEC 第一版寄存器定义.md#62-ring-内的读位置与进度存放地址>) |
-| `0x1254` | `0x03c` | `CP_HQD_PQ_DOORBELL_CONTROL` | 队列 Doorbell 控制：配置 Doorbell 偏移、使能和相关模式，将 Doorbell 通知与该队列关联。 | 采用 | [Doorbell 与 Ring 控制](<./CP_MEC 第一版寄存器定义.md#63-doorbell-与-ring-控制>) |
-| `0x1255` | `0x040` | 保留位置 | 保留：寄存器头文件未定义名称，MQD 对应位置也标为保留。 |  |  |
-| `0x1256` | `0x044` | `CP_HQD_PQ_CONTROL` | 主 Ring 控制：配置 Ring 容量、读指针回报、写指针模式、执行限制和权限等。 | 采用 | [Doorbell 与 Ring 控制](<./CP_MEC 第一版寄存器定义.md#63-doorbell-与-ring-控制>) |
-| `0x1257` | `0x048` | `CP_HQD_IB_BASE_ADDR` | IB 基址低位：保存当前间接命令缓冲区的地址低位，供 CP 继续读取其中的命令。 | 不采用 | [第一版不引入 IB](<./CP_MEC 第一版寄存器定义.md#7-第一版不引入-ib>) |
-| `0x1258` | `0x04c` | `CP_HQD_IB_BASE_ADDR_HI` | IB 基址高位：与前一个寄存器共同确定 IB 地址。 | 不采用 | [第一版不引入 IB](<./CP_MEC 第一版寄存器定义.md#7-第一版不引入-ib>) |
-| `0x1259` | `0x050` | `CP_HQD_IB_RPTR` | IB 读指针：保存间接命令缓冲区的消费位置。 | 不采用 | [第一版不引入 IB](<./CP_MEC 第一版寄存器定义.md#7-第一版不引入-ib>) |
-| `0x125a` | `0x054` | `CP_HQD_IB_CONTROL` | IB 控制：包含 IB 长度、执行禁止、缓存策略、权限和正在处理 IB 等字段。 | 不采用 | [第一版不引入 IB](<./CP_MEC 第一版寄存器定义.md#7-第一版不引入-ib>) |
-| `0x125b` | `0x058` | `CP_HQD_IQ_TIMER` | IQ 定时与处理控制：包含等待时间、重试类型、重新计时、中断及处理状态等字段；IQ 的内部处理流程待核实。 | 不采用 | [第一版不引入 IQ](<./CP_MEC 第一版寄存器定义.md#8-第一版不引入-iq>) |
-| `0x125c` | `0x05c` | `CP_HQD_IQ_RPTR` | IQ 读位置：保存 IQ 相关读取偏移；对应内部对象及推进规则待核实。 | 不采用 | [第一版不引入 IQ](<./CP_MEC 第一版寄存器定义.md#8-第一版不引入-iq>) |
-| `0x125d` | `0x060` | `CP_HQD_DEQUEUE_REQUEST` | 队列卸载／抢占请求：请求排空、复位 wave 或保存 wave 等处理，以卸载队列。 | 不采用 | [队列卸载的寄存器与命令入口](<./CP_MEC 第一版寄存器定义.md#9-队列卸载的寄存器与命令入口>) |
-| `0x125e` | `0x064` | `CP_HQD_DMA_OFFLOAD`<br>`CP_HQD_OFFLOAD` | Offload 相关字段，同址别名：包含 DMA、AQL、EOP 对应的 `OFFLOAD` 与 `_EN` 字段；读写语义、转交对象及流程待核实。 | 不采用 | [Offload 字段与第一版取舍](<./CP_MEC 第一版寄存器定义.md#10-offload-字段与第一版取舍>) |
-| `0x125f` | `0x068` | `CP_HQD_SEMA_CMD` | 信号量操作相关字段：包含 `RETRY` 和 `RESULT`；读写语义及与具体命令的对应关系待核实。 | 不采用 | [信号量操作字段与第一版取舍](<./CP_MEC 第一版寄存器定义.md#11-信号量操作字段与第一版取舍>) |
-| `0x1260` | `0x06c` | `CP_HQD_MSG_TYPE` | 内部消息相关字段：包含 3 位的 `ACTION` 和 3 位的 `SAVE_STATE`；消息来源、编码含义及处理流程待核实。 | 不采用 | [内部消息字段与第一版取舍](<./CP_MEC 第一版寄存器定义.md#12-内部消息字段与第一版取舍>) |
-| `0x1261` | `0x070` | `CP_HQD_ATOMIC0_PREOP_LO` | 原子操作相关数据 0 的低位：保存 `ATOMIC0_PREOP` 相关数据的低 32 位；数据含义及更新规则待核实。 | 不采用 | [原子操作相关数据与第一版取舍](<./CP_MEC 第一版寄存器定义.md#13-原子操作相关数据与第一版取舍>) |
-| `0x1262` | `0x074` | `CP_HQD_ATOMIC0_PREOP_HI` | 原子操作相关数据 0 的高位：与前一个寄存器组成一份 64 位数据；数据含义及更新规则待核实。 | 不采用 | [原子操作相关数据与第一版取舍](<./CP_MEC 第一版寄存器定义.md#13-原子操作相关数据与第一版取舍>) |
-| `0x1263` | `0x078` | `CP_HQD_ATOMIC1_PREOP_LO` | 原子操作相关数据 1 的低位：保存 `ATOMIC1_PREOP` 相关数据的低 32 位；数据含义及更新规则待核实。 | 不采用 | [原子操作相关数据与第一版取舍](<./CP_MEC 第一版寄存器定义.md#13-原子操作相关数据与第一版取舍>) |
-| `0x1264` | `0x07c` | `CP_HQD_ATOMIC1_PREOP_HI` | 原子操作相关数据 1 的高位：与前一个寄存器组成另一份 64 位数据；数据含义及更新规则待核实。 | 不采用 | [原子操作相关数据与第一版取舍](<./CP_MEC 第一版寄存器定义.md#13-原子操作相关数据与第一版取舍>) |
-| `0x1265` | `0x080` | `CP_HQD_HQ_SCHEDULER0`<br>`CP_HQD_HQ_STATUS0` | 队列内部状态与控制 0，同址别名：包含队列空闲、卸载状态、卸载重试计数等字段；驱动还通过对应 MQD 字段的 bit 14 请求 CP 设置调试所需的 `DISPATCH_PTR`。 | 不采用 | [队列内部状态与控制的第一版取舍](<./CP_MEC 第一版寄存器定义.md#14-队列内部状态与控制的第一版取舍>) |
-| `0x1266` | `0x084` | `CP_HQD_HQ_CONTROL0`<br>`CP_HQD_HQ_SCHEDULER1` | 队列内部控制／调度字，同址别名：公开定义只给出整体控制或调度字段，具体行为待核实。 | 不采用 | [队列内部状态与控制的第一版取舍](<./CP_MEC 第一版寄存器定义.md#14-队列内部状态与控制的第一版取舍>) |
-| `0x1267` | `0x088` | `CP_MQD_CONTROL` | MQD 访问控制：配置访问 MQD 使用的地址空间、权限、缓存策略及相关处理控制。 | 不采用 | [管理资源固定使用 VMID 0](<./CP_MEC 第一版寄存器定义.md#15-mqd-访问控制与固定管理地址空间>) |
-| `0x1268` | `0x08c` | `CP_HQD_HQ_STATUS1` | 队列内部状态 1：公开定义仅给出完整的 32 位 `STATUS` 字段，具体状态含义待核实。 | 不采用 | [队列内部状态与控制的第一版取舍](<./CP_MEC 第一版寄存器定义.md#14-队列内部状态与控制的第一版取舍>) |
-| `0x1269` | `0x090` | `CP_HQD_HQ_CONTROL1` | 队列内部控制 1：公开定义仅给出完整的 32 位 `CONTROL` 字段，具体控制含义待核实。 | 不采用 | [队列内部状态与控制的第一版取舍](<./CP_MEC 第一版寄存器定义.md#14-队列内部状态与控制的第一版取舍>) |
-| `0x126a` | `0x094` | `CP_HQD_EOP_BASE_ADDR` | EOP 缓冲区基址编码低位：定位执行结束相关处理使用的缓冲区。 | 不采用 | [EOP 缓冲区与第一版取舍](<./CP_MEC 第一版寄存器定义.md#16-eop-缓冲区与第一版取舍>) |
-| `0x126b` | `0x098` | `CP_HQD_EOP_BASE_ADDR_HI` | EOP 缓冲区基址编码高位：与前一个寄存器共同确定 EOP 缓冲区位置。 | 不采用 | [EOP 缓冲区与第一版取舍](<./CP_MEC 第一版寄存器定义.md#16-eop-缓冲区与第一版取舍>) |
-| `0x126c` | `0x09c` | `CP_HQD_EOP_CONTROL` | EOP 处理控制：包含缓冲区容量、处理使能、取数器暂停、执行限制和相关状态。 | 不采用 | [EOP 缓冲区与第一版取舍](<./CP_MEC 第一版寄存器定义.md#16-eop-缓冲区与第一版取舍>) |
-| `0x126d` | `0x0a0` | `CP_HQD_EOP_RPTR` | EOP 读指针及取数控制：保存消费进度，同时包含取数器初始化、复位和卸载等待状态等字段。 | 不采用 | [EOP 缓冲区与第一版取舍](<./CP_MEC 第一版寄存器定义.md#16-eop-缓冲区与第一版取舍>) |
-| `0x126e` | `0x0a4` | `CP_HQD_EOP_WPTR` | EOP 写指针及缓冲状态：保存写入进度，并包含缓冲区空和可用量等信息。 | 不采用 | [EOP 缓冲区与第一版取舍](<./CP_MEC 第一版寄存器定义.md#16-eop-缓冲区与第一版取舍>) |
-| `0x126f` | `0x0a8` | `CP_HQD_EOP_EVENTS` | EOP 事件状态：记录事件计数，以及计算管线部分刷新是否处于等待状态。 | 不采用 | [EOP 缓冲区与第一版取舍](<./CP_MEC 第一版寄存器定义.md#16-eop-缓冲区与第一版取舍>) |
-| `0x1270` | `0x0ac` | `CP_HQD_CTX_SAVE_BASE_ADDR_LO` | 上下文保存区基址低位：指定队列执行状态保存到哪块内存，用于保存与恢复执行上下文。 | 不采用 | [上下文保存：后期重要扩展](<./CP_MEC 第一版寄存器定义.md#17-上下文保存与后期恢复执行>) |
-| `0x1271` | `0x0b0` | `CP_HQD_CTX_SAVE_BASE_ADDR_HI` | 上下文保存区基址高位：与前一个寄存器共同确定保存区地址。 | 不采用 | [上下文保存：后期重要扩展](<./CP_MEC 第一版寄存器定义.md#17-上下文保存与后期恢复执行>) |
-| `0x1272` | `0x0b4` | `CP_HQD_CTX_SAVE_CONTROL` | 上下文保存控制：配置保存相关策略和执行禁止等控制。 | 不采用 | [上下文保存：后期重要扩展](<./CP_MEC 第一版寄存器定义.md#17-上下文保存与后期恢复执行>) |
-| `0x1273` | `0x0b8` | `CP_HQD_CNTL_STACK_OFFSET` | 控制栈当前偏移：记录控制栈的位置；驱动根据容量与该偏移计算已使用空间。 | 不采用 | [上下文保存：后期重要扩展](<./CP_MEC 第一版寄存器定义.md#17-上下文保存与后期恢复执行>) |
-| `0x1274` | `0x0bc` | `CP_HQD_CNTL_STACK_SIZE` | 控制栈容量：指定控制栈区域的大小。 | 不采用 | [上下文保存：后期重要扩展](<./CP_MEC 第一版寄存器定义.md#17-上下文保存与后期恢复执行>) |
-| `0x1275` | `0x0c0` | `CP_HQD_WG_STATE_OFFSET` | 工作组状态偏移：记录工作组现场数据的当前使用边界；驱动据此计算已使用空间。 | 不采用 | [上下文保存：后期重要扩展](<./CP_MEC 第一版寄存器定义.md#17-上下文保存与后期恢复执行>) |
-| `0x1276` | `0x0c4` | `CP_HQD_CTX_SAVE_SIZE` | 上下文保存区容量：指定保存执行上下文所用区域的大小。 | 不采用 | [上下文保存：后期重要扩展](<./CP_MEC 第一版寄存器定义.md#17-上下文保存与后期恢复执行>) |
-| `0x1277` | `0x0c8` | `CP_HQD_GDS_RESOURCE_STATE` | 专用同步资源状态：包含资源需求／获取标志，以及全局同步资源的大小和位置相关字段；具体编码及分配流程待核实。 | 不采用 | [专用同步资源与第一版取舍](<./CP_MEC 第一版寄存器定义.md#18-专用同步资源与第一版取舍>) |
-| `0x1278` | `0x0cc` | `CP_HQD_ERROR` | 队列错误状态：AMD 字段涉及 AQL 处理及多种访问路径；本版保留，用于记录取包、命令校验、执行与完成写回等异常，具体编码待定。 | 采用（先保留） | [队列错误记录与具体异常](<./CP_MEC 第一版寄存器定义.md#19-队列错误记录与第一版保留范围>) |
-| `0x1279` | `0x0d0` | `CP_HQD_EOP_WPTR_MEM` | 内存侧 EOP 写指针相关值：公开字段为 `WPTR`；与其他 EOP 指针之间的同步关系待核实。 | 不采用 | [EOP 缓冲区与第一版取舍](<./CP_MEC 第一版寄存器定义.md#16-eop-缓冲区与第一版取舍>) |
-| `0x127a` | `0x0d4` | `CP_HQD_AQL_CONTROL` | 队列格式选择：本版自定义整个寄存器值 `0` 为非 AQL、`1` 为 AQL，供 CP 选择解析流程；AMD 原控制字段的完整语义仍待核实。 | 采用 | [AQL 与非 AQL 队列的格式选择](<./CP_MEC 第一版寄存器定义.md#20-aql-与非-aql-队列的格式选择>) |
-| `0x127b` | `0x0d8` | `CP_HQD_PQ_WPTR_LO` | 主 Ring 写指针低位：保存设备侧写指针的低 32 位，反映队列生产进度。 | 不采用 | [从内存读取写进度并保存到固件变量](<./CP_MEC 第一版寄存器定义.md#62-ring-内的读位置与进度存放地址>) |
-| `0x127c` | `0x0dc` | `CP_HQD_PQ_WPTR_HI` | 主 Ring 写指针高位：与前一个寄存器共同组成 64 位写指针。 | 不采用 | [从内存读取写进度并保存到固件变量](<./CP_MEC 第一版寄存器定义.md#62-ring-内的读位置与进度存放地址>) |
-| `0x127d` | `0x0e0` | `CP_HQD_AQL_CONTROL_1` | AQL 扩展控制位置：该版本头文件将整个寄存器标为 `RESERVED`，未公开有效控制字段。 | 不采用 | [第一版不采用 AQL 扩展控制位置](<./CP_MEC 第一版寄存器定义.md#203-第一版不采用-aql-扩展控制位置>) |
-| `0x127e` | `0x0e4` | `CP_HQD_AQL_DISPATCH_ID` | AQL 消费偏移低位：AMD 公开字段为 `CONSUMED_OFFSET`，完整消费与回报语义待核实；第一版不采用。 | 不采用 | [第一版取舍与读进度回报](<./CP_MEC 第一版寄存器定义.md#21-aql-读进度与内存回报>) |
-| `0x127f` | `0x0e8` | `CP_HQD_AQL_DISPATCH_ID_HI` | AQL 消费偏移高位：AMD 公开字段为 `CONSUMED_OFFSET`，与前一个寄存器的完整使用规则待核实；第一版不采用。 | 不采用 | [第一版取舍与读进度回报](<./CP_MEC 第一版寄存器定义.md#21-aql-读进度与内存回报>) |
+复位与启动在目标 CPU 线程中同步完成。`GLOBAL_CTRL.ENABLE` 只控制原有设备功能；CP 通过自己的控制位解除复位。
 
-> **[SOURCE]** 以下源码均为仓库固定 Linux 版本 `248951ddc14de84de3910f9b13f51491a8cd91df`：
->
-> - 寄存器名称、偏移及同址别名：[drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_offset.h](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_offset.h#L3282-L3403) 的 [3282–3403 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_offset.h#L3282-L3403)；公开位字段：[drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_sh_mask.h](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_sh_mask.h#L16323-L16747) 的 [16323–16747 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/include/asic_reg/gc/gc_9_4_3_sh_mask.h#L16323-L16747)。
-> - HQD 装载区间：[drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gc_9_4_3.c](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gc_9_4_3.c#L284-L303) 的 [284–303 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gc_9_4_3.c#L284-L303)；保留位置：[drivers/gpu/drm/amd/include/v9_structs.h](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/include/v9_structs.h#L306-L319) 的 [306–319 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/include/v9_structs.h#L306-L319)。
-> - 队列配置的实际填写过程：[drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c#L1826-L1958) 的 [1826–1958 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/gfx_v9_4_3.c#L1826-L1958)。
-> - AQL 与上下文保存配置：[drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c#L184-L245) 的 [184–245 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c#L184-L245)；控制栈与状态保存区的使用量计算见该文件的 [380–405 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c#L380-L405)。
-> - 队列卸载与抢占请求：[drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gfx_v9.c](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gfx_v9.c#L524-L573) 的 [524–573 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/amdgpu_amdkfd_gfx_v9.c#L524-L573)。
+CP 单独复位保留 VRAM、入口，以及原 DMA、派发和中断状态。`GLOBAL_CTRL.RESET` 复位设备状态并使 CP 回到保持复位、入口为 0 的默认值，VRAM 保留。设备冷复位先停止 CP，再清零 VRAM 并恢复全部默认状态。
+
+CP 单独复位不能据此被解释为目标队列的全部访问已结束。队列功能接入后的恢复、错误和资源释放条件按第 7、9 节确定。
+
+<a id="spec-management"></a>
+
+## 4. 管理命令与完成确认
+
+**[DESIGN]** CP 启动后，Host 通过 KIQ 交给 CP 配置队列。Host 准备好目标队列的 Ring、MQD 和完成标记内存，再提交管理命令与后续写标记命令：
+
+```text
+Host 完整填写 MQD_A，保证 CP 可读取且读取期间内容稳定
+  → 初始化本次完成标记，保证 CP 可见
+  → 向 KIQ 提交 MAP_QUEUES，携带 MQD_A 地址与队列映射信息
+  → 同一 KIQ 中追加写完成标记命令，携带完成地址与预期值
+  → 按提交协议发布命令并通知设备
+
+CP 按 KIQ 命令顺序处理
+  → 读取 MQD_A，完整填写目标 HQD 的地址高低位及其他配置
+  → 激活 Queue A，使它可以被处理
+  → 执行后面的写标记命令，将预期值写到指定内存
+
+Host 观察到本次标记
+  → 按管理命令的结果协议确认配置结果
+```
+
+CP 必须先让管理操作达到规定的完成条件，才能发布后面的标记；使用异步接口时也须等待相关操作完成。两条命令遵守第 5 节的队列选择规则，不要求在同一轮检查中连续执行。
+
+卸载采用相同组织方式：先提交 `UNMAP_QUEUES`，再追加写完成标记命令，完成条件见第 7 节。管理标记针对前面的管理操作，用户 Kernel 仍通过各自的 Signal 协议确认完成。管理失败后的处理及标记的二进制接口尚未确定，不能仅凭标记值排除所有异常。完整例子与 AMD 参考见[后续写完成标记命令](<./CP_MEC 软件实现、参考与扩展.md#completion-marker>)。
+
+KIQ、HIQ 使用非 AQL 管理命令；队列配置统一走 KIQ，其他操作的分工和最小命令集仍需明确。采用 `MAP_QUEUES`、`UNMAP_QUEUES` 名称，不表示采用 AMD 的完整命令编码。
+
+<a id="spec-submit-consume"></a>
+
+## 5. 命令发布、进度读取与队列选择
+
+**[DESIGN]** Host 在 Ring 空槽中准备命令，按发布协议使包和生产进度对设备可见，再通知设备。CP 根据 `CP_HQD_PQ_WPTR_POLL_ADDR / HI` 读取软件生产进度，并用固件变量保存本次处理所需的值；本版不采用 `CP_HQD_PQ_WPTR_LO / HI`。
+
+新通知只更新设备掌握的生产进度。队列驻留期间，以 `CP_HQD_PQ_RPTR` 保存的消费位置为依据，由 CP 按实际消费情况推进。通知不能覆盖消费位置或跳过尚未消费的包。例如下一待消费包为 10，Host 连续发布并通知包 10、11、12 后，CP 仍从 10 开始按序处理。
+
+Ring 地址、容量、消费位置、生产进度及包的发布状态共同决定可处理的命令。Doorbell 与队列的对应、通知编码、重新读取生产进度的时机和具体发布顺序仍需补齐。看到尚未发布的 AQL `INVALID` 槽，应按发布协议等待，不能仅凭该值报告坏包。
+
+**[DESIGN]** 裸机固件按固定规则选择队列：
+
+```text
+开始一轮检查
+  → 检查 KIQ、HIQ，各处理至多一条可处理的管理命令
+  → 从上次记录的位置开始，轮流检查用户 A、B
+      ├─ 未激活或没有可处理命令：跳过
+      ├─ 两条都没有可处理命令：回到主循环
+      └─ 找到可执行 Dispatch
+          → 提交整个 Dispatch，轮询执行器直到完成
+          → 按第 6 节收尾，记录下次优先检查另一条用户队列
+          → 回到主循环
+```
+
+等待计算完成期间，CP 暂不处理其他队列，包括 KIQ、HIQ；Host 在 Ring 有空位时仍可继续发布。若 A、B 始终就绪，执行顺序为 A1、B1、A2、B2；B 无任务时跳过 B，继续 A。轮流选择保证提交机会，不保证两条队列占用相同计算时间。
+
+A、B 的 HQD 可以同时保持驻留，轮换处理无需换出另一个槽位。若当前 Dispatch 一直不结束，普通队列处理也会停住；超时、中止和复位收尾尚待定义。本版不增加可配置的优先级或时间片寄存器，也不实现中途抢占。调度限制及扩展依据见[固定轮流选择与阻塞执行](<./CP_MEC 软件实现、参考与扩展.md#scheduling>)。
+
+<a id="spec-dispatch-completion"></a>
+
+## 6. 计算提交、完成 Signal 与 Ring 槽复用
+
+CP 从 AQL Dispatch 取得任务规模、参数地址和完成 Signal，并根据 `kernel_object` 读取 Kernel 描述对象，取得代码入口与资源要求，再交给计算执行器。
+
+**[DESIGN]** 保留现有分发寄存器及 PCIe BAR 映射，正常任务改由 CP 访问这些分发接口。CP 与现有执行器之间的访问桥接、提交参数、忙／完成／错误返回接口仍需细化，当前接入状态见[计算派发实现](<./CP_MEC 软件实现、参考与扩展.md#dispatch>)。
+
+正常成功路径采用以下顺序：
+
+```text
+读取并解析 Dispatch，保持原消费位置
+  → 提交计算，阻塞等待整个 Dispatch 完成
+  → 确认结果写回，完成任务清理
+  → 按完成协议发布 Signal，此后不再访问该任务的参数等资源
+  → 将原 Ring 包槽标为 INVALID
+  → 推进 CP_HQD_PQ_RPTR
+  → 向 RPTR_REPORT_ADDR 指向的内存回报新进度
+  → Host 观察到新进度后，可以复用已消费包占用的 Ring 槽
+```
+
+读进度用于判断 Ring 槽是否可复用，任务结果按 Signal 和错误协议判断。回报内存保存 CP 发布的进度副本；MQD 在卸载保存时接收需要恢复的状态，下次驻留时再装回 HQD。Host 不独立推进这些副本。回报尚未完成时，Host 可能读到旧值，因此应暂缓复用对应槽位。进度副本与槽位复用的例子见[消费进度与回报](<./CP_MEC 软件实现、参考与扩展.md#consumption>)。
+
+不采用 `CP_HQD_AQL_DISPATCH_ID / HI` 不决定索引是 32 位还是 64 位，也不改变上述推进时机。Signal 所需的原子更新能力和结果可见性要求仍须满足；无有效 Signal、失败包和写回失败的具体处理留在第 9 节，不从正常成功路径推定。
+
+<a id="spec-errors-unmap"></a>
+
+## 7. 错误记录、卸载与资源释放
+
+**[DESIGN]** 保留每槽位的 `CP_HQD_ERROR`，用于记录取包、命令校验、执行与完成写回中的实际异常。需要覆盖 Ring 或写指针读取失败、已发布命令非法或不受支持、Dispatch 描述或参数不可用、执行器返回失败、读进度回报失败，以及完成 Signal 无效或无法更新。具体编码和处理策略尚未确定；各类异常及诊断关系见[队列错误记录](<./CP_MEC 软件实现、参考与扩展.md#error>)。
+
+访存或执行器必须把失败结果返回 CP，固件才能将错误归到所属队列。原有设备级 `ERROR_STATUS` 不能直接作为已经实现的 `CP_HQD_ERROR` 协议。Host 可通过选槽窗口查询错误；MQD 中的错误成员与 Host 诊断缓冲区只在相应读写发生时接收副本，不会自动同步。
+
+Ring 为空、执行器忙或等待依赖未满足属于正常等待。Host 等待超时只表明等待期限已到，不能直接据此认定 Kernel 执行失败。
+
+队列卸载的正常成功路径须满足以下完成条件，具体状态转换和保存字段仍待确定：
+
+```text
+Host 经 KIQ 提交 UNMAP_QUEUES，随后追加写完成标记命令
+  → CP 停止目标队列继续取包
+  → 确认目标队列相关在途访问已经结束
+  → 将需要保留的队列状态保存到原 MQD
+  → 管理操作达到完成条件，CP 发布后续完成标记
+  → Host 根据卸载结果和资源生命周期释放 Ring、MQD 等内存
+```
+
+本版不采用 `CP_HQD_DEQUEUE_REQUEST` 寄存器入口。卸载不是销毁 Ring 或 MQD，也不保证 Ring 中全部任务均成功执行；任务结果和资源释放按各自协议判断。只读到 `ACTIVE = 0`、发现错误或等待超时，都不能证明设备已经结束相关访问。`ACTIVE` 清零时机、卸载失败、KIQ 自身重新配置及复位恢复需统一补齐。
+
+<a id="spec-registers"></a>
+
+## 8. 本版采用的 HQD 寄存器
+
+下表列出已确认采用的 15 个寄存器位置，包括先保留的错误记录寄存器。槽内偏移沿用此前清单，不因删去未采用项而重新编号；它们用于第 2 节的 Host 窗口及 CP 槽位直接地址计算。采用名称和用途不等于采用 AMD 的全部位字段，未确定的编码、复位值和访问规则见第 9 节。
+
+| 槽内偏移  | 寄存器名称                        | 本版用途                                              | 决定           | 详细说明                                                            |
+| --------- | --------------------------------- | ----------------------------------------------------- | -------------- | ------------------------------------------------------------------- |
+| `0x000` | `CP_MQD_BASE_ADDR`              | 保存当前队列 MQD 地址低位，MQD 固定按 VMID 0 访问。   | 采用           | [MQD 基址](<./CP_MEC 软件实现、参考与扩展.md#mqd>)                   |
+| `0x004` | `CP_MQD_BASE_ADDR_HI`           | 与前一项共同保存 MQD 地址高位。                       | 采用           | [MQD 基址](<./CP_MEC 软件实现、参考与扩展.md#mqd>)                   |
+| `0x008` | `CP_HQD_ACTIVE`                 | 标记槽位中的队列是否启用；CP 据此判断是否检查队列。   | 采用           | [队列激活](<./CP_MEC 软件实现、参考与扩展.md#active>)                |
+| `0x00c` | `CP_HQD_VMID`                   | 保存队列地址空间标识，供访存接口选择上下文。          | 采用           | [队列地址空间](<./CP_MEC 软件实现、参考与扩展.md#vmid>)              |
+| `0x020` | `CP_HQD_PQ_BASE`                | 保存 Ring 基址编码低位，用于定位命令 Ring。           | 采用           | [Ring 定位](<./CP_MEC 软件实现、参考与扩展.md#ring-base>)            |
+| `0x024` | `CP_HQD_PQ_BASE_HI`             | 与前一项共同保存 Ring 基址编码高位。                  | 采用           | [Ring 定位](<./CP_MEC 软件实现、参考与扩展.md#ring-base>)            |
+| `0x028` | `CP_HQD_PQ_RPTR`                | 保存驻留队列的当前消费位置，由 CP 推进。              | 采用           | [Ring 进度](<./CP_MEC 软件实现、参考与扩展.md#ring-progress>)        |
+| `0x02c` | `CP_HQD_PQ_RPTR_REPORT_ADDR`    | 指定设备回报消费进度的内存地址低位。                  | 采用           | [进度地址与数值](<./CP_MEC 软件实现、参考与扩展.md#ring-progress>)   |
+| `0x030` | `CP_HQD_PQ_RPTR_REPORT_ADDR_HI` | 与前一项共同确定消费进度回报地址。                    | 采用           | [进度地址与数值](<./CP_MEC 软件实现、参考与扩展.md#ring-progress>)   |
+| `0x034` | `CP_HQD_PQ_WPTR_POLL_ADDR`      | 指定 CP 读取软件生产进度的内存地址低位。              | 采用           | [进度地址与数值](<./CP_MEC 软件实现、参考与扩展.md#ring-progress>)   |
+| `0x038` | `CP_HQD_PQ_WPTR_POLL_ADDR_HI`   | 与前一项共同确定生产进度读取地址。                    | 采用           | [进度地址与数值](<./CP_MEC 软件实现、参考与扩展.md#ring-progress>)   |
+| `0x03c` | `CP_HQD_PQ_DOORBELL_CONTROL`    | 保存关联队列的 Doorbell 配置，具体字段待定。          | 采用           | [Doorbell 与 Ring 控制](<./CP_MEC 软件实现、参考与扩展.md#doorbell>) |
+| `0x044` | `CP_HQD_PQ_CONTROL`             | 保存 Ring 容量及本版所需控制，具体字段待定。          | 采用           | [Doorbell 与 Ring 控制](<./CP_MEC 软件实现、参考与扩展.md#doorbell>) |
+| `0x0cc` | `CP_HQD_ERROR`                  | 保存所属队列的错误原因，实际异常与待定规则见第 7 节。 | 采用（先保留） | [错误记录](<./CP_MEC 软件实现、参考与扩展.md#error>)                 |
+| `0x0d4` | `CP_HQD_AQL_CONTROL`            | 整个寄存器值`0` 为非 AQL、`1` 为 AQL。            | 采用           | [队列格式](<./CP_MEC 软件实现、参考与扩展.md#queue-format>)          |
+
+完整的 59 个 AMD 参考位置、同址别名及逐项采用／不采用结论统一保存在[AMD 寄存器对照](<./CP_MEC 软件实现、参考与扩展.md#amd-registers>)。参考表中的保留位置、未采用项不会因保留名称和偏移而成为已实现接口。
+
+<a id="spec-open-interfaces"></a>
+
+## 9. 尚待确认的软件接口
+
+本节沿着“创建 Queue A，提交一次计算，再销毁队列”的过程，把待定接口拆成可以单独确认的问题。前文已经确定执行顺序；这里需要补齐驱动、运行时、CP 固件和 QEMU 共同使用的具体规则。
+
+```text
+准备队列和任务所需的内存                  → 9.1 存储位置、地址与 CP 访存
+  → 将队列配置写入 MQD                   → 9.2 MQD 布局与 HQD 读写规则
+  → 经 KIQ 请求配置，并确认结果          → 9.3 管理命令与完成标记
+  → 向 Ring 发布任务、写 Doorbell        → 9.4 包发布与读写进度
+  → CP 提交计算，发布完成 Signal         → 9.5 执行器与 Signal
+  → 处理失败、卸载并结束设备访问         → 9.6 错误与卸载
+  → 应用和驱动回收对象及映射             → 9.7 Host 软件接口与资源管理
+```
+
+**[DESIGN]** 下列编号项当前均为待确认，可以按 `9.1.1`、`9.1.2` 逐条讨论。每组开头说明已经确定的前提；问题中的候选做法和示例数值只用于解释选择，不自动成为本版决定。确认后，将结论写回第 2～8 节对应位置，本节该项改为结论链接。旧草案中的参数也须经过确认才能采用。
+
+### 9.1 队列和任务放在哪里，CP 怎样访问
+
+Host 要先为 Queue A 准备内存，CP 才能读取配置和任务。第 2 节已经确定：KIQ、HIQ 和所有 MQD 使用 VMID 0，用户 Ring、代码和数据使用所属进程的上下文。下面分别讨论存储位置、地址含义和实际访问方法。
+
+**9.1.1 Ring 与 MQD 的存储位置**
+
+驱动要分配 Queue A 的 Ring 和 MQD_A。Ring 保存待执行的命令，MQD_A 保存配置和需要恢复的队列状态；两者可以采用不同的存储位置。
+
+需要确认：用户 Ring、管理队列 Ring 和 MQD 分别放在 Host RAM，还是设备 VRAM？如果放在 Host RAM，驱动怎样使这块内存可被设备访问；如果放在 VRAM，Host 怎样取得填写内容的映射？本项确认各对象放在哪里和谁分配，具体地址值在 9.1.4 确认。
+
+**9.1.2 进度与完成值的存储位置**
+
+Host 要写生产进度、读消费进度，CP 则读生产进度、写消费进度。管理完成标记和任务 Signal 也需要两边都能访问。
+
+需要确认：这些共享值各自放在 Host RAM 还是 VRAM？是每条队列单独分配一块内存，还是由驱动统一分配后划出位置？确认时应分别列出生产进度、消费进度、管理完成标记和 Signal，避免只写一个含义不明的“共享区”。
+
+**9.1.3 Kernel 代码、描述对象和参数的存储位置**
+
+CP 读取 Dispatch 后，需要取得 Kernel 描述对象；计算执行器随后需要读取代码、参数和参数指向的输入数据。这几类对象也可以放在不同位置。
+
+需要确认：哪些对象继续放在 VRAM，哪些允许放在 Host RAM？例如参数放在 Host RAM 时，是执行器直接访问，还是先搬到执行器可访问的位置？这里先确定存储与搬运方案，交给 RV32 Kernel 的具体参数形式在 9.5.2 确认。
+
+**9.1.4 地址字段中保存的数值**
+
+Host 访问内存时使用的指针，与填写给设备的地址值可能不同。例如访问 VRAM 时，Host 通过 BAR 映射找到数据，CP 接口则可能使用 VRAM 内的字节偏移。CP 拿到一个地址字段后，必须知道该按哪种规则找到数据。
+
+需要确认：MQD 地址、Ring 地址、进度地址、完成标记地址、Signal 引用以及代码和参数地址，分别采用什么表示？例如一个字段保存“VRAM 起点之后的字节偏移”，还是“交给设备 DMA 接口的地址”？需要地址翻译时，使用哪个上下文？还应规定地址位宽和对齐要求，保证驱动填写与 CP 解释一致。
+
+**9.1.5 VMID 的数量与第二阶段的实现范围**
+
+已经采用 `CP_HQD_VMID`，也已经区分管理上下文与用户上下文；HQD 槽位编号不决定 VMID。[实验大纲](<./QEMU GPGPU 实验大纲.md>)把完整设备页表与地址隔离安排在第三阶段，因此还需要说明第二阶段怎样提供这些上下文。
+
+需要确认：第二阶段支持多少个 VMID、由谁分配和配置、CP 访存时怎样使用它？哪些地址映射能力在第二阶段实现，哪些留到第三阶段？确认结果需要同时写明本阶段能够验证的隔离范围，保留已经确定的 VMID 0 管理资源约定。
+
+**9.1.6 CP 发起一次访存的接口**
+
+假设 Ring 位于 Host RAM，CP 已取得 Ring 的设备地址。接下来固件需要发出读取请求，得到包内容，或者得到读取失败的结果。第 1 节记录的当前 CP 基础实现只直接访问本地 VRAM，队列路径还需要接入这一步。
+
+需要确认：固件通过怎样的接口提交地址、上下文、长度和数据缓冲区？怎样判断请求仍在处理、已经完成或已经失败？写回进度、管理标记和 Signal 应怎样使用该接口？Signal 需要的原子更新也要有相应操作，分别执行普通读取和写入不能保证这次更新的原子性。
+
+**9.1.7 固件代码、栈和数据的保留范围**
+
+CP 固件运行时要持续使用代码、栈和全局数据。队列功能接入后，驱动还会为 Kernel 和应用数据分配 VRAM，需要防止两种分配占用同一位置。
+
+需要确认：固件使用固定保留范围，还是由驱动分配一段在 CP 运行期间持续保留的空间？入口、栈和数据怎样布局，普通显存分配器怎样避开这些空间？具体大小随方案确定。
+
+### 9.2 MQD 的内容与 HQD 的读写规则
+
+驱动填写 MQD_A，CP 读取它并配置 Queue A 的 HQD；卸载时，CP 将需要保留的状态写回 MQD_A。第 8 节已经确定采用的寄存器位置，下面补齐内存布局和每次读写的含义。
+
+**9.2.1 MQD 的字段布局与装载、保存范围**
+
+驱动和固件需要按相同偏移找到 MQD 中的 Ring 地址、容量、VMID 和消费进度。队列运行后，部分字段仍是原配置，部分字段可能已经变化。
+
+需要确认：MQD 结构包含哪些字段，每个字段占多少字节、位于什么偏移，采用什么字节序和对齐规则？哪些字段在映射时装入 HQD，哪些在卸载时写回，重新映射时从哪里恢复消费位置？应形成一份可供两边共用的结构定义。
+
+**9.2.2 已采用寄存器的有效位与数值编码**
+
+知道 `CP_HQD_PQ_CONTROL` 保存 Ring 容量后，驱动仍需要知道该写入什么数字。Ring 基址也需要确定是直接拆分字节地址，还是先按某种规则编码再写入。
+
+需要确认：第 8 节各寄存器支持哪些字段，每个字段的单位、有效位和合法范围是什么？容量、地址等数值如何编码和解码？`CP_HQD_AQL_CONTROL` 整个值为 `0` 或 `1` 的约定已经确定，其余字段逐项补齐；Doorbell 字段要与 9.4.5 的通知方式对应。
+
+**9.2.3 复位值、读写权限与非法访问**
+
+首次启动前由 Host 配置 KIQ，启动后由 CP 经 KIQ 顺序配置 HQD，这个写方安排已经确定。还需要让 QEMU 明确处理每一次寄存器访问。
+
+需要确认：各字段复位后读到什么、每次允许读写多少字节、按几字节对齐，Host 和 CP 分别能读写哪些字段？槽位激活期间哪些修改允许执行？不允许的写入、非法字段值、未采用位置和保留位如何处理？Host 读取正在变化的状态时，哪些字段可以分别读取，哪些必须等待配置完成或采用一致性读取规则？
+
+**9.2.4 CP 本地地址与无效槽位选择**
+
+Host 的 `HQD_SELECT` 和窗口位置已经确定，CP 按槽位直接寻址的方式也已经确定。目前暂定 `CP_HQD_BASE = 0xffff_0000`，槽位间隔为 `0x100`。
+
+需要确认：该 CP 本地基址是否作为最终地址？Host 选到 4 个有效槽位之外，或 CP 访问槽位区域之外时，读写返回什么结果？这些行为需要和寄存器访问错误的处理统一。
+
+### 9.3 管理命令的内容与结果确认
+
+驱动已经准备好 MQD_A，接下来经 KIQ 请求 CP 配置 Queue A。管理操作后追加写完成标记命令的形式已经确定；下面补齐 CP 实际读取的命令内容，以及 Host 判断结果的方法。
+
+**9.3.1 KIQ、HIQ 各自处理的命令**
+
+第一版保留 KIQ 和 HIQ，队列配置统一通过 KIQ。现在还没有明确 HIQ 在第一版承担什么实际操作。
+
+需要确认：除映射、卸载和写完成标记外，本版还需要哪些管理命令？每条命令允许从 KIQ、HIQ 中的哪一条提交？HIQ 本版需要执行具体管理动作，还是先保留槽位与解析入口？
+
+**9.3.2 命令布局与目标队列的表示**
+
+驱动要表达“把 MQD_A 装入槽位 2”，CP 必须能从命令中识别操作、MQD 地址和目标位置。
+
+需要确认：每类命令的编号、长度、字段偏移、字节序与对齐是什么？映射和卸载怎样指定目标队列或槽位？写完成标记命令叫什么、携带哪些字段？这里需要形成具体命令格式；采用 `MAP_QUEUES` 等名称，不会自动确定它们的二进制内容。
+
+**9.3.3 重复配置、重复卸载与槽位占用**
+
+例如槽位 2 已保存 Queue A，驱动又请求把 Queue B 放到槽位 2；或者 Queue A 已经卸载，驱动再次提交卸载命令。
+
+需要确认：这些请求返回成功、返回错误，还是需要先完成另一项操作？必须明确同一队列的重复请求与不同队列争用槽位的区别，避免 CP 直接覆盖仍在使用的状态。
+
+**9.3.4 完成标记的数值、发布与复用**
+
+Host 初始化标记，提交管理命令和写标记命令，再等待预期值。例如上一次写入了 `7`，下一次继续等待 `7`，就需要有规则防止把旧值当作本次完成。
+
+需要确认：标记占多少位、初值和本次预期值怎样选择、什么时候可以复用这块内存？CP 怎样保证管理结果先于标记对 Host 可见，Host 怎样读取并确认？地址表示沿用 9.1.4 的决定。
+
+**9.3.5 管理操作失败后的命令处理**
+
+例如 CP 读取 MQD_A 失败，此时后面的写标记命令仍在 KIQ 中。Host 需要区分“仍未处理”“已经成功”和“已经失败”。
+
+需要确认：CP 停止处理这次请求之后的命令，还是记录失败后继续执行标记命令？Host 从哪里取得与本次请求对应的错误结果？如果标记自身写入失败，Host 又通过哪里退出等待？这部分与 9.6 的错误协议一起确定。
+
+### 9.4 Ring 包的发布与读写进度
+
+Queue A 已激活，Host 开始提交任务。已经确定：通知只更新生产进度，CP 自己推进消费位置；正常 Dispatch 完成并收尾后才归还 Ring 槽。下面确定双方怎样计算空槽、发布新包和读取进度。
+
+**9.4.1 两类 Ring 的容量与包边界**
+
+CP 要从当前位置找到一条完整命令，也要知道下一条命令从哪里开始。管理 Ring 与 AQL Ring 可以有不同的包组织方式。
+
+需要确认：两类 Ring 的容量以字节还是包数表示，允许哪些容量？各类包是固定长度还是由包内长度字段决定？包到达 Ring 末尾时怎样安排，允许跨末尾拆开存放吗？容量的寄存器表示与 9.2.2 对齐。
+
+**9.4.2 进度值的含义、位宽与回绕**
+
+假设某 Ring 有 8 个槽位，从编号 0 开始，已经成功消费了 10 个包，尚未发生计数溢出。下一待消费位置可以用累计编号 `10` 表示，也可以用槽内位置 `2` 表示，两种表示需要不同的满空判断与恢复规则；本例只说明差别。
+
+需要确认：生产、消费进度分别表示下一位置还是最后完成的位置，按包、字节或其他单位计数，采用多少位？怎样计算实际 Ring 地址、判断满空、处理计数回绕？当前只采用一个 32 位 `CP_HQD_PQ_RPTR` 位置；如果采用 64 位逻辑消费编号，还必须说明它与该寄存器、回报内存和 MQD 的对应及恢复方法。
+
+**9.4.3 持续变化的 64 位值怎样一致读取**
+
+如果某个进度值采用 64 位，RV32 固件可能分两次读取高低位。两次读取之间 Host 恰好更新进度，就可能拼出一个从未发布过的值。消费进度由 CP 更新、Host 分次读取时，也有相同问题。
+
+需要确认：最终哪些动态值使用 64 位，读写双方通过什么协议取得完整的一次更新？例如由访问接口提供一致快照，或使用约定的发布与重读方法，具体做法需要选择并验证。地址配置只有一个写方、Host 持有选槽锁，都不能替代这里的规则。
+
+**9.4.4 提交者数量与包发布顺序**
+
+Host 先取得空槽，再填写包内容，最后让 CP 知道这个包可以使用。如果多个线程共用一条队列，还可能发生后一个槽先写完、前一个槽尚未发布的情况。
+
+需要确认：本版每条队列只允许一个提交者、由运行时用锁串行提交，还是支持多个提交者同时预留槽位？按选定模型，包体、有效 Header、生产进度和 Doorbell 分别何时写入，在哪些位置保证内存可见性？CP 遇到尚未发布的 `INVALID` 槽后怎样重试，仍遵守第 5 节已确定的正常等待规则。
+
+**9.4.5 Doorbell 的队列对应、写入值与刷新时机**
+
+Host 连续发布包 10、11、12 时，CP 要从自己的消费位置按序读取。Doorbell 要让设备找到对应队列，并及时发现新的生产进度。
+
+需要确认：每条队列使用哪个 Doorbell 位置，写入多少位，数值表示什么？写入只是通知 CP 去读取 `WPTR_POLL_ADDR`，还是还携带可用的进度信息？CP 在收到通知、回到主循环或读空时怎样刷新生产进度？重复、连续或合并的通知都应按同一规则处理，不能改写消费位置。
+
+### 9.5 从 Dispatch 启动计算并发布 Signal
+
+CP 已经取得一个有效 Dispatch，接下来读取描述对象和参数，通过现有分发接口启动整个任务，阻塞等待完成。第 6 节已经确定成功收尾顺序，下面补齐任务格式和交接接口。
+
+**9.5.1 第一版支持的 AQL 包与字段**
+
+运行时要知道可以填写什么，CP 要知道应该解析或拒绝什么。仅将队列设为 AQL，还没有定义本版支持的全部包类型。
+
+需要确认：本版只执行 Kernel Dispatch，还是也支持 Barrier 等其他包？Dispatch 中哪些字段必须提供、哪些支持非零值、哪些必须固定为指定值？工作维度、工作组大小和资源需求允许什么范围？不支持的类型或字段怎样报告，需与 9.6.1 的错误分类对应。
+
+**9.5.2 Kernel 描述对象与 RV32 参数约定**
+
+已经确定 CP 根据 `kernel_object` 读取描述对象，再取得代码入口和资源要求。接下来要让描述对象和参数能被当前 RV32 计算执行器使用。
+
+需要确认：描述对象有哪些字段，代码入口和参数长度怎样表示，谁负责生成？参数按什么布局传给 Kernel，参数中的数组地址怎样解释？如果 9.1.3 选择搬运参数，谁分配和回收搬运空间、什么时候允许复用？复制参数字节后，其中的地址也必须符合执行器的访问约定。
+
+**9.5.3 CP 提交计算与读取执行结果**
+
+CP 已拿到代码入口、参数和工作规模，需要通过保留的分发接口启动一次任务，然后持续检查状态。
+
+需要确认：原有分发寄存器怎样映射到 CP 地址空间，固件按什么顺序填写和提交？忙、成功和失败分别怎样返回，旧状态何时清除，怎样避免重复提交？还要验证：CP 等待计算期间，执行器能继续推进，Host 在 Ring 有空位时也能继续发布。
+
+**9.5.4 Signal 的表示与完成操作**
+
+Host 创建一个完成对象，把引用放进 Dispatch；CP 完成任务后按协议更新，Host 再据此判断完成。例如可以讨论“初值为 1，完成时原子减一，等待值为 0”的形式，但本项尚未确定该编码与操作。
+
+需要确认：Packet 中的 Signal 引用怎样定位实际对象，对象的字段和数值位宽是什么，初值、完成操作和等待条件怎样定义？是否允许多个任务共用一个 Signal？包中未指定 Signal 时，是允许不写 Signal，还是拒绝该任务？已指定引用却无法访问的情况按 9.6 讨论失败处理。采用的共享更新必须满足相应原子性要求，每项任务的完成更新只发生一次。
+
+**9.5.5 任务数据与完成状态的可见性**
+
+Host 看到 Signal 完成后，要能读到本次 Kernel 的结果。类似地，CP 开始执行前，也要能读到 Host 已经准备好的参数和输入。
+
+需要确认：Host 发布输入、CP 开始计算、执行器写完结果、CP 更新 Signal、Host 读取结果，各步采用什么屏障或访问接口保证顺序？Packet 中相关同步字段支持哪些取值？这里把第 6 节已经确定的先后关系落实到访问方法，包槽回收仍在 Signal 发布之后进行。
+
+### 9.6 出错后怎样结束任务，卸载后怎样停止访问
+
+第 7 节已经保留 `CP_HQD_ERROR`，也确定卸载成功必须停止取包、结束相关访问并保存必要状态。下面补齐失败时的行为，避免 Host 只等成功标记，或过早释放设备仍在使用的内存。
+
+**9.6.1 错误记录、停止取包与通知**
+
+例如 CP 无法读取 Queue A 的 Ring，需要记录原因，并让等待 Queue A 的 Host 知道已经出错。
+
+需要确认：`CP_HQD_ERROR` 采用错误编号还是多个错误位，是否保留首次错误，谁在何时清除？出错后停止当前包还是整条队列，Host 怎样查询或收到通知？是否把错误保存到 MQD、在什么时候保存？实际错误分类沿用第 7 节列出的场景。
+
+**9.6.2 失败包与部分完成的收尾**
+
+包校验失败时，Kernel 可能还没有执行；Signal 写回失败时，Kernel 可能已经执行完；读进度回报失败时，HQD 中的进度又可能已经前进。几种情况需要分别处理。
+
+需要确认：各失败阶段是否归还包槽、推进消费位置或更新任务结果？Signal、消费进度和管理标记写回失败后，是否重试，Host 通过什么途径结束等待？任何重试都需要说明怎样避免重新执行已经完成的 Kernel，或重复更新完成状态。
+
+**9.6.3 卸载时未消费的任务与 ACTIVE 清零**
+
+例如 Queue A 中还有三个包，Host 提交了 `UNMAP_QUEUES`。第 7 节已经要求 CP 停止继续取包，但剩余包对应的任务结果和恢复方式尚未确定。
+
+需要确认：Host 是否须先等待队列排空才提交卸载，还是允许留下未执行包并保存消费位置？未执行任务的等待者得到什么结果？`ACTIVE` 在停止取包、等待访问结束和保存 MQD 这些步骤中的哪个时刻清零？最后仍以卸载结果和完成标记确认可释放条件。
+
+**9.6.4 当前任务不结束时的停止与资源处理**
+
+本版约定固件等待 Dispatch 时暂不处理 KIQ，因此一个始终不结束的任务也会阻挡后来的卸载命令。Host 的等待超时本身不会停止设备访问。
+
+需要确认：第二阶段在这种情况下提供什么停止方法，怎样确认计算与访存已经结束？若暂时无法停止，资源保留、报错和等待返回怎样安排？后期可以完善恢复能力，但本版必须明确哪些条件满足前不能解除映射和释放内存。
+
+**9.6.5 KIQ 重配与复位后的重新建立**
+
+首次启动由 Host 配置 KIQ 已经确定。运行后，如果需要重配 KIQ，或通过复位退出失败状态，还要处理旧队列、旧请求和旧完成值。
+
+需要确认：哪些情况下允许重配 KIQ，进入什么停止或复位状态后由谁重新配置？CP 单独复位、设备复位后，哪些队列状态需要清理或重建，Host 怎样区分旧任务与新任务的结果？第 3 节已说明 CP 单独复位保留原 DMA 和派发状态，恢复步骤须处理这些仍可能存在的活动。
+
+### 9.7 应用、运行时和驱动的接口与资源回收
+
+设备协议确定后，还需要让应用能够创建队列、提交任务、等待和销毁。整体调用过程见[Host 软件流程](<./CP_MEC 软件实现、参考与扩展.md#host-software-flow>)，下面分别确认每类调用的返回含义与对象寿命。
+
+**9.7.1 创建队列的输入、返回对象和失败回滚**
+
+应用申请 Queue A，驱动分配资源并通过 KIQ 配置，随后把可使用的队列交给运行时。
+
+需要确认：创建调用允许申请什么容量和属性，返回哪些对象或映射，返回成功时是否已经确认管理配置成功？槽位或内存不足怎样返回？如果创建中途失败，驱动怎样判断资源是否已交给设备，并撤销已经完成的分配与映射？
+
+**9.7.2 异步提交与队列满时的返回**
+
+正常提交已经确定由运行时写包和通知设备完成，返回后任务可能仍在执行。现在需要补齐应用可以依赖的调用结果。
+
+需要确认：提交调用接收哪些参数、返回怎样的任务或完成对象？Ring 满或暂时没有可用完成对象时，是等待、返回可重试结果，还是采用其他约定？失败返回时必须说明包是否已经发布，避免应用重试后重复提交同一任务。
+
+**9.7.3 查询、等待与队列同步的含义**
+
+应用既可能等待某个任务，也可能希望等待“此前提交的全部任务”。等待期间还可能收到错误，或到达调用者给定的超时时间。
+
+需要确认：查询和等待怎样区分未完成、成功、失败与超时，等待采用轮询还是可阻塞方式？队列同步等待调用时已经提交的任务，还是要求队列一直到完全为空？等待过程中怎样允许其他必要操作继续进行，避免一直占用它们所需的锁？
+
+**9.7.4 任务参数、完成对象与旧引用的回收**
+
+任务完成后，运行时可以按协议回收参数，但应用可能还持有 Signal 用于查询。Ring 槽归还也不会自动撤销应用保存的这些引用。
+
+需要确认：代码、描述对象、参数和完成对象分别由谁保持引用，什么条件下允许释放或复用？Signal 已被回收后，旧引用再次用于查询或等待时怎样处理？接口需要防止旧引用误操作后来分配的新对象。
+
+**9.7.5 队列销毁、进程退出与旧映射**
+
+应用主动销毁队列，或进程在任务执行期间退出时，驱动都要停止新提交、处理等待者并结束设备访问。另一个线程或进程仍可能持有旧内存或 Doorbell 映射。
+
+需要确认：销毁调用返回成功前必须完成哪些步骤，失败时对象还处于什么状态？驱动怎样跟踪尚未释放的映射和引用，防止旧 Doorbell 映射影响重新建立的队列？进程退出清理采用什么等待与释放规则？设备侧停止条件沿用 9.6，软件引用问题见[资源释放与软件清理](<./CP_MEC 软件实现、参考与扩展.md#host-resource-lifetime>)。
+
+**9.7.6 新队列路径与已有软件接口的协调**
+
+队列路径与原有同步计算、数据拷贝、内存释放和设备复位共用部分资源。例如任务仍在读取一个输入缓冲区时，应用又请求释放它，就需要明确处理顺序。
+
+需要确认：哪些操作可以与队列执行并行，哪些需要等待或返回错误？原同步计算与 CP 提交怎样协调执行器使用？逐项规定实际冲突的处理方式，旧草案中“一律返回 `-EBUSY`、销毁队列后才读回结果”的策略仍未采用。
