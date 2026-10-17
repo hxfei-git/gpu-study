@@ -25,7 +25,9 @@
 | KIQ   | Kernel Interface Queue                                 | 内核接口队列；第一版由 Host 配置的首个管理入口                                 |
 | HIQ   | HSA Interface Queue                                    | HSA 接口队列；第一版的另一条管理队列                                           |
 | HSA   | Heterogeneous System Architecture                      | 异构系统架构                                                                   |
-| RV32  | 32-bit RISC-V                                          | 第一版 CP 使用的原生 32 位 RISC-V 模型                                         |
+| RV32  | 32-bit RISC-V                                          | 本实验计算解释器使用的 32 位 RISC-V 模型                                      |
+| RV64  | 64-bit RISC-V                                          | 第一版 CP 使用的原生 64 位 RISC-V 模型                                         |
+| M-mode | Machine Mode                                         | RISC-V 机器特权级；CP 裸机固件的运行模式                                      |
 | QEMU  | Quick Emulator                                         | 本实验使用的设备与 CP 仿真平台                                                 |
 | PMU   | Platform Management Unit                               | 平台管理单元；本文参考 ZynqMP PMU Firmware 的裸机调度实现                      |
 | PM4   | AMD PM4                                                | AMD GPU 的一类底层命令包协议；用于说明计算 Ring 的 IB 引用及 KIQ 管理命令      |
@@ -77,7 +79,7 @@
 
 ## 1. 现有实现与 CP 接入位置
 
-当前已有同步计算软件栈和能执行固件的原生 RV32 CP。接入队列时，需要把“Host 直接启动一次计算”扩展为“CP 固件读取队列，再向计算执行器提交任务”。先看这两条路径各自推进到哪里。
+当前已有同步计算软件栈和能执行固件的原生 RV64 CP。接入队列时，需要把“Host 直接启动一次计算”扩展为“CP 固件读取队列，再向计算执行器提交任务”。先看这两条路径各自推进到哪里。
 
 ### 1.1 Host、原生 CP 与计算解释器
 
@@ -87,7 +89,7 @@
     → vfio-user-pci 代理：转发设备访问、处理消息 DMA、接收中断
        → 进程 B：gpgpu-cp
             ├─ gpu0：设备寄存器、VRAM、DMA、中断
-            ├─ 原生 RV32 CP：执行独立固件，保存自己的 PC 与寄存器
+            ├─ 原生 RV64 CP：执行独立固件，保存自己的 PC 与寄存器
             └─ RV32 计算解释器：执行应用 Kernel，保存各 lane 的执行状态
 ```
 
@@ -97,7 +99,7 @@ A57 的指令由对应 QEMU 目标的 TCG 推进。原生 CP 的 RISC-V 指令�
 
 原生 CP 属于 PCIe 设备的内部控制核。Linux 调度器把应用线程、内核线程安排到 A57；GPGPU 驱动通过设备寄存器管理 CP 的固件、入口与复位，Linux 不把普通线程调度到 CP。
 
-当前 CP 地址 `0～vram_size-1` 映射到同一份 VRAM。Host 经 BAR2 写入固件，CP 按 VRAM 偏移取指。原生 CP 与计算解释器使用 RISC-V 代码，不说明 AMD MEC 使用 RISC-V，也不提供 AMD 固件二进制兼容性。
+当前 CP 在 M-mode 执行裸机固件，不启用页表。本地地址空间仍采用原有 4 GiB 布局，地址 `0～vram_size-1` 映射到同一份 VRAM。Host 经 BAR2 写入固件，CP 按 VRAM 偏移取指。原生 CP 与计算解释器使用 RISC-V 代码，不说明 AMD MEC 使用 RISC-V，也不提供 AMD 固件二进制兼容性。
 
 例如固件位于 VRAM 偏移 `0x4000`，Host 写入 `BAR2 基址 + 0x4000`，CP 的入口填写 `0x4000`。在同一地址替换固件时，BAR、DMA、计算解释器写入及冷复位清零需要使相关 TCG 指令翻译失效，避免继续执行旧翻译块。当前基础接入共用 VRAM，没有永久预留固件分区；队列软件接口需要明确固件、堆栈和数据的分配范围。
 
@@ -136,26 +138,42 @@ B 等待 DMA 回复
 
 **[BOUNDARY]** 这条线路提供普通数据读写。队列的建立、Ring 格式、VMID 选页表、Signal 原子操作及动态 64 位进度协议仍需接入。固件代码和栈继续使用 VRAM；窗口访问成功也不代表相关队列功能已经实现。
 
-> **[SOURCE] 本次实现的源码入口**：实验子仓库基于 `fd2719636bb903ee2815e359dc9af5af7f0202a4` 的 2026-10-14 工作区改动，尚未提交。
+> **[SOURCE] 本次实现的源码入口**：实验子仓库固定提交 `57543dd54b6b046b888277272fa84af81746b1ac`。
 >
-> - 窗口读写与基址寄存器：[hw/riscv/gpgpu-cp.c，44–133 行](/home/book/2.study/gpu-study/4.experiments/gpu-study-qemu/hw/riscv/gpgpu-cp.c:44)；本地地址空间与 VRAM 别名：[232–251 行](/home/book/2.study/gpu-study/4.experiments/gpu-study-qemu/hw/riscv/gpgpu-cp.c:232)。
-> - PCI DMA 路由与暂存请求唤醒：[hw/remote/vfio-user-obj.c，134–187 行](/home/book/2.study/gpu-study/4.experiments/gpu-study-qemu/hw/remote/vfio-user-obj.c:134)；映射对象的引用与释放：[407–464 行](/home/book/2.study/gpu-study/4.experiments/gpu-study-qemu/hw/remote/vfio-user-obj.c:407)。
+> - 窗口读写与基址寄存器：[hw/riscv/gpgpu-cp.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/riscv/gpgpu-cp.c:44:1)，[44–135 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/riscv/gpgpu-cp.c:44:1)；本地地址空间与 VRAM 别名：[232–251 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/riscv/gpgpu-cp.c:232:1)；RV64 CPU 选择：[274–288 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/riscv/gpgpu-cp.c:274:1)。
+> - PCI DMA 路由与暂存请求唤醒：[hw/remote/vfio-user-obj.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/remote/vfio-user-obj.c:134:1)，[134–187 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/remote/vfio-user-obj.c:134:1)；映射对象的引用与释放：[407–464 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/remote/vfio-user-obj.c:407:1)。
 > - 消息交错修正：[0002-queued-dma-requests.diff](./gpu-study-qemu/subprojects/packagefiles/libvfio-user/0002-queued-dma-requests.diff)，应用于 libvfio-user 固定版本 `0b28d205572c80b568a1003db2c8f37ca333e4d7`，接在原 `0001` 后面。
-> - 原生固件访存、异常恢复和 Host DMA 并用：[tests/qtest/gpgpu-cp-test.c，318–516 行](/home/book/2.study/gpu-study/4.experiments/gpu-study-qemu/tests/qtest/gpgpu-cp-test.c:318)；确定性消息交错：[tests/qtest/gpgpu-vfio-user-test.h，115–250 行](/home/book/2.study/gpu-study/4.experiments/gpu-study-qemu/tests/qtest/gpgpu-vfio-user-test.h:115)。
+> - 原生固件访存、异常恢复和 Host DMA 并用：[tests/qtest/gpgpu-cp-test.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/tests/qtest/gpgpu-cp-test.c:321:1)，[321–530 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/tests/qtest/gpgpu-cp-test.c:321:1)；确定性消息交错：[tests/qtest/gpgpu-vfio-user-test.h](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/tests/qtest/gpgpu-vfio-user-test.h:115:1)，[115–255 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/tests/qtest/gpgpu-vfio-user-test.h:115:1)。
 
 2026-10-14 实测：CP 用例 8/8、双进程 IOMMU 2/2、单进程 IOMMU 2/2、原有 A57 GPGPU 用例 21/21 通过。CP 用例使用真实 RV32 指令，覆盖 1/2/4 字节读写、超过 32 位的 IOVA、非恒等翻译、基址复位、访问异常与恢复，以及 CP 访存期间 Host DMA 继续工作。设备进程启用 AddressSanitizer、固定进程地址布局后，这 8 项也全部通过，未报告内存访问错误。
 
-libvfio-user 的新增交错用例 6/6、包含这些用例的相关 Python 测试 35/35、原 C 单测 18/18 通过。本轮未重跑 Linux 客体的驱动和运行时端到端测试。
+2026-10-14 的 libvfio-user 新增交错用例 6/6、包含这些用例的相关 Python 测试 35/35、原 C 单测 18/18 通过。该次未重跑 Linux 客体的驱动和运行时端到端测试。
 
-在子仓库中，准备好同时启用 `aarch64-softmmu`、`riscv32-softmmu` 和 `vfio-user-server` 的构建目录后，使用下面的入口。本次构建目录为 `build/cp-window`：
+2026-10-17 原生 CP 迁移至 RV64，保留裸机物理访存、现有地址编码和 RV32 计算解释器。复用原有 8 项 CP 用例，增加 `LD/SD` 读写高半部非零的 64 位值，并检查消息请求长度为 8 字节；原有 1/2/4 字节访问、复位、固件替换、异常恢复和 Host DMA 并用继续通过。CP 用例 8/8、单／双进程 IOMMU 各 2/2、AArch64／RISC-V 设备用例各 21/21，以及 RV32 汇编前端 4/4 均通过。日志沿用子仓库 `build/` 下的位置，没有增加测试脚本或独立测试用例。
+
+同日运行 Linux 客体回归，内核为 `6.18.57-0-virt`。单／双进程分别覆盖 `none`、`smmuv3`：四组均通过三个示例的 17,953 个输出值、68/68 运行时检查、5/5 驱动装卸载检查及 2/2 软件栈卸载重载检查，退出码均为 0，无内核异常或非预期 SMMU fault。这四组回归沿用同步计算路径，双进程模式中的原生 CP 保持复位，应用 Kernel 仍由 RV32 计算解释器执行；CP 固件能力由上述 8 项 QTest 单独验证。结果保存在子仓库 `build/gpgpu-linux-module/{none,smmuv3,remote/none,remote/smmuv3}/` 下的 `test.json`、`stack-test.json` 和相应日志中。
+
+RV64 版本在子仓库中使用同时启用 `aarch64-softmmu`、`riscv64-softmmu` 和 `vfio-user-server` 的构建。下列入口沿用 `build/arm64-qemu`；2026-10-14 的历史记录使用 `build/cp-window`：
 
 ```bash
-make -f Makefile.camp test-gpgpu-cp ARM64_BUILD_DIR="$PWD/build/cp-window"
-make -f Makefile.camp test-gpgpu-remote-iommu ARM64_BUILD_DIR="$PWD/build/cp-window"
-make -f Makefile.camp test-gpgpu-iommu ARM64_BUILD_DIR="$PWD/build/cp-window"
-QTEST_QEMU_BINARY="$PWD/build/cp-window/qemu-system-aarch64" \
-  build/cp-window/tests/qtest/qos-test --tap \
+make -f Makefile.camp test-gpgpu-cp JOBS=4
+make -f Makefile.camp test-gpgpu-remote-iommu JOBS=4
+make -f Makefile.camp test-gpgpu-iommu JOBS=4
+QTEST_QEMU_BINARY="$PWD/build/arm64-qemu/qemu-system-aarch64" \
+  build/arm64-qemu/tests/qtest/qos-test --tap \
   -p /aarch64/virt/generic-pcihost/pci-bus-generic/pci-bus/gpgpu/gpgpu-tests
+```
+
+RISC-V 设备回归将上一条命令中的 `aarch64` 换为 `riscv64`。汇编前端与四种 Linux 配置继续使用已有入口：
+
+```bash
+make -C software/gpgpu check-assembler
+for remote in 0 1; do
+    for iommu in none smmuv3; do
+        make -C software/gpgpu/linux test REMOTE=$remote IOMMU=$iommu
+        make -f Makefile.camp test-gpgpu-stack REMOTE=$remote IOMMU=$iommu
+    done
+done
 ```
 
 ### 1.2 同步计算路径与尚待接入的固件接口
@@ -290,7 +308,7 @@ CP：
 
 例如，Host 选择槽位 2 后查看 Queue A，改选槽位 3 后查看 Queue B；CP 仍可通过槽位 2 的直接地址访问 Queue A。QEMU 将两个入口转到对应的同一份 HQD 状态，`HQD_SELECT` 只影响 Host 窗口。Host 驱动用锁保护选槽和窗口访问，CP 不依赖这把锁选择队列。
 
-这一安排解决了地址配置由谁写入的问题。Host 若要读取 CP 正在配置的槽位并使用其中的地址，应等待该次配置完成；完成确认采用[后附写完成标记命令](#completion-marker)，失败报告的具体规则仍待确定。运行期间持续变化的进度值是另一种读取场景，若最终使用 64 位值，仍须明确 RV32 分次访问的一致性规则，不能用选槽锁代替。索引位宽、各字段复位值、访问宽度及非法写入处理见[软件接口缺口](<./CP_MEC 第一版规格.md#spec-open-interfaces>)。
+这一安排解决了地址配置由谁写入的问题。Host 若要读取 CP 正在配置的槽位并使用其中的地址，应等待该次配置完成；完成确认采用[后附写完成标记命令](#completion-marker)，失败报告的具体规则仍待确定。运行期间持续变化的进度值是另一种读取场景，若最终使用 64 位值，仍须明确双方的访问宽度、对齐及发布顺序，不能用选槽锁代替。索引位宽、各字段复位值、访问宽度及非法写入处理见[软件接口缺口](<./CP_MEC 第一版规格.md#spec-open-interfaces>)。
 
 **AMD 窗口参考。** `GRBM_GFX_CNTL` 的选择字段包含 `MEID`、`PIPEID`、`QUEUEID`，并有 `VMID` 字段。驱动先按目标实例选择寄存器段，再选择引擎、管线与队列；用锁保护“选择窗口 → 读写寄存器 → 恢复选择”。选择窗口用于访问一份 HQD，不会因此改变其他槽位的内容或决定设备接下来只能执行这个队列。
 
@@ -564,7 +582,7 @@ for (group_id = my_xcc_id; group_id < group_count; group_id += xcc_count) {
 
 > **[SOURCE]** 固定 Linux 版本 `248951ddc14de84de3910f9b13f51491a8cd91df`，[drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c#L765-L779) 的 [765–779 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdkfd/kfd_mqd_manager_v9.c#L765-L779)，为 AQL 队列配置 `compute_tg_chunk_size = 1` 和各自的 `compute_current_logic_xcc_id`，后者按参与的 XCC 数量取模计算。
 
-**[BOUNDARY]** AMD 资料和驱动源码能确认跨 XCC 分工及相关配置，但不能证明上述循环全部由 MEC 固件执行；具体实现可能涉及固件和硬件配合。本节的 8 个 XCC 是 AMD 教学案例；第一版采用单个 RV32 CP，不把多 XCC 分工纳入本版实现。
+**[BOUNDARY]** AMD 资料和驱动源码能确认跨 XCC 分工及相关配置，但不能证明上述循环全部由 MEC 固件执行；具体实现可能涉及固件和硬件配合。本节的 8 个 XCC 是 AMD 教学案例；第一版采用单个 RV64 CP，不把多 XCC 分工纳入本版实现。
 
 <a id="firmware-start"></a>
 
@@ -1156,7 +1174,7 @@ CP 已经找到有效 Dispatch，接下来需要从描述对象取得启动信�
 
 **[BOUNDARY]** 本节记录教学设备的目标执行方案；当前代码能力见[现有实现](#implementation)，不能据此推断 AMD MEC 内部实现。
 
-本方案使用一个 RV32 CP 和现有计算执行器，计算执行器一次处理一个 Dispatch。4 个 HQD 槽位分别保存 KIQ、HIQ、A、B 的队列状态。相关队列已经配置后，CP 需要从这些状态找到命令，并决定下一次提交谁的任务。
+本方案使用一个 RV64 CP 和现有计算执行器，计算执行器一次处理一个 Dispatch。4 个 HQD 槽位分别保存 KIQ、HIQ、A、B 的队列状态。相关队列已经配置后，CP 需要从这些状态找到命令，并决定下一次提交谁的任务。
 
 ```text
 CP 开始一轮检查
@@ -2134,7 +2152,7 @@ do {
 > - 调度器：[xpfw_scheduler.c](https://github.com/Xilinx/embeddedsw/blob/c0aed2eff7a30f307238ec853fa8fbc45dcabdda/lib/sw_apps/zynqmp_pmufw/src/xpfw_scheduler.c#L25-L44) 的 [25–44 行](https://github.com/Xilinx/embeddedsw/blob/c0aed2eff7a30f307238ec853fa8fbc45dcabdda/lib/sw_apps/zynqmp_pmufw/src/xpfw_scheduler.c#L25-L44)判断任务是否到期；[89–162 行](https://github.com/Xilinx/embeddedsw/blob/c0aed2eff7a30f307238ec853fa8fbc45dcabdda/lib/sw_apps/zynqmp_pmufw/src/xpfw_scheduler.c#L89-L162)包含定时器启停、节拍更新和回调执行；[164–190 行](https://github.com/Xilinx/embeddedsw/blob/c0aed2eff7a30f307238ec853fa8fbc45dcabdda/lib/sw_apps/zynqmp_pmufw/src/xpfw_scheduler.c#L164-L190)登记任务的间隔和回调。
 > - 中断入口：[xpfw_interrupts.c](https://github.com/Xilinx/embeddedsw/blob/c0aed2eff7a30f307238ec853fa8fbc45dcabdda/lib/sw_apps/zynqmp_pmufw/src/xpfw_interrupts.c#L156-L159) 的 [156–159 行](https://github.com/Xilinx/embeddedsw/blob/c0aed2eff7a30f307238ec853fa8fbc45dcabdda/lib/sw_apps/zynqmp_pmufw/src/xpfw_interrupts.c#L156-L159)调用核心节拍处理函数；[260–279 行](https://github.com/Xilinx/embeddedsw/blob/c0aed2eff7a30f307238ec853fa8fbc45dcabdda/lib/sw_apps/zynqmp_pmufw/src/xpfw_interrupts.c#L260-L279)读取待处理中断、调用对应处理函数并确认中断。
 
-**[BOUNDARY]** PMU Firmware 是平台管理固件，本节借鉴其裸机任务表、定时触发、中断分发和主循环组织方式，不据此推断 AMD GPU 的 MEC 实现。`mb_sleep()` 是原平台的等待操作；用于本实验时，需要接入 RV32 CP 自身的定时器、中断和等待唤醒机制。
+**[BOUNDARY]** PMU Firmware 是平台管理固件，本节借鉴其裸机任务表、定时触发、中断分发和主循环组织方式，不据此推断 AMD GPU 的 MEC 实现。`mb_sleep()` 是原平台的等待操作；用于本实验时，需要接入 RV64 CP 自身的定时器、中断和等待唤醒机制。
 
 **计算期间继续处理管理命令。** 参考上述组织方式，可以把一次长等待拆成多次短处理：提交计算后返回主循环，后续通过状态检查或完成事件继续处理结果。裸机主循环可以按下面的规则推进：
 

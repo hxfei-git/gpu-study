@@ -18,7 +18,8 @@
 | KIQ | Kernel Interface Queue | 内核接口队列 |
 | HIQ | HSA Interface Queue | HSA 接口队列 |
 | CPU | Central Processing Unit | 中央处理器 |
-| RV32 | 32-bit RISC-V | 本实验计算解释器及原生 CP 的 32 位 RISC-V 模型 |
+| RV32 | 32-bit RISC-V | 本实验计算解释器使用的 32 位 RISC-V 模型 |
+| RV64 | 64-bit RISC-V | 本实验原生 CP 使用的 64 位 RISC-V 模型 |
 | PCI | Peripheral Component Interconnect | 外设互连总线 |
 | BAR | Base Address Register | PCI 基址寄存器；用于描述设备资源窗口 |
 | VRAM | Video RAM | 设备显存 |
@@ -43,6 +44,8 @@
 根据用户反馈，前 10 个基础实验和第一阶段“进阶实验一：设计类 CUDA 的 GPGPU 软件栈”已完成，并已搭配 A57、支持 SMMUv3 系统 IOMMU。第一阶段成果继续使用，当前进入第二阶段：用户 AQL Queue、Doorbell、CP 与 Signal。
 
 2026-10-11 已完成双进程设备与原生 RV32 CP 基础接入，包括复位、固件装载、启动和同地址替换固件。2026-10-14 完成 CP Host 访存窗口：CP 用普通读写指令经 IOVA 访问 Host RAM，Host 继续通过 BAR2 和原 DMA 访问 VRAM。CP 回归通过 8/8，双进程和单进程 IOMMU 回归各通过 2/2，原有 A57 GPGPU 设备测试通过 21/21；实现与复现命令见[窗口实现说明](<./CP_MEC 软件实现、参考与扩展.md#cp-host-window-implementation>)。
+
+2026-10-17 原生 CP 已迁移至 RV64，Host 窗口支持自然对齐的 1/2/4/8 字节读写，裸机物理访存、地址编码及 RV32 计算解释器保持原约定。复用现有 CP 用例通过 8/8，单／双进程 IOMMU 各 2/2、两种架构的原有设备用例各 21/21 及 RV32 汇编检查 4/4 通过。Linux 单／双进程与 `none`／`smmuv3` 四种组合均通过三个示例的 17,953 个输出值、68 项运行时检查及装卸载检查；详细验证记录继续保存在上述窗口实现说明中。
 
 队列部分已确认第一版架构，软件接口仍需逐项补齐；尚未记录队列功能实现完成或第二阶段整体验收通过。第一阶段的软件栈和构建入口见[子仓库软件栈说明](<./gpu-study-qemu/software/gpgpu/README.md>)。
 
