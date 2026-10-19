@@ -158,7 +158,11 @@ Keep each pull request focused. Describe the reader-facing change, identify upda
 
 学习部分已完成第 06 阶段上下篇的学习：[06_AQL 应用的完整运行流程：驱动初始化、执行与资源释放（上）](<./1.笔记/06_AQL 应用的完整运行流程：驱动初始化、执行与资源释放（上）.md>)与[下篇](<./1.笔记/06_AQL 应用的完整运行流程：驱动初始化、执行与资源释放（下）.md>)。第七章仍是后续学习阶段，按[第七章大纲](<./1.笔记/07_AMDGPU 通用内存管理与 DRM 任务提交（大纲）.md>)继续；已有章节的补充按当前问题就地完成。
 
-根据用户反馈，实验第一阶段已完成，并已搭配 A57、支持 SMMUv3 系统 IOMMU。当前进入第二阶段：用户 AQL Queue、Doorbell、CP 与 Signal，实验范围见 [QEMU GPGPU 四阶段实验大纲](<./4.experiments/QEMU GPGPU 实验大纲.md>)，已确认约定见 [CP/MEC 第一版规格](<./4.experiments/CP_MEC 第一版规格.md>)。2026-10-11 已完成双进程设备与原生 RISC-V CP 基础接入，2026-10-14 完成 CP Host 访存窗口及回归，2026-10-17 原生 CP 迁移至 RV64，窗口增加对齐的 8 字节读写并通过原有 8 项 CP 回归；裸机物理访存、地址编码和 RV32 计算执行器保持原约定。当前状态见 [大纲进度说明](<./4.experiments/QEMU GPGPU 实验大纲.md#current-progress>)。第二阶段的队列功能尚未记录实现完成或整体运行验收通过；后续随实验进展同步更新此处的阶段记录与大纲。
+根据用户反馈，实验第一阶段已完成，并已搭配 A57、支持 SMMUv3 系统 IOMMU。第二阶段围绕用户 AQL Queue、Doorbell、CP 与 Signal 展开，实验范围见 [QEMU GPGPU 四阶段实验大纲](<./4.experiments/QEMU GPGPU 实验大纲.md>)，已确认约定见 [CP/MEC 第一版规格](<./4.experiments/CP_MEC 第一版规格.md>)。2026-10-11 已完成双进程设备与原生 RISC-V CP 基础接入，2026-10-14 完成 CP Host 访存窗口及回归，2026-10-17 原生 CP 迁移至 RV64，窗口增加对齐的 8 字节读写并通过原有 8 项 CP 回归；裸机物理访存、地址编码和 RV32 计算执行器保持原约定。
+
+2026-10-19 完成第二阶段设备队列入口、RV64 CP 固件、Linux 驱动与 HSAKMT 风格接口库的实现和本轮验收，CP 回归通过 16/16。同日按用户确认，采用宿主机交叉编译生成 `6.18.57-0-gpgpu-virt` 内核，内置 `GPU_BUDDY`；原生构建进度与环境保留。A57 客体上，双进程、`IOMMU=none` 的 Linux 队列验收通过 5/5，卸载检查通过 1/1；单／双进程与 `none`／`smmuv3` 四种同步组合均通过，每种包含装卸载 5/5、17,953 个示例输出值、运行时检查 68/68 和卸载重载 2/2。具体结果见 [大纲进度说明](<./4.experiments/QEMU GPGPU 实验大纲.md#current-progress>)；多 VMID、抢占和运行中复位恢复仍属于后续阶段。
+
+以下 2026-10-17、2026-10-18 的段落保留规格确认时的历史记录，其中“尚待实现”“尚未接入”等措辞只描述当时进度；当前代码与验收状态以上述说明和大纲为准。
 
 2026-10-18 按实验子仓库固定提交 `57543dd54b6b046b888277272fa84af81746b1ac` 重新核对：原生 CP 为 RV64，执行裸机固件；计算执行器仍为 RV32，执行应用 Kernel，计算线程的 `a0` 仍为 32 位。文档和讲解必须写清执行主体。CP 的 Host 窗口已实现，计算执行器读取 Host 参数的路径尚未实现，16 字节描述对象及只读参数窗口已在[规格 9.5.2](<./4.experiments/CP_MEC 第一版规格.md#spec-kernel-executor-interface>)确认，尚待接入；CP 分发寄存器和状态接口已按[规格 9.5.3](<./4.experiments/CP_MEC 第一版规格.md#spec-cp-dispatch-interface>)确定，尚待实现。源码依据见[CP 与计算执行器的位宽](<./4.experiments/CP_MEC 软件实现、参考与扩展.md#cp-executor-widths>)。
 

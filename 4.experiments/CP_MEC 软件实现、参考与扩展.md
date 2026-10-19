@@ -85,7 +85,7 @@
 
 ## 1. 现有实现与 CP 接入位置
 
-当前已有同步计算软件栈和能执行固件的原生 RV64 CP。接入队列时，需要把“Host 直接启动一次计算”扩展为“CP 固件读取队列，再向计算执行器提交任务”。先看这两条路径各自推进到哪里。
+当前代码保留 Host 直接启动计算的同步路径，并已接入“用户发布 AQL → RV64 CP 取包 → RV32 执行器计算 → Signal 与事件通知”的队列路径。CP QTest 已通过 16/16；Linux 新内核下的驱动装载、五组队列端到端测试和四种同步组合回归均通过。具体运行结果与后续安排统一见[大纲当前实现记录](<./QEMU GPGPU 实验大纲.md#stage-two-implementation-results>)。
 
 <a id="cp-executor-widths"></a>
 
@@ -103,7 +103,7 @@
 
 A57 的指令由对应 QEMU 目标的 TCG 推进。原生 CP 的 RV64 固件指令由设备进程中的 TCG 推进，构建和启动入口使用 `riscv64-softmmu`、`qemu-system-riscv64`。计算解释器则通过 C 代码读取 Kernel 的 RV32 指令，修改模拟的 lane 寄存器与 PC。三者各自保存取指位置与执行状态。
 
-2026-10-18 按子仓库固定提交 `57543dd54b6b046b888277272fa84af81746b1ac` 核对：原生 CP 的默认及允许 CPU 类型均为 `TYPE_RISCV_CPU_BASE64`；计算执行器的 `GPGPULane.gpr[]` 和 `pc` 仍为 `uint32_t`。Kernel 的 `a0` 是 lane 的 `gpr[10]`，当前保存参数块的 VRAM 偏移。CP 固件使用自己的 64 位寄存器。第二阶段由 CP 通过分发接口向计算执行器交付任务，具体接口仍待接入。
+2026-10-18 按子仓库固定提交 `57543dd54b6b046b888277272fa84af81746b1ac` 核对：原生 CP 的默认及允许 CPU 类型均为 `TYPE_RISCV_CPU_BASE64`；计算执行器的 `GPGPULane.gpr[]` 和 `pc` 仍为 `uint32_t`。该基线的同步路径把参数块的 VRAM 偏移写入 lane 的 `gpr[10]`，即 `a0`；CP 固件使用自己的 64 位寄存器。当前新增的队列路径已由 CP 交付完整 Host 参数地址，计算线程的 `a0` 保存只读参数窗口起点，访问方式见[参数访问说明](#kernel-argument-access)。
 
 例如两个源寄存器分别保存 3 和 5，计算解释器执行加法时，由 C 代码算出 8，再写入目标 lane 的模拟寄存器。TCG 则执行翻译后的指令块。各自保存执行状态，并不意味着每个设备或 lane 都有独立的执行线程；还要看由哪个调用或事件推进执行。
 
@@ -111,17 +111,17 @@ A57 的指令由对应 QEMU 目标的 TCG 推进。原生 CP 的 RV64 固件指�
 
 当前 CP 在 M-mode 执行裸机固件，不启用页表。本地地址空间仍采用原有 4 GiB 布局，地址 `0～vram_size-1` 映射到同一份 VRAM。Host 经 BAR2 写入固件，CP 按 VRAM 偏移取指。原生 CP 与计算解释器使用 RISC-V 代码，不说明 AMD MEC 使用 RISC-V，也不提供 AMD 固件二进制兼容性。
 
-现有独立 CP 测试把固件放在 VRAM 偏移 `0x4000`：Host 写入 `BAR2 基址 + 0x4000`，CP 的入口填写 `0x4000`。这是测试选用的地址。当前 Linux 驱动的显存分配池只排除首个 Host 页，尚未划出固件保留区；固件测试与原软件栈测试分别运行。
+原有独立 CP 用例把测试固件放在 VRAM 偏移 `0x4000`：Host 写入 `BAR2 基址 + 0x4000`，CP 的入口填写 `0x4000`。这是独立用例使用的测试地址。历史同步驱动的分配池只排除首个 Host 页；当前队列驱动及真实队列固件使用下述固定保留区。
 
-**[DESIGN]** 第二阶段已确认在 64 MiB VRAM 的末尾保留 4 MiB，即 `0x03c0_0000～0x03ff_ffff`，固件入口固定为 `0x03c0_0000`。最后 64 KiB 用作栈，其余 4032 KiB 保存代码、常量、全局变量和静态工作区，完整图示见[规格 3.1 节](<./CP_MEC 第一版规格.md#spec-firmware-layout>)。前 60 MiB 从偏移 0 开始，由 Linux 内核驱动按设备统一管理实际区间的分配与回收，首个页作为范围内的保留项登记。底层采用[通用伙伴分配器](#vram-buddy-allocator)，按目标内核使用 `gpu_buddy` 或 `drm_buddy`；分配器接入、固件固定链接布局和入口初始化仍待实现。
+**[DESIGN]** 第二阶段已确认在 64 MiB VRAM 的末尾保留 4 MiB，即 `0x03c0_0000～0x03ff_ffff`，固件入口固定为 `0x03c0_0000`。最后 64 KiB 用作栈，其余 4032 KiB 保存代码、常量、全局变量和静态工作区，完整图示见[规格 3.1 节](<./CP_MEC 第一版规格.md#spec-firmware-layout>)。前 60 MiB 从偏移 0 开始，由 Linux 内核驱动按设备统一管理实际区间的分配与回收，首个页作为范围内的保留项登记。当前队列驱动已接入[通用伙伴分配器](#vram-buddy-allocator) `gpu_buddy`，固件已采用固定链接布局并初始化栈与全局数据；Linux 新内核下的分配、固件装载与生命周期用例已通过端到端验收。
 
 > **[SOURCE]** 实验子仓库固定提交 `57543dd54b6b046b888277272fa84af81746b1ac`：
 >
-> - RV64 CP 的默认及允许 CPU 类型：[hw/riscv/gpgpu-cp.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/riscv/gpgpu-cp.c:274:1)，[274–288 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/riscv/gpgpu-cp.c:274:1)。设备进程入口：[software/gpgpu/linux/module-test.py](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/linux/module-test.py:30:1)，[30 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/linux/module-test.py:30:1)使用 `qemu-system-riscv64`。
-> - RV32 计算线程状态：[hw/gpgpu/gpgpu_core.h](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu_core.h:72:1)，[72–80 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu_core.h:72:1)；启动时填写各 lane 的 `a0`：[hw/gpgpu/gpgpu_core.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu_core.c:615:1)，[615–624 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu_core.c:615:1)。
-> - 默认 VRAM 容量：[hw/gpgpu/gpgpu.h](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu.h:23:1) 的 [23–29 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu.h:23:1)定义 64 MiB 默认值。
+> - RV64 CP 的默认及允许 CPU 类型：[hw/riscv/gpgpu-cp.c](https://github.com/hxfei-git/gpu-study-qemu/blob/57543dd54b6b046b888277272fa84af81746b1ac/hw/riscv/gpgpu-cp.c#L274)，[274–288 行](https://github.com/hxfei-git/gpu-study-qemu/blob/57543dd54b6b046b888277272fa84af81746b1ac/hw/riscv/gpgpu-cp.c#L274-L288)。设备进程入口：[software/gpgpu/linux/module-test.py](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/linux/module-test.py:30:1)，[30 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/linux/module-test.py:30:1)使用 `qemu-system-riscv64`。
+> - RV32 计算线程状态：[hw/gpgpu/gpgpu_core.h](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu_core.h:72:1)，[72–80 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu_core.h:72:1)；启动时填写各 lane 的 `a0`：[hw/gpgpu/gpgpu_core.c](https://github.com/hxfei-git/gpu-study-qemu/blob/57543dd54b6b046b888277272fa84af81746b1ac/hw/gpgpu/gpgpu_core.c#L615)，[615–624 行](https://github.com/hxfei-git/gpu-study-qemu/blob/57543dd54b6b046b888277272fa84af81746b1ac/hw/gpgpu/gpgpu_core.c#L615-L624)。
+> - 默认 VRAM 容量：[hw/gpgpu/gpgpu.h](https://github.com/hxfei-git/gpu-study-qemu/blob/57543dd54b6b046b888277272fa84af81746b1ac/hw/gpgpu/gpgpu.h#L23) 的 [23–29 行](https://github.com/hxfei-git/gpu-study-qemu/blob/57543dd54b6b046b888277272fa84af81746b1ac/hw/gpgpu/gpgpu.h#L23-L29)定义 64 MiB 默认值。
 > - 独立 CP 测试地址：[tests/qtest/gpgpu-cp-test.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/tests/qtest/gpgpu-cp-test.c:15:1) 的 [15–19 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/tests/qtest/gpgpu-cp-test.c:15:1)定义固件和结果位置，[73–98 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/tests/qtest/gpgpu-cp-test.c:73:1)经 BAR2 写入固件并设置入口。
-> - 当前显存分配范围：[software/gpgpu/linux/gpgpu_pci.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/linux/gpgpu_pci.c:184:1) 的 [184–191 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/linux/gpgpu_pci.c:184:1)建立分配池并排除首个页，尚未扣除固件空间。
+> - 该基线的同步模式分配范围：[software/gpgpu/linux/gpgpu_pci.c](https://github.com/hxfei-git/gpu-study-qemu/blob/57543dd54b6b046b888277272fa84af81746b1ac/software/gpgpu/linux/gpgpu_pci.c#L184-L191)，[184–191 行](https://github.com/hxfei-git/gpu-study-qemu/blob/57543dd54b6b046b888277272fa84af81746b1ac/software/gpgpu/linux/gpgpu_pci.c#L184-L191)建立分配池并排除首个页，尚未扣除固件空间。当前入口已改名为 `gpgpu_pci_main.c`，这里保留固定提交链接；本次队列模式另由 `gpgpu_memory.c` 管理前 60 MiB。
 
 在同一地址替换固件时，BAR、DMA、计算解释器写入及冷复位清零需要使相关 TCG 指令翻译失效，避免继续执行旧翻译块。
 
@@ -158,11 +158,11 @@ B 等待 DMA 回复
 
 卸载 DMA 映射时，还要保证旧地址映射不再引用对象后才释放它。映射对象现在拥有自己的引用计数，旧 `FlatView` 持有的引用全部释放后，才销毁对应内存区域。这个修正用于消除断开连接时检测到的释放后访问。
 
-**[BOUNDARY]** 这条线路提供普通数据读写。[队列访存上下文与错误归属](<./CP_MEC 第一版规格.md#spec-memory-access-context>)、[Signal 的单一更新者规则](<./CP_MEC 第一版规格.md#spec-signal-single-writer>)已确认设计，尚待接入；第二阶段不增加原子读改写入口。队列建立、Ring 格式、Signal 通知及动态 64 位值的完整读写也仍需接入和验证。当前队列主线使用 DMA 直通，访问 Host RAM 时采用物理地址；按 VMID 选择 GPU 页表留到第三阶段。本节保留已实现的 SMMUv3 通路与测试记录。固件代码和栈继续使用 VRAM；窗口访问成功也不代表相关队列功能已经实现。
+**[BOUNDARY]** 这条线路提供普通数据读写。当前固件已按[访存上下文与错误归属](<./CP_MEC 第一版规格.md#spec-memory-access-context>)处理失败，并按[单一更新者规则](<./CP_MEC 第一版规格.md#spec-signal-single-writer>)更新 Signal；第二阶段不增加 CP 原子读改写入口。队列建立、Ring 解析、通知和完整字段读写已接入，并由设备与固件 QTest 验证。队列主线使用 DMA 直通，访问 Host RAM 时采用物理地址；按 VMID 选择 GPU 页表留到第三阶段。本节的 SMMUv3 通路与历史测试记录继续保留，Linux 队列端到端验收状态以[大纲](<./QEMU GPGPU 实验大纲.md#stage-two-implementation-results>)为准。
 
-> **[SOURCE] 本次实现的源码入口**：实验子仓库固定提交 `57543dd54b6b046b888277272fa84af81746b1ac`。
+> **[SOURCE] 历史 CP Host 窗口实现**：实验子仓库固定提交 `57543dd54b6b046b888277272fa84af81746b1ac`。
 >
-> - 窗口读写与基址寄存器：[hw/riscv/gpgpu-cp.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/riscv/gpgpu-cp.c:44:1)，[44–135 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/riscv/gpgpu-cp.c:44:1)；本地地址空间与 VRAM 别名：[232–251 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/riscv/gpgpu-cp.c:232:1)；RV64 CPU 选择：[274–288 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/riscv/gpgpu-cp.c:274:1)。
+> - 窗口读写与基址寄存器：[hw/riscv/gpgpu-cp.c](https://github.com/hxfei-git/gpu-study-qemu/blob/57543dd54b6b046b888277272fa84af81746b1ac/hw/riscv/gpgpu-cp.c#L44)，[44–135 行](https://github.com/hxfei-git/gpu-study-qemu/blob/57543dd54b6b046b888277272fa84af81746b1ac/hw/riscv/gpgpu-cp.c#L44-L135)；本地地址空间与 VRAM 别名：[232–251 行](https://github.com/hxfei-git/gpu-study-qemu/blob/57543dd54b6b046b888277272fa84af81746b1ac/hw/riscv/gpgpu-cp.c#L232-L251)；RV64 CPU 选择：[274–288 行](https://github.com/hxfei-git/gpu-study-qemu/blob/57543dd54b6b046b888277272fa84af81746b1ac/hw/riscv/gpgpu-cp.c#L274-L288)。
 > - PCI DMA 路由与暂存请求唤醒：[hw/remote/vfio-user-obj.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/remote/vfio-user-obj.c:134:1)，[134–187 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/remote/vfio-user-obj.c:134:1)；映射对象的引用与释放：[407–464 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/remote/vfio-user-obj.c:407:1)。
 > - 消息交错修正：[0002-queued-dma-requests.diff](./gpu-study-qemu/subprojects/packagefiles/libvfio-user/0002-queued-dma-requests.diff)，应用于 libvfio-user 固定版本 `0b28d205572c80b568a1003db2c8f37ca333e4d7`，接在原 `0001` 后面。
 > - 原生固件访存、异常恢复和 Host DMA 并用：[tests/qtest/gpgpu-cp-test.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/tests/qtest/gpgpu-cp-test.c:321:1)，[321–530 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/tests/qtest/gpgpu-cp-test.c:321:1)；确定性消息交错：[tests/qtest/gpgpu-vfio-user-test.h](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/tests/qtest/gpgpu-vfio-user-test.h:115:1)，[115–255 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/tests/qtest/gpgpu-vfio-user-test.h:115:1)。
@@ -198,7 +198,7 @@ for remote in 0 1; do
 done
 ```
 
-### 1.2 同步计算路径与尚待接入的固件接口
+### 1.2 同步计算路径与 CP 固件提交路径
 
 现有同步调用按下面的路径执行。`LAUNCH ioctl` 返回时，驱动已经完成相应等待，运行时随后释放本次上传的参数：
 
@@ -212,9 +212,9 @@ done
   → 运行时释放本次参数
 ```
 
-第一版队列接入后，正常提交改由运行时发布 AQL Packet、通知对应队列；CP 固件取包并提交计算。计算执行器仍负责 Kernel 指令，QEMU 仍须向 CP 提供能够返回完成或失败的调用接口。CP 对当前 Dispatch 的阻塞等待，是固件处理后续命令的限制；Host 能否继续运行，还取决于计算执行器与 QEMU 事件的具体接入方式。
+当前队列路径由调用方发布 AQL Packet、通知对应队列，CP 固件取包并提交计算。QEMU 保存配置快照，分段执行 Kernel，再向 CP 发布完成或失败状态。CP 仍等待整个 Dispatch 结束后才处理后续队列命令；执行器每段返回 QEMU 主循环，Host 可继续准备和发布任务。
 
-在实验子仓库固定提交 `fd2719636bb903ee2815e359dc9af5af7f0202a4` 中，CP 复位和入口已经实现；BAR4 Doorbell 的写处理仍为空，BAR0 尚无 HQD 选择与窗口路由，UAPI 也尚无 Queue／Signal 接口。原生 CP 固件到 HQD、取包和计算派发的整条路径仍需接入。
+在实验子仓库固定提交 `fd2719636bb903ee2815e359dc9af5af7f0202a4` 中，CP 复位和入口已经实现；BAR4 Doorbell 的写处理仍为空，BAR0 尚无 HQD 选择与窗口路由，UAPI 也尚无 Queue／Signal 接口。这是当时的实现状态；当前队列路径已接入 HQD、Doorbell、取包和计算派发，历史证据继续保留如下。
 
 > **[SOURCE] 可选源码索引** 实验子仓库 `fd2719636bb903ee2815e359dc9af5af7f0202a4`：
 >
@@ -223,9 +223,16 @@ done
 > - 同步派发、忙碌状态与完成／失败通知：[hw/gpgpu/gpgpu_dispatch.c，14–114 行](https://github.com/hxfei-git/gpu-study-qemu/blob/fd2719636bb903ee2815e359dc9af5af7f0202a4/hw/gpgpu/gpgpu_dispatch.c#L14-L114)。
 > - CP 复位与入口：[hw/gpgpu/gpgpu_cp.c，9–74 行](https://github.com/hxfei-git/gpu-study-qemu/blob/fd2719636bb903ee2815e359dc9af5af7f0202a4/hw/gpgpu/gpgpu_cp.c#L9-L74)；设备与 CP 共用 VRAM：[hw/riscv/gpgpu-cp.c，102–140 行](https://github.com/hxfei-git/gpu-study-qemu/blob/fd2719636bb903ee2815e359dc9af5af7f0202a4/hw/riscv/gpgpu-cp.c#L102-L140)。
 > - 设备状态与 lane 执行状态分别保存：[hw/gpgpu/gpgpu.h，74–102 行](https://github.com/hxfei-git/gpu-study-qemu/blob/fd2719636bb903ee2815e359dc9af5af7f0202a4/hw/gpgpu/gpgpu.h#L74-L102)、[hw/gpgpu/gpgpu_core.h，72–94 行](https://github.com/hxfei-git/gpu-study-qemu/blob/fd2719636bb903ee2815e359dc9af5af7f0202a4/hw/gpgpu/gpgpu_core.h#L72-L94)；TCG 翻译块执行入口：[accel/tcg/cpu-exec.c，428–439 行](https://github.com/hxfei-git/gpu-study-qemu/blob/fd2719636bb903ee2815e359dc9af5af7f0202a4/accel/tcg/cpu-exec.c#L428-L439)。
-> - 当前 BAR0 路由：[hw/gpgpu/gpgpu_regs.c，25–101 行](https://github.com/hxfei-git/gpu-study-qemu/blob/fd2719636bb903ee2815e359dc9af5af7f0202a4/hw/gpgpu/gpgpu_regs.c#L25-L101)；Doorbell 占位：[hw/gpgpu/gpgpu_doorbell.c，10–23 行](https://github.com/hxfei-git/gpu-study-qemu/blob/fd2719636bb903ee2815e359dc9af5af7f0202a4/hw/gpgpu/gpgpu_doorbell.c#L10-L23)；现有 UAPI：[software/gpgpu/include/gpgpu_uapi.h，17–73 行](https://github.com/hxfei-git/gpu-study-qemu/blob/fd2719636bb903ee2815e359dc9af5af7f0202a4/software/gpgpu/include/gpgpu_uapi.h#L17-L73)。
+> - 该基线的 BAR0 路由：[hw/gpgpu/gpgpu_regs.c，25–101 行](https://github.com/hxfei-git/gpu-study-qemu/blob/fd2719636bb903ee2815e359dc9af5af7f0202a4/hw/gpgpu/gpgpu_regs.c#L25-L101)；Doorbell 占位：[hw/gpgpu/gpgpu_doorbell.c，10–23 行](https://github.com/hxfei-git/gpu-study-qemu/blob/fd2719636bb903ee2815e359dc9af5af7f0202a4/hw/gpgpu/gpgpu_doorbell.c#L10-L23)；该基线的 UAPI：[software/gpgpu/include/gpgpu_uapi.h，17–73 行](https://github.com/hxfei-git/gpu-study-qemu/blob/fd2719636bb903ee2815e359dc9af5af7f0202a4/software/gpgpu/include/gpgpu_uapi.h#L17-L73)。
 
 构建、运行与软件栈使用方式见[子仓库软件栈说明](./gpu-study-qemu/software/gpgpu/README.md)和[设备源码规格](./gpu-study-qemu/docs/specs/gpgpu.rst)。
+
+> **[SOURCE] 当前队列实现入口**（实验子仓库 `3217651a83c00c14a39712cefda9394b6e977ff3`，2026-10-19；与上述历史同步基线区分）：
+>
+> - 固件检查管理与用户槽位的顺序：[software/gpgpu/firmware/main.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/firmware/main.c:109:1) 的 [109–142 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/firmware/main.c:109:1)；Dispatch 执行确认、Signal、通知和槽位归还：[software/gpgpu/firmware/aql.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/firmware/aql.c:60:1) 的 [60–166 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/firmware/aql.c:60:1)。
+> - 执行器提交与终态确认：[hw/gpgpu/gpgpu_dispatch.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu_dispatch.c:193:1) 的 [193–239 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu_dispatch.c:193:1)；Host 参数窗口读取：[hw/gpgpu/gpgpu_params.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu_params.c:8:1) 的 [8–26 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu_params.c:8:1)。
+> - 驱动加载固件并建立管理入口：[software/gpgpu/linux/gpgpu_queue.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/linux/gpgpu_queue.c:278:1) 的 [278–339 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/linux/gpgpu_queue.c:278:1)；显存分配器与首个保留页：[software/gpgpu/linux/gpgpu_memory.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/linux/gpgpu_memory.c:8:1) 的 [8–22 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/linux/gpgpu_memory.c:8:1)。
+> - 驱动保存通知与故障：[software/gpgpu/linux/gpgpu_event.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/linux/gpgpu_event.c:47:1) 的 [47–103 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/linux/gpgpu_event.c:47:1)；四组 HSAKMT 风格接口声明：[software/gpgpu/hsakmt/gpgpu_kmt.h](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/hsakmt/gpgpu_kmt.h:48:1) 的 [48–82 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/hsakmt/gpgpu_kmt.h:48:1)。
 
 <a id="host-software-flow"></a>
 
@@ -233,7 +240,7 @@ done
 
 接入队列后，应用希望连续提交计算，再分别等待结果。第二阶段的用户态向上实现到 HSAKMT 风格接口库，封装设备连接、内存、队列和事件管理。参数组织、AQL 发布与 Signal 判断由调用方承担，当前可以是实验程序，以后再评估运行时。
 
-以下以驱动已通过 KIQ 建立 HIQ、设备仍有空闲用户队列名额为前提，说明调用方、接口库与驱动怎样配合。Queue A 只是本次申请所得队列的示例名称；输入输出和释放接口已按[规格 9.7](<./CP_MEC 第一版规格.md#spec-host-api-scope>)统一确认，功能尚待实现。
+以下以驱动已通过 KIQ 建立 HIQ、设备仍有空闲用户队列名额为前提，说明调用方、接口库与驱动怎样配合。Queue A 只是本次申请所得队列的示例名称；输入输出和释放接口已按[规格 9.7](<./CP_MEC 第一版规格.md#spec-host-api-scope>)接入 HSAKMT 风格库与队列驱动，Linux 五组端到端测试已通过。
 
 ```text
 调用方经接口库申请 Ring、进度和任务存储，准备代码与输入数据
@@ -275,9 +282,9 @@ AMD 参考采用相同的职责划分：内核 amdgpu 驱动通过 TTM 管理显
 > - 通用核心的配置：[drivers/gpu/Kconfig](vscode://file/home/book/1.project/gpu_study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/Kconfig:3:1) 的 [3–6 行](vscode://file/home/book/1.project/gpu_study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/Kconfig:3:1)；DRM 配置关联：[drivers/gpu/drm/Kconfig](vscode://file/home/book/1.project/gpu_study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/Kconfig:237:1) 的 [237–242 行](vscode://file/home/book/1.project/gpu_study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/Kconfig:237:1)。
 > - 保留的 DRM 打印辅助函数：[drivers/gpu/drm/drm_buddy.c](vscode://file/home/book/1.project/gpu_study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/drm_buddy.c:17:1) 的 [17–78 行](vscode://file/home/book/1.project/gpu_study/2.%E6%BA%90%E7%A0%81/linux/drivers/gpu/drm/drm_buddy.c:17:1)。
 
-**[BOUNDARY]** 这是第二阶段的分配器选型，尚未替换现有驱动的 `gen_pool`。实际接入时，以运行内核匹配的头文件、配置与导出符号为准，启用对应组件后再验证分配、回收、保留区和并发访问；参考源码中存在某个接口，不代表实验客体已经编译提供该接口。
+**[BOUNDARY]** 队列模式已使用 `gpu_buddy` 管理前 60 MiB，原同步模式继续使用 `gen_pool`。驱动已在 Linux `6.18.57-0-gpgpu-virt` 上完成编译和运行验收，覆盖分配、回收、保留区及并发提交，状态见[大纲](<./QEMU GPGPU 实验大纲.md#stage-two-implementation-results>)。
 
-接口方案参考仓库固定版本的 libhsakmt，分成四组。实现边界、参数含义、返回状态及资源释放行为已按[规格 9.7](<./CP_MEC 第一版规格.md#spec-host-api-scope>)统一确认。下图列出用途和 AMD 参考入口，功能尚待实现：
+接口方案参考仓库固定版本的 libhsakmt，分成四组。实现边界、参数含义、返回状态及资源释放行为已按[规格 9.7](<./CP_MEC 第一版规格.md#spec-host-api-scope>)统一确认。四组实验接口已接入；下图保留各组用途及对应的 AMD 参考入口：
 
 ```text
 设备连接与查询  → hsaKmtOpenKFD / CloseKFD / GetVersion / GetNodeProperties
@@ -292,7 +299,7 @@ Ring 槽、任务参数和 Signal 的可复用时机分别判断。例如任务�
 
 现有 libgpgpu 的同步计算路径继续用于独立回归，既有上传和读回可以供新路径复用；新接口的分层不再以高层 `gpgpuLaunchKernel()` 为中心。ROCr/HSA 运行时及高层任务接口留待[后续单独评估](<./QEMU GPGPU 实验大纲.md#rocr-runtime-extension>)。创建失败、映射引用与退出时的资源保护见[资源释放与软件清理](#host-resource-lifetime)。
 
-> **[SOURCE]** 子仓库固定版本 `57543dd54b6b046b888277272fa84af81746b1ac`：[software/gpgpu/runtime/gpgpu.h](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/runtime/gpgpu.h:9:1) 的 [9–43 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/runtime/gpgpu.h:9:1)定义现有上下文、Kernel、三维尺寸和返回值；[gpgpu.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/runtime/gpgpu.c:268:1) 的 [268–348 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/runtime/gpgpu.c:268:1)给出现有尺寸校验、参数复制、同步提交和等待。这里记录当前实现，第二阶段的 HSAKMT 风格接口仍待接入。
+> **[SOURCE]** 子仓库固定版本 `57543dd54b6b046b888277272fa84af81746b1ac`：[software/gpgpu/runtime/gpgpu.h](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/runtime/gpgpu.h:9:1) 的 [9–43 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/runtime/gpgpu.h:9:1)定义现有上下文、Kernel、三维尺寸和返回值；[gpgpu.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/runtime/gpgpu.c:268:1) 的 [268–348 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/software/gpgpu/runtime/gpgpu.c:268:1)给出现有尺寸校验、参数复制、同步提交和等待。这里记录历史同步实现；当前队列接口保存在独立的 HSAKMT 风格库中。
 
 ## 2. 队列对象与地址空间
 
@@ -351,7 +358,7 @@ Host RAM 中的 Ring_A
 > - 第一阶段暂存缓冲区的分配：[software/gpgpu/linux/gpgpu_pci.c](https://github.com/hxfei-git/gpu-study-qemu/blob/a49cd28e70e640b1d23a0651c74c029bc2dac4cf/software/gpgpu/linux/gpgpu_pci.c#L195-L203)，[195–203 行](https://github.com/hxfei-git/gpu-study-qemu/blob/a49cd28e70e640b1d23a0651c74c029bc2dac4cf/software/gpgpu/linux/gpgpu_pci.c#L195-L203)；用户映射：[246–268 行](https://github.com/hxfei-git/gpu-study-qemu/blob/a49cd28e70e640b1d23a0651c74c029bc2dac4cf/software/gpgpu/linux/gpgpu_pci.c#L246-L268)。
 > - CP 使用设备 DMA 地址访问 Host RAM：[hw/riscv/gpgpu-cp.c](https://github.com/hxfei-git/gpu-study-qemu/blob/a49cd28e70e640b1d23a0651c74c029bc2dac4cf/hw/riscv/gpgpu-cp.c#L44-L84)，[44–84 行](https://github.com/hxfei-git/gpu-study-qemu/blob/a49cd28e70e640b1d23a0651c74c029bc2dac4cf/hw/riscv/gpgpu-cp.c#L44-L84)。
 
-**[BOUNDARY]** 本节确定存储、分配和映射方式，队列功能仍待实现。第二阶段管理队列与用户队列的 VMID 均为 0；用户 Ring 仍由 Host 软件记录所属上下文，MQD 仍由驱动管理。当前阶段不按 VMID 选择页表。既有 SMMUv3 翻译配置见[窗口实现说明](#cp-host-window-implementation)，其中的 DMA 地址不能普遍当作 Host RAM 物理地址。
+**[BOUNDARY]** 本节的存储、分配和映射方式已接入队列驱动，Linux 运行验证见[大纲](<./QEMU GPGPU 实验大纲.md#stage-two-implementation-results>)。第二阶段管理队列与用户队列的 VMID 均为 0；用户 Ring 仍由 Host 软件记录所属上下文，MQD 仍由驱动管理。当前阶段不按 VMID 选择页表。既有 SMMUv3 翻译配置见[窗口实现说明](#cp-host-window-implementation)，其中的 DMA 地址不能普遍当作 Host RAM 物理地址。
 
 #### 2.1.2 MQD 的装载与状态保存
 
@@ -429,9 +436,9 @@ Host 将 `HQD_SELECT` 从 2 改为 3 后，同一窗口改为访问 Queue B，Qu
 
 CP 的访问地址为 `0xffff_0000 + 槽位编号 × 0x100 + 字段偏移`。例如读取 Queue A 的 `CP_HQD_PQ_BASE` 时，Host 先选择槽位 2，再读 `BAR0 + 0x0720`；CP 直接读 `0xffff_0220`，两条路径返回同一个字段的值。完整地址范围、字段值示例与无效选槽行为见[规格 8.3 节](<./CP_MEC 第一版规格.md#spec-hqd-address-map>)。
 
-Host 若要读取 CP 正在配置的槽位并使用其中的地址，应等待该次配置完成；完成确认采用[后附写完成标记命令](#completion-marker)，读到预期序号后还须同步并检查本次结果码，失败与回报故障按[管理结果协议](<./CP_MEC 第一版规格.md#spec-management-result>)处理。单次 32 位寄存器读取返回完整值，跨多个寄存器读取不保证同一时刻的快照。运行期间的进度值已确定为 32 位；共享进度与 64 位完成值按[规格 2.2.1 节](<./CP_MEC 第一版规格.md#spec-shared-value-integrity>)完整访问，发布同步仍须落实并验证，不能用选槽锁代替。
+Host 若要读取 CP 正在配置的槽位并使用其中的地址，应等待该次配置完成；完成确认采用[后附写完成标记命令](#completion-marker)，读到预期序号后还须同步并检查本次结果码，失败与回报故障按[管理结果协议](<./CP_MEC 第一版规格.md#spec-management-result>)处理。单次 32 位寄存器读取返回完整值，跨多个寄存器读取不保证同一时刻的快照。运行期间的进度值已确定为 32 位；共享进度与 64 位完成值按[规格 2.2.1 节](<./CP_MEC 第一版规格.md#spec-shared-value-integrity>)完整访问，发布同步已在完整字段访问、队列连续提交和并发用例中验证；选槽锁只保护选槽窗口的使用顺序。
 
-**[DESIGN]** HQD 的复位和访问规则已在[规格 8.2 节](<./CP_MEC 第一版规格.md#spec-hqd-access-rules>)确定：设备冷复位或整体复位清零 HQD 与 `HQD_SELECT`，CP 单独复位保留 HQD。两个 HQD 入口都采用对齐的 32 位小端访问；运行后 Host 对 HQD 只读，但仍可写选择寄存器查看不同槽位。非法寄存器访问记录到全局 `ERROR_STATUS.INVALID_CMD`，不覆盖队列执行错误。无效选槽保留原选择并报告该全局错误；CP 访问 `0xffff_0400` 这样的未映射地址时交给访存异常处理。这些 HQD 规则已确认，设备实现和固件接入尚待完成。
+**[DESIGN]** HQD 的复位和访问规则已在[规格 8.2 节](<./CP_MEC 第一版规格.md#spec-hqd-access-rules>)确定：设备冷复位或整体复位清零 HQD 与 `HQD_SELECT`，CP 单独复位保留 HQD。两个 HQD 入口都采用对齐的 32 位小端访问；运行后 Host 对 HQD 只读，但仍可写选择寄存器查看不同槽位。非法寄存器访问记录到全局 `ERROR_STATUS.INVALID_CMD`，不覆盖队列执行错误。无效选槽保留原选择并报告该全局错误；CP 访问 `0xffff_0400` 这样的未映射地址时交给访存异常处理。这些 HQD 规则已接入设备与固件，并纳入 CP QTest。
 
 **AMD 窗口参考。** `GRBM_GFX_CNTL` 的选择字段包含 `MEID`、`PIPEID`、`QUEUEID`，并有 `VMID` 字段。驱动先按目标实例选择寄存器段，再选择引擎、管线与队列；用锁保护“选择窗口 → 读写寄存器 → 恢复选择”。选择窗口用于访问一份 HQD，不会因此改变其他槽位的内容或决定设备接下来只能执行这个队列。
 
@@ -600,7 +607,7 @@ KIQ 是由 Host 直接配置 HQD 的首个管理入口，启动时仍按[KIQ 启
 
 驱动须保证 MQD 的物理地址、访问范围和存储寿命有效，CP 通过约定的 Host 访问路径读写。保留 VMID 0 归属本身不会提供页表隔离。第一版也不实现这个寄存器中的其余 AMD 控制字段；访问检查与可见性按实验协议定义，具体规则继续随访存接口细化。
 
-[AMD 取舍清单](#amd-registers)保留该 AMD 参考项及槽内偏移 `0x088`，标记为“不采用”。第二阶段仅支持 VMID 0，非零编号及相关上下文管理属于第三阶段扩展；本节记录的是设计约定，队列功能仍待实现。
+[AMD 取舍清单](#amd-registers)保留该 AMD 参考项及槽内偏移 `0x088`，标记为“不采用”。第二阶段仅支持 VMID 0，非零编号及相关上下文管理属于第三阶段扩展；当前队列代码按这一 VMID 0 约定运行。
 
 <a id="multi-xcc"></a>
 
@@ -946,7 +953,7 @@ KIQ、HIQ 都由内核驱动提交，用户计算包直接保存在用户 AQL Ri
 
 **[DESIGN]** CP 在固件保留区的私有数据中维护每槽占用状态和绑定的 MQD 地址，装载中、已绑定、卸载中和异常尚未清理都算占用。重复映射同一个地址时返回“重复映射”，保留原队列配置和进度；卸载没有当前绑定的地址时返回“队列未映射”，不修改其他槽位。正常卸载须确认访问结束并成功保存状态后才解除绑定；映射失败须确认尚未激活、相关访问结束且部分配置已撤销，才归还槽位，否则保留占用。完整的申请、查重与释放图示见[规格第 4.2 节](<./CP_MEC 第一版规格.md#spec-management-slot-state>)，结果码和返回位置已在[规格第 4.4 节](<./CP_MEC 第一版规格.md#spec-management-result>)确定。
 
-写标记命令命名为 `WRITE_COMPLETION`，携带完成地址与 64 位待写值。完整字段、偏移与卸载查找图示见[规格第 4.1 节](<./CP_MEC 第一版规格.md#spec-management-packet-format>)，这些编号和布局均为实验约定，功能尚待实现。
+写标记命令命名为 `WRITE_COMPLETION`，携带完成地址与 64 位待写值。完整字段、偏移与卸载查找图示见[规格第 4.1 节](<./CP_MEC 第一版规格.md#spec-management-packet-format>)，这些编号和布局均为实验约定，已由固件管理命令解析使用。
 
 启动后，Host 对 HQD 只读，按上述分工提交配置请求。CP 先完成整份配置，再根据它访问队列，不引入 Host 与 CP 在运行期间交替填写地址的流程。Host 仍需准备命令引用的 MQD，并按已确认的 MQD 生命周期规则保持配置字段不变。
 
@@ -1097,7 +1104,7 @@ Host、CP 按[完整访问规则](<./CP_MEC 第一版规格.md#spec-shared-value
 
 管理完成标记针对前面的管理操作。`MAP_QUEUES` 后的标记表示配置处理到达完成点，目标队列中后续 Kernel 的执行结果仍按各自的 Signal 协议判断。
 
-**[BOUNDARY]** 命令组织方式、结果区布局、请求结果码、标记取值和回报故障的等待退出规则均已确认，见[规格第 4.3 节](<./CP_MEC 第一版规格.md#spec-management-marker>)与[第 4.4 节](<./CP_MEC 第一版规格.md#spec-management-result>)，功能尚待实现。队列错误规则见[规格第 7.2 节](<./CP_MEC 第一版规格.md#spec-queue-error-policy>)，失败后的进度处理、等待退出与资源保留见[第 7.3 节](<./CP_MEC 第一版规格.md#spec-failure-retirement>)；强制恢复列入[后续异常恢复扩展](<./QEMU GPGPU 实验大纲.md#stalled-task-recovery-extension>)，正常回收继续遵守已确认的对象寿命条件。完成地址沿用[64 位 Host RAM 物理字节地址](<./CP_MEC 第一版规格.md#spec-address-values>)的编码；`WRITE_COMPLETION` 按原有[32 字节布局](<./CP_MEC 第一版规格.md#spec-management-packet-format>)执行先写结果码、后写 64 位标记的操作。
+**[BOUNDARY]** 命令组织方式、结果区布局、请求结果码、标记取值和回报故障的等待退出规则均已确认，见[规格第 4.3 节](<./CP_MEC 第一版规格.md#spec-management-marker>)与[第 4.4 节](<./CP_MEC 第一版规格.md#spec-management-result>)；固件和驱动已接入该协议。队列错误规则见[规格第 7.2 节](<./CP_MEC 第一版规格.md#spec-queue-error-policy>)，失败后的进度处理、等待退出与资源保留见[第 7.3 节](<./CP_MEC 第一版规格.md#spec-failure-retirement>)；强制恢复列入[后续异常恢复扩展](<./QEMU GPGPU 实验大纲.md#stalled-task-recovery-extension>)，正常回收继续遵守已确认的对象寿命条件。完成地址沿用[64 位 Host RAM 物理字节地址](<./CP_MEC 第一版规格.md#spec-address-values>)的编码；`WRITE_COMPLETION` 按原有[32 字节布局](<./CP_MEC 第一版规格.md#spec-management-packet-format>)执行先写结果码、后写 64 位标记的操作。
 
 **AMD 的可观察完成点。**
 
@@ -1105,7 +1112,7 @@ GC 9.4.3 的 KIQ 驱动在提交队列映射或卸载命令后，调用 Ring 测
 
 同一固定源码基线中的 KFD 卸载路径使用内存标记：先提交 `UNMAP_QUEUES`，再提交携带完成地址与预期值的 `QUERY_STATUS`，随后等待内存出现预期值。驱动在等待结束后还检查 HIQ MQD 中的抢占失败记录，因为所述 MEC 固件可能放弃未及时响应的卸载请求，并将失败队列记入 MQD。
 
-这两条源码路径说明了后续命令提供可观察完成点的用法，也说明完成确认与失败报告需要一起理解。本实验采用[后附写完成标记命令](#completion-marker)的内存标记方案，使用自己已确认的命令编码，错误协议按实验规格第 7 节的已确认规则执行，功能尚待实现。
+这两条源码路径说明了后续命令提供可观察完成点的用法，也说明完成确认与失败报告需要一起理解。本实验采用[后附写完成标记命令](#completion-marker)的内存标记方案，使用自己已确认的命令编码，固件和驱动已按实验规格第 7 节接入错误协议。
 
 > **[SOURCE]** 以下源码均为仓库固定 Linux 版本 `248951ddc14de84de3910f9b13f51491a8cd91df`：
 >
@@ -1145,7 +1152,7 @@ Host 首次配置 KIQ 时填写 `0`。后续由 KIQ 建立 HIQ、由 HIQ 建立�
 
 **[DESIGN]** 队列格式同时确定固定包槽的大小：管理 Ring 每槽 32 字节，用户 AQL Ring 每槽 64 字节，一条命令完整占用一个槽。两类包都不跨越 Ring 末尾；末槽处理完后回到槽 0，继续使用原内存。
 
-创建 AQL Ring 时，各槽 Header 初始化为 `INVALID`。Host 根据消费回报复用旧槽；CP 根据新的可消费范围和发布状态判断能否取包，遇到 `INVALID` 继续等待。管理 Ring 按管理命令的发布协议判断可读范围。256 字节 Ring 的包槽图与完整约定见[规格 5.1 节](<./CP_MEC 第一版规格.md#spec-ring-packet-boundaries>)；进度编码见[规格 5.2.1 节](<./CP_MEC 第一版规格.md#spec-ring-progress>)，具体发布顺序已按规格 9.4.4、9.4.5 确认，功能尚待实现。
+创建 AQL Ring 时，各槽 Header 初始化为 `INVALID`。Host 根据消费回报复用旧槽；CP 根据新的可消费范围和发布状态判断能否取包，遇到 `INVALID` 继续等待。管理 Ring 按管理命令的发布协议判断可读范围。256 字节 Ring 的包槽图与完整约定见[规格 5.1 节](<./CP_MEC 第一版规格.md#spec-ring-packet-boundaries>)；进度编码见[规格 5.2.1 节](<./CP_MEC 第一版规格.md#spec-ring-progress>)，具体发布顺序已按规格 9.4.4、9.4.5 接入提交辅助代码与固件。
 
 `0` 只表示非 AQL，不能单独用于区分 KIQ 和 HIQ；两者仍按已确定的槽位分工承担各自的管理任务。本版支持的非 AQL 命令范围另按管理命令协议确定，填写 `0` 不表示支持 AMD 的全部 PM4 命令。
 
@@ -1261,7 +1268,7 @@ S1 保存在所属应用上下文独立的 Signal 区中，该区域可以作为
 
 **[DESIGN]** Signal、管理完成标记和通知槽中的 64 位字段采用至少 8 字节对齐的完整 64 位读写，W_A、R_A 按完整的 32 位值访问。Host、CP 与 QEMU 后端须共同保证读取方取得完整旧值或完整新值，不采用拆分高低 32 位后反复拼接的协议。规则与图示见[规格 2.2.1 节](<./CP_MEC 第一版规格.md#spec-shared-value-integrity>)，队列接入时还须核对最终内存访问并验证读写交错。
 
-**[BOUNDARY]** 这里说明存储归属与正常成功路径。[Signal 的单一更新者规则](<./CP_MEC 第一版规格.md#spec-signal-single-writer>)已确定：一次使用对应一个任务，Host 提交前置 `1`，提交后只读，由 CP 完成时减为 `0`。布局与通知按[规格 9.5.4](<./CP_MEC 第一版规格.md#spec-signal-completion-protocol>)执行，可见性操作按[规格 6.4 节](<./CP_MEC 第一版规格.md#spec-dispatch-visibility>)接入；资源回收和失败等待退出已按规格 9.6、9.7 确认，尚待实现。一致性分配处理缓存可见性，完整字段读写与发布顺序仍须实现和验证。已有分配方法及 Linux 依据见[Ring 与 MQD 的分配和访问](#ring-mqd-storage)。
+**[BOUNDARY]** 这里说明存储归属与正常成功路径。[Signal 的单一更新者规则](<./CP_MEC 第一版规格.md#spec-signal-single-writer>)已确定：一次使用对应一个任务，Host 提交前置 `1`，提交后只读，由 CP 完成时减为 `0`。布局与通知按[规格 9.5.4](<./CP_MEC 第一版规格.md#spec-signal-completion-protocol>)执行，可见性操作已按[规格 6.4 节](<./CP_MEC 第一版规格.md#spec-dispatch-visibility>)接入；资源回收和失败等待退出已按规格 9.6、9.7 接入驱动与接口库。一致性分配仍需配合完整字段访问和发布屏障，Linux 端到端验证见[大纲](<./QEMU GPGPU 实验大纲.md#stage-two-implementation-results>)。已有分配方法及 Linux 依据见[Ring 与 MQD 的分配和访问](#ring-mqd-storage)。
 
 #### 4.3.2 进度数值与访存地址
 
@@ -1326,7 +1333,7 @@ Queue A 的 HQD
 
 Doorbell 通知有包发布。第一版 CP 每次轮到检查活跃队列时，重新读取软件写进度并保存到固件变量；即使写进度未变，也要复查当前尚未发布的 Header。队列为空或当前包仍为 `INVALID` 时，CP 先检查其他队列，下一轮再复查，具体规则见[规格 5.2.3 节](<./CP_MEC 第一版规格.md#spec-doorbell-notification>)。新读到的写进度只更新固件掌握的生产进度，消费位置仍由 CP 按消费协议推进。
 
-本实验将两个进度值放在每条队列独立分配的 Host RAM 进度区中，与 Ring 命令区分开。图中地址均为假定的设备可访问地址；Host 通过自己的映射访问同一内存，不要求双方使用相同的虚拟地址。进度地址保留完整的 64 位，进度数值使用 32 位，两处存放位置均至少按 8 字节对齐。完整字段访问已按[规格 2.2.1 节](<./CP_MEC 第一版规格.md#spec-shared-value-integrity>)确定，接入与验证尚未完成；用户 AQL 的多生产者主方案已按[规格 9.4.4](<./CP_MEC 第一版规格.md#spec-ring-submitters>)确认，Header 的完整 32 位访问、管理 Ring 的串行发布及取号约束也已确认，仍须接入和验证。
+本实验将两个进度值放在每条队列独立分配的 Host RAM 进度区中，与 Ring 命令区分开。图中地址均为假定的设备可访问地址；Host 通过自己的映射访问同一内存，不要求双方使用相同的虚拟地址。进度地址保留完整的 64 位，进度数值使用 32 位，两处存放位置均至少按 8 字节对齐。完整字段访问已按[规格 2.2.1 节](<./CP_MEC 第一版规格.md#spec-shared-value-integrity>)接入，动态 64 位值的完整性已有并发 QTest 验证。用户 AQL 的取号辅助代码、Header 的完整 32 位发布和管理 Ring 的串行发布已按[规格 9.4.4](<./CP_MEC 第一版规格.md#spec-ring-submitters>)实现；Linux 多生产者测试仍待端到端验收。
 
 本例中已预留但尚未归还的编号数量为 `(5 - 3) mod 2^32 = 2`，当前窗口还剩 `8 - 2 = 6` 个未预留位置；即使包 3、4 的 Header 尚为 `INVALID`，这两个编号也已被预留。用户 AQL 采用先取号、再等空槽的规则，其他情况下差值可以大于槽数，不能仅凭这一点报错，也不能继续把 `N - D` 当作通用可用槽数。每个线程按自己的编号等待 `(P - R) mod 2^32 < N`，再取得旧槽的复用权。包编号按模 `2^32` 累加，取槽时按槽数取模；满队列、在途预留限制和跨计数溢出的图示见[规格 5.2.1 节](<./CP_MEC 第一版规格.md#spec-ring-progress>)。
 
@@ -1443,7 +1450,7 @@ CP 继续处理 Queue A
 
 首次配置 KIQ 或从 MQD 恢复队列时，需要按配置、恢复协议设置初始消费位置；上述规则约束的是队列运行期间的新通知。`CP_HQD_PQ_RPTR` 继续保留，`CP_HQD_AQL_DISPATCH_ID / HI` 继续不采用。
 
-**[BOUNDARY]** 上述示例说明本实验已确认的通知与消费规则，Doorbell 和队列功能尚待实现。CP 按[进度读取流程](#ring-progress)从内存取得生产进度并保存到变量，消费位置按[包槽回收时序](#consumption)推进；进度按 32 位无符号包编号、模 `2^32` 规则表示，见[规格 5.2.1 节](<./CP_MEC 第一版规格.md#spec-ring-progress>)。每次检查队列时重读 `W` 是本实验的选择，不能由此推定 AMD 固件也按同样方式轮询。
+**[BOUNDARY]** 上述通知与消费规则已接入 Doorbell 设备回调和 CP 固件。CP 按[进度读取流程](#ring-progress)从内存取得生产进度并保存到变量，消费位置按[包槽回收时序](#consumption)推进；进度按 32 位无符号包编号、模 `2^32` 规则表示，见[规格 5.2.1 节](<./CP_MEC 第一版规格.md#spec-ring-progress>)。每次检查队列时重读 `W` 是本实验的选择，不能由此推定 AMD 固件也按同样方式轮询。
 
 AMD 的 ROCr 接口允许 `HSA_QUEUE_TYPE_MULTI` 队列的 Doorbell 通知值不按递增顺序写入。普通硬件 Doorbell 路径使用 64 位写入，通知值为已发布包的编号，批量通知可使用本批最后一个编号。
 
@@ -1498,7 +1505,7 @@ CP 已经找到有效 Dispatch，接下来需要从描述对象取得启动信�
 
 **[DESIGN]** 第一版暂不采用这四个寄存器。裸机 CP 固件按固定规则轮流选择用户队列，每次提交一个完整 Dispatch，等待它执行完后再选择下一条队列。
 
-**[BOUNDARY]** 本节记录教学设备的目标执行方案；当前代码能力见[现有实现](#implementation)，不能据此推断 AMD MEC 内部实现。
+**[BOUNDARY]** 本节说明教学设备已接入的队列调度方式；运行验证状态见[现有实现](#implementation)，不能据此推断 AMD MEC 内部实现。
 
 本方案使用一个 RV64 CP 和现有计算执行器，计算执行器一次处理一个 Dispatch。HQD 槽位 0、1 分别用于 KIQ、HIQ，槽位 2、3 分配给动态创建的用户队列。以下把当前分配到两个用户槽位的队列记作 A、B；CP 按槽位检查命令，并决定下一次提交谁的任务。
 
@@ -1533,7 +1540,7 @@ B 没有任务时，CP 跳过 B，继续处理 A。CP 不守着空队列等待�
 
 固件可以用 `next_queue` 这样的软件变量记录下次先检查槽位 2 还是槽位 3，无需增加可配置的优先级或时间片寄存器。本例中 A、B 的 HQD 可以始终保持驻留；从处理 A 改为处理 B 时，CP 改为读取 B 的 HQD 和 Ring，无需因此把 A 换出、把 B 换入。
 
-正常成功路径在 Dispatch 完成并发布 Signal 后，释放原 Ring 包槽、推进并回报读进度，具体时序见[Dispatch 完成后的包槽回收时序](#consumption)。Signal 操作和结果可见性的屏障已按[规格 9.5.4](<./CP_MEC 第一版规格.md#spec-signal-completion-protocol>)、[9.5.5](<./CP_MEC 第一版规格.md#spec-task-visibility>)确定，尚待接入执行器和访存接口；失败后按[规格第 7.3 节](<./CP_MEC 第一版规格.md#spec-failure-retirement>)停止正常收尾并保留已有状态。
+正常成功路径在 Dispatch 完成并发布 Signal 后，释放原 Ring 包槽、推进并回报读进度，具体时序见[Dispatch 完成后的包槽回收时序](#consumption)。Signal 操作和结果可见性的屏障已按[规格 9.5.4](<./CP_MEC 第一版规格.md#spec-signal-completion-protocol>)、[9.5.5](<./CP_MEC 第一版规格.md#spec-task-visibility>)接入执行器和访存接口；失败后按[规格第 7.3 节](<./CP_MEC 第一版规格.md#spec-failure-retirement>)停止正常收尾并保留已有状态。
 
 第一版先采用最简单的等待方式：提交任务后，CP 轮询计算执行器的完成状态，期间暂不处理 A、B、KIQ、HIQ 中的其他命令。计算执行器继续推进当前任务；阻塞的是 CP 固件对后续队列命令的处理。Host 在 Ring 有空位时仍可继续发布命令。
 
@@ -1574,7 +1581,7 @@ AMD/HSA 的 Packet Processor 是处理队列包的协议角色。在 MI300X 的�
 
 **[DESIGN]** CP 从 Packet 和 Kernel 描述对象取得代码入口、参数位置及执行维度，并按本版接口启动计算。当前阶段不引入设备虚拟地址：Kernel 描述对象、代码和数组用 VRAM 字节偏移定位，Host RAM 参数块在 DMA 直通配置下用物理地址定位。带具体数值的完整关系图见[规格第 2.3 节](<./CP_MEC 第一版规格.md#spec-kernel-data-storage>)。
 
-**[DESIGN]** 本版保留现有计算分发寄存器及其 PCIe BAR 映射，正常任务改由 CP 访问这些接口。16 字节描述对象和计算线程的只读参数窗口见[规格 6.2 节](<./CP_MEC 第一版规格.md#spec-kernel-descriptor>)；CP 按 `0xfffd_0000 + BAR0 字节偏移` 访问同一份分发状态，长度交付、执行状态和结果确认已按[规格 6.3 节](<./CP_MEC 第一版规格.md#spec-executor-dispatch>)确定。现有同步派发代码尚未接入这条固件调用路径。
+**[DESIGN]** 本版保留现有计算分发寄存器及其 PCIe BAR 映射，正常任务改由 CP 访问这些接口。16 字节描述对象和计算线程的只读参数窗口见[规格 6.2 节](<./CP_MEC 第一版规格.md#spec-kernel-descriptor>)；CP 按 `0xfffd_0000 + BAR0 字节偏移` 访问同一份分发状态，长度交付、执行状态和结果确认已按[规格 6.3 节](<./CP_MEC 第一版规格.md#spec-executor-dispatch>)确定。当前设备已接入这条固件调用路径，旧 Host 同步路径继续独立回归。
 
 CP 读取描述对象后，把代码入口写入原有 `KERNEL_ADDR`，把完整 Host 参数地址写入 `KERNEL_ARGS`，再通过新增的 `KERNEL_CODE_SIZE`、`KERNEL_ARGS_SIZE` 写入两个长度。长度用于取指和参数访问的实际范围检查；代码、参数内容仍由执行器读取。CP 在 `IDLE` 填完工作组配置等字段并保证写入顺序后，最后向原有 `DISPATCH` 写 `1`，设备统一保存本次配置并执行。
 
@@ -1599,7 +1606,7 @@ AQL 的 `grid_size` 是各轴的线程数量，现有执行器的 `grid_dim` 是
 > - [2959–3070 行](vscode://file/home/book/1.project/gpu_study/2.%E6%BA%90%E7%A0%81/rocr-runtime/runtime/hsa-runtime/inc/hsa.h:2959:1)定义 `hsa_kernel_dispatch_packet_t`，其中 `grid_size` 以 work-item 计数，`workgroup_size` 表示每组尺寸。
 > - [2810–2863 行](vscode://file/home/book/1.project/gpu_study/2.%E6%BA%90%E7%A0%81/rocr-runtime/runtime/hsa-runtime/inc/hsa.h:2810:1)定义包类型和 fence scope 编码；[2872–2954 行](vscode://file/home/book/1.project/gpu_study/2.%E6%BA%90%E7%A0%81/rocr-runtime/runtime/hsa-runtime/inc/hsa.h:2872:1)定义 Header、setup 的位域。
 >
-> **[SOURCE]** 实验子仓库固定版本 `57543dd54b6b046b888277272fa84af81746b1ac`：[hw/gpgpu/gpgpu_core.h](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu_core.h:31:1)的 [31–34 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu_core.h:31:1)定义规模上限；[hw/gpgpu/gpgpu_core.c](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu_core.c:570:1)的 [570–628 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu_core.c:570:1)使用 `grid_dim` 遍历工作组，并按 `block_dim` 计算每组线程数。这段代码是现有执行器，AQL 校验和尺寸换算的固件接入尚待实现。
+> **[SOURCE]** 实验子仓库固定版本 `57543dd54b6b046b888277272fa84af81746b1ac`：[hw/gpgpu/gpgpu_core.h](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu_core.h:31:1)的 [31–34 行](vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu_core.h:31:1)定义规模上限；[hw/gpgpu/gpgpu_core.c](https://github.com/hxfei-git/gpu-study-qemu/blob/57543dd54b6b046b888277272fa84af81746b1ac/hw/gpgpu/gpgpu_core.c#L570)的 [570–628 行](https://github.com/hxfei-git/gpu-study-qemu/blob/57543dd54b6b046b888277272fa84af81746b1ac/hw/gpgpu/gpgpu_core.c#L570-L628)使用 `grid_dim` 遍历工作组，并按 `block_dim` 计算每组线程数。这段历史同步代码说明原有执行规模和遍历方式；当前固件已接入 AQL 校验及尺寸换算。
 
 运行时已经在 Host RAM 参数块中填入 X、Y、Z 的 VRAM 偏移和 N。CP 找到 Dispatch 后，目标访问过程如下；执行器读取参数的 Host 访存路径仍需新增：
 
@@ -1622,9 +1629,9 @@ RV32 计算执行器保存本次 Host 参数基址和长度，从 VRAM 读取 Ke
 
 计算执行器保存完整的 64 位 Host 参数基址和 32 位实际长度。计算线程从 `a0 = 0x9000_0000` 开始，通过 `0x9000_0000～0x9000_ffff` 的只读窗口访问参数；执行器检查实际长度和地址加法后，再按完整 Host 地址读取。窗口只接受对齐的 4 字节整数或浮点读取，写入窗口、越界或 Host 读取失败都按任务失败处理。描述对象非法和取指越界采用同样的队列失败规则，不发布成功 Signal。布局、换算示例及资源寿命见[规格 6.2 节](<./CP_MEC 第一版规格.md#spec-kernel-descriptor>)。
 
-**[BOUNDARY]** 当前同步路径仍把 VRAM 参数偏移写入各 lane 的 32 位 `a0`，计算执行器尚无 Host RAM 参数读取分支。原生 CP 已是 RV64，已有 Host 窗口只接在 CP 自己的地址空间；上述计算线程窗口、CP 分发寄存器和执行结果接口均已确认，尚待实现。Signal 布局与等待登记已按[规格 9.5.4](<./CP_MEC 第一版规格.md#spec-signal-completion-protocol>)确认，队列错误码和基本失败收尾已按规格 9.6 确认，执行器细分错误枚举在接入时补齐。这里的描述对象、参数窗口和分发接口是实验设计，不规定 AMD 的默认参数位置或寄存器布局。
+**[BOUNDARY]** 同步路径仍把 VRAM 参数偏移写入各 lane 的 32 位 `a0`；队列路径已使用上述只读 Host 参数窗口。原生 CP 的 Host 窗口与计算线程的参数窗口分别服务于固件访存和 Kernel 读参。CP 分发、执行结果、Signal 更新、等待登记及基本错误处理均已接入；设备与固件 QTest 已验证相关路径，Linux 新内核五组端到端测试也已通过，状态见[大纲](<./QEMU GPGPU 实验大纲.md#stage-two-implementation-results>)。这里的描述对象、参数窗口和分发接口是实验设计，不规定 AMD 的默认参数位置或寄存器布局。
 
-> **[SOURCE] 当前参数访问的源码依据**：实验子仓库固定提交 `57543dd54b6b046b888277272fa84af81746b1ac`。以下执行器代码在 CP 迁移中保持原有行为。
+> **[SOURCE] 历史同步参数访问的源码依据**：实验子仓库固定提交 `57543dd54b6b046b888277272fa84af81746b1ac`。以下代码记录该基线的同步参数路径，当前队列路径另有 Host 参数窗口。
 >
 > - 派发前检查代码和参数均位于 VRAM：[hw/gpgpu/gpgpu_dispatch.c](https://github.com/hxfei-git/gpu-study-qemu/blob/57543dd54b6b046b888277272fa84af81746b1ac/hw/gpgpu/gpgpu_dispatch.c#L14-L32)，[14–32 行](https://github.com/hxfei-git/gpu-study-qemu/blob/57543dd54b6b046b888277272fa84af81746b1ac/hw/gpgpu/gpgpu_dispatch.c#L14-L32)。
 > - 计算解释器读取 VRAM 或内建控制窗口，尚无 Host RAM 读取分支：[hw/gpgpu/gpgpu_core.c](https://github.com/hxfei-git/gpu-study-qemu/blob/57543dd54b6b046b888277272fa84af81746b1ac/hw/gpgpu/gpgpu_core.c#L134-L178)，[134–178 行](https://github.com/hxfei-git/gpu-study-qemu/blob/57543dd54b6b046b888277272fa84af81746b1ac/hw/gpgpu/gpgpu_core.c#L134-L178)。
@@ -1675,7 +1682,7 @@ Host RAM 中的参数块
        └─ 线程 1：读取 X[1] = 20 → 计算 43 → 写入 Y[1]
 ```
 
-**[DESIGN]** 各线程可以读取同一个参数值，把 `a`、`b` 和计算结果保存在自己的执行状态中。这个例子没有线程间交换中间结果的需求，无需先把 `b` 放进工作组共享存储。图中 Host RAM 参数读取仍是待接入路径，现有执行器继续按[参数访问说明](#kernel-argument-access)从 VRAM 读取参数。
+**[DESIGN]** 各线程可以读取同一个参数值，把 `a`、`b` 和计算结果保存在自己的执行状态中。这个例子没有线程间交换中间结果的需求，无需先把 `b` 放进工作组共享存储。图中 Host RAM 参数读取已接入队列执行器；同步路径仍按[参数访问说明](#kernel-argument-access)使用 VRAM 参数。
 
 AMD 的 VGPR 位于计算单元内部，按 wave 分配使用，每个 lane 保存对应线程的值；SGPR 保存 wave 共用的标量值。只读参数可以由每个 wave 读取并保存在 SGPR 中，具体是否转入 VGPR 由生成的指令决定。多个 wave 可以各自持有内容相同的 `b`。
 
@@ -1767,9 +1774,9 @@ A57 运行时：完整读到 Signal = 0 → dmb sy → 读取或复制结果
 
 图中的 CP `fence` 均为 `fence iorw, iorw`；Host 和 CP 的屏障封装都须带编译器内存约束。Host 仍先原子预留编号，再等待对应槽可复用，Header 发布才交付包体。代码、描述对象和输入的 VRAM 上传须成功完成后才能发布；结果复制若使用 DMA，也须完成后才能使用 Host 缓冲区。
 
-执行器跨线程传递配置、结果和终态时，用锁或 release/acquire 同步；CP 每次 Host 访问成功后才继续后续发布。后端须实际完成写回并保证可见，不能用固件屏障代替这些条件。Host 无论在短暂轮询期间还是阻塞唤醒后读到完成，都先复查 Signal 并执行完成读取的同步。接入时用每轮不同的输入和预期结果验证连续提交，核对参数、输入和输出均属于相应任务。
+执行器跨线程传递配置、结果和终态时，用锁或 release/acquire 同步；CP 每次 Host 访问成功后才继续后续发布。后端须实际完成写回并保证可见，不能用固件屏障代替这些条件。Host 无论在短暂轮询期间还是阻塞唤醒后读到完成，都先复查 Signal 并执行完成读取的同步。Linux 队列测试已编写逐轮改变输入的连续提交检查，用于核对参数、输入和输出是否属于相应任务；运行结果统一记在[大纲](<./QEMU GPGPU 实验大纲.md#stage-two-implementation-results>)。
 
-**[BOUNDARY]** 上述流程是本实验已确认、尚待实现的可见性协议。Header 的完整 32 位访问、先恢复 `INVALID` 再回报 `R`，以及管理 Ring 的串行发布均已按 9.4.4 确认；后端同步和动态字段完整访问仍须实现并验证。原有成功顺序与 Host RAM 参数地址约定继续沿用。
+**[BOUNDARY]** 上述可见性协议已接入：Header 采用完整 32 位访问，固件先恢复 `INVALID` 再回报 `R`，驱动串行发布管理命令对。后端已补齐完整字段读写和结果发布同步，并通过设备与固件 QTest；Linux 队列程序的连续提交与并发检查已在新内核上通过。
 
 若以后支持 Barrier Packet，它的 acquire 位于依赖满足之后，不能提前到等待依赖之前。
 
@@ -1880,7 +1887,7 @@ AMD/HSA 的正常完成语义是对非空 completion Signal 原子减一。一�
 
 例如事件 7 的通知先到，驱动先记住“已通知”，后来的等待请求就直接返回复查 Signal；线程先等待时，驱动登记等待者后再次检查条件，尚未通知才睡眠。通知方先保存状态再唤醒，通知处理与等待登记须正确同步。完整流程和交错图见[通知槽与等待登记](<./CP_MEC 第一版规格.md#spec-signal-notify-wait>)，原有 `1 → 0`、约 `200 μs` 主动轮询及 IH 交付顺序继续沿用。
 
-**[BOUNDARY]** 上面的 AMD/ROCr 对象关联与代码作为参考，本实验的 Signal 布局和等待协议以规格第 2.5 节为准，不推定两者格式相同。9.5.4 与[9.5.5](<./CP_MEC 第一版规格.md#spec-task-visibility>)均已确认；事件与通知槽的管理接口已按[9.7.4](<./CP_MEC 第一版规格.md#spec-hsakmt-event>)确认，并遵守[旧 IH 记录的对象寿命规则](<./CP_MEC 第一版规格.md#spec-ih-object-lifetime>)。当前实验不引入设备虚拟地址或页表翻译，Signal、等待、通知与可见性协议仍待实现和验证。
+**[BOUNDARY]** 上面的 AMD/ROCr 对象关联与代码作为参考，本实验的 Signal 布局和等待协议以规格第 2.5 节为准，不推定两者格式相同。9.5.4 与[9.5.5](<./CP_MEC 第一版规格.md#spec-task-visibility>)均已确认；事件与通知槽的管理接口已按[9.7.4](<./CP_MEC 第一版规格.md#spec-hsakmt-event>)确认，并遵守[旧 IH 记录的对象寿命规则](<./CP_MEC 第一版规格.md#spec-ih-object-lifetime>)。当前实验不引入设备虚拟地址或页表翻译，Signal、等待、通知与可见性代码均已接入，Linux 新内核的五组队列端到端验收已通过。
 
 > **[SPEC]** [HSA System Architecture 1.2](https://hsafoundation.com/wp-content/uploads/2021/02/HSA-SysArch-1.2.pdf)，**2018-05-02**，§2.9.2、原文第 26～27 页，规定完成阶段的原子递减。
 
@@ -2072,7 +2079,7 @@ Host 查询 Queue A 的错误
 
 **[DESIGN]** 用户队列故障停止该队列后续取包，HIQ 故障停止 HIQ，其他正常队列继续处理；KIQ 实际通道故障或 CP 固件代码、栈等异常停止全部新取包与新派发。CP 清除出错队列的 `ACTIVE`，保留异常占用和 MQD 绑定。访问失败后不自动重放整个任务，也不盲目重试完成更新。错误通知采用[简化 IH 通路](<./CP_MEC 第一版规格.md#spec-ih-notification>)：CP 保存首次错误，队列第一次进入故障状态时提交一次 `QUEUE_ERROR`；IH 写入 Host RAM 后发布进度并通知 Host。驱动用完整 `mqd_addr` 找到原 Queue 对象，直接从 `data` 取得错误值；MQD 的 `saved_error` 仍在卸载时保存。
 
-IH 的容量、32 字节记录、七个管理寄存器、CP 同步提交和故障处理方向均已确认，完整字段与流程图见上述规格。IH 自身无法交付记录时，经已有 `IRQ_ERROR` 通知 Host；旧通知及后续处理结束前，不能复用 MQD 地址和事件编号。失败收尾按[规格第 7.3 节](<./CP_MEC 第一版规格.md#spec-failure-retirement>)执行：驱动保存故障、唤醒相关等待者，以错误结束尚未完成的等待，相关资源继续保留。具体软件接口已按[9.7](<./CP_MEC 第一版规格.md#spec-host-api-scope>)确认，故障复位恢复留作后续扩展，功能尚待实现；释放前须确认设备访问及旧通知处理结束。
+IH 的容量、32 字节记录、七个管理寄存器、CP 同步提交和故障处理方向均已确认，完整字段与流程图见上述规格。IH 自身无法交付记录时，经已有 `IRQ_ERROR` 通知 Host；旧通知及后续处理结束前，不能复用 MQD 地址和事件编号。失败收尾按[规格第 7.3 节](<./CP_MEC 第一版规格.md#spec-failure-retirement>)执行：驱动保存故障、唤醒相关等待者，以错误结束尚未完成的等待，相关资源继续保留。具体软件接口已按[9.7](<./CP_MEC 第一版规格.md#spec-host-api-scope>)接入，释放前须确认设备访问及旧通知处理结束；故障复位恢复仍留作后续扩展。
 
 **[DESIGN]** 下列情况沿本版的取包、校验、执行和回报流程解释主要异常，编号以[规格第 7.2.1 节](<./CP_MEC 第一版规格.md#spec-queue-error-codes>)的完整清单为准。以下列表的顺序不是错误编号；这些是教学设备需要覆盖的场景，不代表 AMD 同名寄存器的分类或编码，也不是已运行验证的故障记录。
 
@@ -2146,7 +2153,7 @@ AMD GC 9.4.3 的公开定义中，`AQL_ERROR` 位于 bit 5，`PQ_UTCL1_ERROR` �
 
 设备级复位、CP 单独复位和队列卸载的作用范围也不同。CP 单独复位保留原 DMA、派发与中断状态，不能据此宣布所有设备访问均已停止。Host 看到错误寄存器、超时或 `ACTIVE = 0` 后，仍要完成规定的停止和清理流程，才能解除映射并释放内存。
 
-**[BOUNDARY]** 正常卸载前排空的规则已确认，功能尚待实现；故障队列的清理不要求先排空，按已确认的错误协议结束尚未完成的等待并保留资源。取消未执行任务、保留未执行任务跨卸载续跑列为[后续扩展](<./QEMU GPGPU 实验大纲.md#queue-unmap-extension>)。第一版不支持执行中途保存恢复，不能把 AMD 支持的全部卸载方式当成本版能力。
+**[BOUNDARY]** 正常卸载前排空的复核与卸载协议已接入驱动和固件；故障队列的清理不要求先排空，按已确认的错误协议结束尚未完成的等待并保留资源。取消未执行任务、保留未执行任务跨卸载续跑列为[后续扩展](<./QEMU GPGPU 实验大纲.md#queue-unmap-extension>)。第一版不支持执行中途保存恢复，不能把 AMD 支持的全部卸载方式当成本版能力。
 
 驱动还要处理设备访问之外的软件引用。以下两条失败路径沿用已经确定的访问结束与引用保护条件；HSAKMT 风格接口的已确认约定见[规格 9.7](<./CP_MEC 第一版规格.md#spec-host-api-scope>)：
 
@@ -2163,9 +2170,9 @@ AMD GC 9.4.3 的公开定义中，`AQL_ERROR` 位于 bit 5，`PQ_UTCL1_ERROR` �
   → 满足释放条件后，才回收或重新分配对应资源
 ```
 
-**[DESIGN]** 创建失败的回滚、映射与对象引用保护，以及等待时释放其他必要操作所需的锁，都是实现时必须满足的条件。旧 Doorbell 映射仍可访问时，不能把对应入口交给新的队列。[规格 9.7.3](<./CP_MEC 第一版规格.md#spec-hsakmt-queue>)确定由调用方先排空，再请求驱动卸载；库不承担高层任务同步。[9.7.4](<./CP_MEC 第一版规格.md#spec-host-object-release>)集中说明事件释放与正常退出，接口行为已确认、功能尚待实现。驱动管理它已知的对象引用，调用方负责保留不透明参数中引用的代码和数据；强制撤销旧映射及异常退出后的强制恢复继续留作扩展。
+**[DESIGN]** 创建失败的回滚、映射与对象引用保护，以及等待时释放其他必要操作所需的锁，已接入当前队列驱动。旧 Doorbell 映射仍可访问时，不能把对应入口交给新的队列。[规格 9.7.3](<./CP_MEC 第一版规格.md#spec-hsakmt-queue>)确定由调用方先排空，再请求驱动卸载；库不承担高层任务同步。[9.7.4](<./CP_MEC 第一版规格.md#spec-host-object-release>)集中说明事件释放与正常退出，接口已接入，Linux 生命周期测试已通过未排空拒绝、正常卸载与重建、旧映射和旧事件保活、异常退出保留等检查。驱动管理它已知的对象引用，调用方负责保留不透明参数中引用的代码和数据；强制撤销旧映射及异常退出后的强制恢复继续留作扩展。
 
-旧 Host 同步 `LAUNCH` 路径只用于独立回归，正常队列路径由 CP 提交计算，这个边界已按[规格 6.3 节](<./CP_MEC 第一版规格.md#spec-executor-dispatch>)确定。Host 按[完成可见性协议](<./CP_MEC 第一版规格.md#spec-dispatch-visibility>)确认任务成功后，可以保持 Queue 存在并读回结果；内存释放仍须等相关对象最后一次访问结束。原草案中“一律返回 `-EBUSY`、销毁队列后才读回结果”的策略不采用。具体软件调用按 9.7 的已确认方案接入，故障复位恢复仍留作扩展。
+旧 Host 同步 `LAUNCH` 路径只用于独立回归，正常队列路径由 CP 提交计算，这个边界已按[规格 6.3 节](<./CP_MEC 第一版规格.md#spec-executor-dispatch>)确定。Host 按[完成可见性协议](<./CP_MEC 第一版规格.md#spec-dispatch-visibility>)确认任务成功后，可以保持 Queue 存在并读回结果；内存释放仍须等相关对象最后一次访问结束。原草案中“一律返回 `-EBUSY`、销毁队列后才读回结果”的策略不采用。具体软件调用已按 9.7 的约定接入，故障复位恢复仍留作扩展。
 
 ## 7. 未采用的内部处理接口
 
@@ -2311,7 +2318,7 @@ CP_HQD_OFFLOAD
 
 本节对应 `CP_HQD_SEMA_CMD`，AMD 偏移为 `0x125f`，[AMD 取舍清单](#amd-registers)中的槽内偏移为 `0x068`。
 
-**[DESIGN]** 第一版不采用这个寄存器。固件需要的本地操作结果与等待状态可以用普通变量保存；完成 Signal 的更新仍通过内存访问接口实现。
+**[DESIGN]** 第一版不采用这个寄存器。固件已用普通变量保存本地操作结果与等待状态，并通过内存访问接口更新完成 Signal。
 
 假设处理单元 A 必须等 B 准备好数据，才能继续。下面用普通的同步等待说明两类信息的区别，不代表 MI300X 的实际寄存器更新流程：
 
@@ -2346,7 +2353,7 @@ CP_HQD_SEMA_CMD
 
 **[BOUNDARY]** 当前证据尚不能确定 `RETRY` 是请求重试还是记录重试状态，也不能确定 `RESULT` 的四种编码分别代表什么。字段由谁更新、谁读取、何时清除，以及哪些信号量命令或 AQL 操作会经过这里，都仍待核实。因此，不能据此推断每次更新完成 Signal 都需要读写这个寄存器。
 
-**[DESIGN]** CP 的本地结果与等待状态可由变量保存；Host 观察的完成 Signal 仍在共享内存中，按[Signal 与同步约定](#signal)更新。第一版不仿造尚未明确的 `RETRY`／`RESULT` 编码。
+**[DESIGN]** CP 已在固件变量中保存本地结果与等待状态；Host 观察的完成 Signal 仍在共享内存中，按[Signal 与同步约定](#signal)更新。第一版不仿造尚未明确的 `RETRY`／`RESULT` 编码。
 
 <a id="msg"></a>
 
@@ -2430,7 +2437,7 @@ GC 9.4.3 的公开头文件为每个寄存器定义了一个完整的 32 位字�
 
 **[DESIGN]** 第一版不实现这四个 HQD 状态字段，也不增加专门的原子读改写接口。Signal 保留 64 位值，按[单一更新者规则](<./CP_MEC 第一版规格.md#spec-signal-single-writer>)使用普通窗口读写：Host 提交前置 `1`，提交后只读，由 CP 完成时减为 `0`。
 
-上述简化依赖执行期间只有 CP 更新 `value`。完整的 64 位读写和结果发布顺序仍须保证；如果以后引入多个并发更新者，再按[原子操作扩展](#signal-atomic-extension)增加对应能力。AMD 寄存器的原始定义和参考示例不受这一实验取舍影响。
+上述简化依赖执行期间只有 CP 更新 `value`。当前后端与固件已接入完整的 64 位读写和结果发布顺序；如果以后引入多个并发更新者，再按[原子操作扩展](#signal-atomic-extension)增加对应能力。AMD 寄存器的原始定义和参考示例不受这一实验取舍影响。
 
 [AMD 取舍清单](#amd-registers)保留四行 AMD 参考项及其偏移，均标记为“不采用”，并共同链接到本节。
 
@@ -2638,7 +2645,7 @@ OA 指有序追加相关资源。该寄存器的字段主要围绕资源需求�
 
 ## 9. 后续扩展
 
-第一版先按完整 Dispatch 阻塞执行，所有队列的 VMID 固定为 0。多 VMID 与地址隔离列为第三阶段扩展；后续增加管理响应、优先级和 Kernel 中途切换时，要先补齐执行器与固件之间的运行接口，再决定是否需要新的状态字段。实验推进安排只在[大纲](<./QEMU GPGPU 实验大纲.md>)维护。
+第一版先按完整 Dispatch 阻塞执行，所有队列的 VMID 固定为 0。多 VMID 与地址隔离列为第三阶段扩展；后续增加管理响应、优先级和 Kernel 中途切换时，需要扩展当前执行器与固件之间的运行接口，再决定是否需要新的状态字段。实验推进安排只在[大纲](<./QEMU GPGPU 实验大纲.md>)维护。
 
 <a id="pmu-scheduler"></a>
 
