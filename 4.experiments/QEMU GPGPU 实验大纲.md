@@ -47,9 +47,9 @@
 
 ## 1. 当前进度与阅读入口
 
-根据用户反馈，前 10 个基础实验和第一阶段“进阶实验一：设计类 CUDA 的 GPGPU 软件栈”已完成，并已搭配 A57、支持 SMMUv3 系统 IOMMU。第一阶段成果继续使用；第二阶段“用户 AQL Queue、Doorbell、CP 与 Signal”的本轮实现和验收已完成，具体范围与结果见下文。
+根据用户反馈，前 10 个基础实验和第一阶段“进阶实验一：设计类 CUDA 的 GPGPU 软件栈”已完成，并已搭配 A57、支持 SMMUv3 系统 IOMMU。第一阶段成果继续使用；第二阶段“用户 AQL Queue、Doorbell、CP 与 Signal”的本轮实现和既有验收已完成；规格复核仍有待修项，具体范围与结果见下文。
 
-当前执行模型为 **RV64 原生 CP 执行固件、RV32 计算执行器运行应用 Kernel**。CP 使用 `qemu-system-riscv64`，计算线程的寄存器及 `a0` 仍为 32 位。同步路径的参数继续放在 VRAM；本轮新增的队列路径由 CP 交付完整 Host 参数地址，计算线程通过只读窗口读取参数。实现基线为 `57543dd54b6b046b888277272fa84af81746b1ac`，执行主体与位宽说明见[CP 与计算执行器的位宽](<./CP_MEC 软件实现、参考与扩展.md#cp-executor-widths>)。
+当前执行模型为 **RV64 原生 CP 执行固件、RV32 计算执行器运行应用 Kernel**。CP 使用 `qemu-system-riscv64`，计算线程的寄存器及 `a0` 仍为 32 位。同步路径的参数继续放在 VRAM；本轮新增的队列路径由 CP 交付完整 Host 参数地址，计算线程通过只读窗口读取参数。当前实现固定于 `3217651a83c00c14a39712cefda9394b6e977ff3`；接入前的历史基线为 `57543dd54b6b046b888277272fa84af81746b1ac`，执行主体与位宽说明见[CP 与计算执行器的位宽](<./CP_MEC 软件实现、参考与扩展.md#cp-executor-widths>)。
 
 历史进度：2026-10-11 完成双进程设备与原生 RV32 CP 基础接入，包括复位、固件装载、启动和同地址替换固件。2026-10-14 完成 CP Host 访存窗口：CP 用普通读写指令经 IOVA 访问 Host RAM，Host 继续通过 BAR2 和原 DMA 访问 VRAM。该版本的 CP 回归通过 8/8，双进程和单进程 IOMMU 回归各通过 2/2，原有 A57 GPGPU 设备测试通过 21/21；实现与复现命令见[窗口实现说明](<./CP_MEC 软件实现、参考与扩展.md#cp-host-window-implementation>)。
 
@@ -67,7 +67,21 @@
 - 步骤 2～5：共享对象、完整访存、HQD、Doorbell、IH、分段执行器、Host 参数窗口和 RV64 固件已接入。最新 CP QTest 16/16 通过，其中保留原 8 项，新增设备边界与真实固件用例；并发 64 位访问检查为 A57 与 RV64 CP 双向各 2000 轮。真实固件已验证 KIQ／HIQ 故障的停止范围、IH 满环后的部分写入保留、首次错误保留、乱序 Doorbell 和编号回绕；IH 故障后提交新 Dispatch 的竞态已修复。单／双进程 IOMMU 各 2/2、ARM64／RISC-V 设备各 21/21、汇编检查 4/4 通过。
 - 步骤 6～8：驱动按模块参数选择同步或队列模式，队列模式采用设备统一显存分配、进程独占 Doorbell 页和对象引用。四组用户接口已在新内核上运行，双进程、`IOMMU=none` 的五组队列验收通过 5/5，模块卸载通过 1/1，未发现内核故障。等待用例确认三个线程阻塞在事件 ioctl 后才提交任务；寿命用例分别检查旧映射与旧事件保活。新内核的单／双进程与 `none/smmuv3` 四种同步组合全部通过，每种均包含装卸载 5/5、三个示例的 17,953 个输出值、运行时检查 68/68 和卸载重载 2/2；原发行版内核下的四组合回归也已通过。
 
-构建与测试入口见[软件栈说明](./gpu-study-qemu/software/gpgpu/README.md)。CP 日志为 `gpu-study-qemu/build/gpgpu-cp-qtest.log`；新内核的构建、归档与验收记录保存在 `gpu-study-qemu/build/gpgpu-kernel-cross/`，其中 `kernel-build.json` 固定产物哈希，`remote/none/queue-test.json` 保存五组队列结果，`stage1-validation.json` 汇总四种同步组合的 8 次运行。下列 2026-10-17、2026-10-18 的“尚待实现”记录描述各次规格确认时的状态，当前实现与运行结果以上述记录为准。
+构建与测试入口见[软件栈说明](./gpu-study-qemu/software/gpgpu/README.md)。CP 日志为 `gpu-study-qemu/build/gpgpu-cp-qtest.log`；新内核的构建、归档与验收记录保存在 `gpu-study-qemu/build/gpgpu-kernel-cross/`，其中 `kernel-build.json` 固定产物哈希，`remote/none/queue-test.json` 保存五组队列结果，`stage1-validation.json` 汇总四种同步组合的 8 次运行。
+
+<a id="stage-two-spec-review"></a>
+
+### 第二阶段规格复核与文档状态（2026-10-19）
+
+当前结论为“核心实现基本符合规格，既有验收通过，仍有一项协议异常处理待修复”。驱动读到匹配的管理完成标记后，未检查 `status` 是否属于已定义的 `0～6`；若仍为初值 `0xffff_ffff` 或其他未知编码，创建队列的失败分支可能释放 MQD 及 Ring、进度对象引用。此时尚不能确认设备访问已经结束。修复应按[规格 4.4](<./CP_MEC 第一版规格.md#spec-management-result>)识别协议错误，并按对象寿命条件保留不能安全回收的资源。
+
+> **[SOURCE]** 子仓库固定提交 `3217651a83c00c14a39712cefda9394b6e977ff3`：[管理结果读取，第 106～117 行](https://github.com/hxfei-git/gpu-study-qemu/blob/3217651a83c00c14a39712cefda9394b6e977ff3/software/gpgpu/linux/gpgpu_queue.c#L106-L117)、[创建失败回收，第 570～581 行](https://github.com/hxfei-git/gpu-study-qemu/blob/3217651a83c00c14a39712cefda9394b6e977ff3/software/gpgpu/linux/gpgpu_queue.c#L570-L581)。本次为代码与规格复核，该缺口尚未修复。
+
+本次复核另在拉取后的代码上执行 `make -C software/gpgpu -j4 all check-assembler`，用户态库、示例和测试程序编译成功，汇编检查 4/4 通过。当前审查环境没有 QEMU 构建产物、RISC-V 裸机编译器和 ARM64 测试镜像，未重新运行完整 CP QTest 或 Linux 队列验收。上文数量沿用已提交的历史运行记录；原始 `build/` 日志未纳入 Git，不随拉取取得。
+
+[GPGPU 虚拟加速器硬件手册](<./QEMU_2026_GPGPU_硬件手册.html>) 已从实验汇编中拆出，保留原教学基线，并补入第二阶段架构、地址空间、固件保留区、HQD、Doorbell、管理命令、AQL、Signal、IH、执行器接口和错误／释放规则。主仓库及子仓库状态入口已统一；后续实验计划继续在本大纲维护。
+
+下列 2026-10-17、2026-10-18 的“尚待实现”记录描述各次规格确认时的状态，当前实现与运行结果以上述记录为准。
 
 2026-10-17 已确认 [Ring 与 MQD 的存储和分配方案](<./CP_MEC 第一版规格.md#spec-ring-mqd-storage>)、[进度与完成值的分配方案](<./CP_MEC 第一版规格.md#spec-shared-state-storage>)及 [Kernel 代码、描述对象、参数和数组的存储与访问方案](<./CP_MEC 第一版规格.md#spec-kernel-data-storage>)，规格 9.1.1～9.1.3 已更新为“已确定”。Kernel 描述对象、代码和数组放在 VRAM，参数块放在 Host RAM，由执行器直接读取。当前队列主线按 Host DMA 直通配置使用物理地址与 VRAM 字节偏移，不引入设备虚拟地址；执行器的 Host 参数访问仍待接入。
 

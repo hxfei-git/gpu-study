@@ -162,6 +162,8 @@ Keep each pull request focused. Describe the reader-facing change, identify upda
 
 2026-10-19 完成第二阶段设备队列入口、RV64 CP 固件、Linux 驱动与 HSAKMT 风格接口库的实现和本轮验收，CP 回归通过 16/16。同日按用户确认，采用宿主机交叉编译生成 `6.18.57-0-gpgpu-virt` 内核，内置 `GPU_BUDDY`；原生构建进度与环境保留。A57 客体上，双进程、`IOMMU=none` 的 Linux 队列验收通过 5/5，卸载检查通过 1/1；单／双进程与 `none`／`smmuv3` 四种同步组合均通过，每种包含装卸载 5/5、17,953 个示例输出值、运行时检查 68/68 和卸载重载 2/2。具体结果见 [大纲进度说明](<./4.experiments/QEMU GPGPU 实验大纲.md#current-progress>)；多 VMID、抢占和运行中复位恢复仍属于后续阶段。
 
+硬件查阅入口已拆为同级独立的 [GPGPU 虚拟加速器硬件手册](<./4.experiments/QEMU_2026_GPGPU_硬件手册.html>)，包含基础设备资料及第二阶段已确认的地址、寄存器、共享对象和发布协议。2026-10-19 规格复核发现驱动尚未校验未知管理结果码，相关资源可能被提前释放；该项仍待修复，不能把既有验收通过等同于完全符合规格。具体证据和本次复核范围见[大纲复核记录](<./4.experiments/QEMU GPGPU 实验大纲.md#stage-two-spec-review>)。
+
 以下 2026-10-17、2026-10-18 的段落保留规格确认时的历史记录，其中“尚待实现”“尚未接入”等措辞只描述当时进度；当前代码与验收状态以上述说明和大纲为准。
 
 2026-10-18 按实验子仓库固定提交 `57543dd54b6b046b888277272fa84af81746b1ac` 重新核对：原生 CP 为 RV64，执行裸机固件；计算执行器仍为 RV32，执行应用 Kernel，计算线程的 `a0` 仍为 32 位。文档和讲解必须写清执行主体。CP 的 Host 窗口已实现，计算执行器读取 Host 参数的路径尚未实现，16 字节描述对象及只读参数窗口已在[规格 9.5.2](<./4.experiments/CP_MEC 第一版规格.md#spec-kernel-executor-interface>)确认，尚待接入；CP 分发寄存器和状态接口已按[规格 9.5.3](<./4.experiments/CP_MEC 第一版规格.md#spec-cp-dispatch-interface>)确定，尚待实现。源码依据见[CP 与计算执行器的位宽](<./4.experiments/CP_MEC 软件实现、参考与扩展.md#cp-executor-widths>)。
