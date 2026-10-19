@@ -37,6 +37,7 @@
 | PM4   | AMD PM4                                                | AMD GPU 的一类底层命令包协议；用于说明计算 Ring 的 IB 引用及 KIQ 管理命令      |
 | GC    | Graphics and Compute                                   | AMD 图形与计算模块；本文参考 GC 9.4.3 驱动                                     |
 | VM    | Virtual Memory                                         | 虚拟内存；VM 上下文保存地址翻译所需的配置                                      |
+| GPUVM | GPU Virtual Memory                                     | GPU 虚拟内存；设备地址空间及其映射管理                                         |
 | VMID  | Virtual Memory Identifier                              | 虚拟地址空间标识，用于选择 VM 上下文                                           |
 | MMU   | Memory Management Unit                                 | 内存管理单元，执行地址翻译和权限检查                                           |
 | TLB   | Translation Lookaside Buffer                           | 地址翻译缓存                                                                   |
@@ -2798,7 +2799,7 @@ MI300 的 `S_ENDPGM_SAVED` 指令用于通知硬件：wave 已由上下文切换
 
 ### 9.3 多 VMID 与设备访问隔离
 
-**[DESIGN]** 第二阶段统一使用 VMID 0。多 VMID 的数量、分配、字段传递、复用和设备访问隔离作为第三阶段扩展，进入该阶段后再确定具体编号范围和接口布局，推进范围见[第三阶段大纲](<./QEMU GPGPU 实验大纲.md#stage-three-vmid>)。
+**[DESIGN]** 第二阶段统一使用 VMID 0。第三阶段的固定驻留、字段传递、翻译失效与安全复用见[GPUVM 第一版规格](<./GPUVM 第一版规格.md#gpuvm-context-tlb>)。按本轮收敛目标，草案只保留两个用户地址空间的隔离与正常回收，不实现超额轮换、换页或复杂恢复；具体配置供审阅，尚未接入设备 GPUVM。本节保留第二阶段的扩展说明，推进范围见[第三阶段大纲](<./QEMU GPGPU 实验大纲.md#stage-three-vmid>)。
 
 当第三阶段需要让不同进程使用各自的设备地址空间时，目标关系如下：
 
