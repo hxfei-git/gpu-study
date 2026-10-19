@@ -49,7 +49,7 @@
 
 根据用户反馈，前 10 个基础实验和第一阶段“进阶实验一：设计类 CUDA 的 GPGPU 软件栈”已完成，并已搭配 A57、支持 SMMUv3 系统 IOMMU。第一阶段成果继续使用；第二阶段“用户 AQL Queue、Doorbell、CP 与 Signal”的本轮实现和既有验收已完成；规格复核仍有待修项，具体范围与结果见下文。
 
-当前执行模型为 **RV64 原生 CP 执行固件、RV32 计算执行器运行应用 Kernel**。CP 使用 `qemu-system-riscv64`，计算线程的寄存器及 `a0` 仍为 32 位。同步路径的参数继续放在 VRAM；本轮新增的队列路径由 CP 交付完整 Host 参数地址，计算线程通过只读窗口读取参数。当前实现固定于 `3217651a83c00c14a39712cefda9394b6e977ff3`；接入前的历史基线为 `57543dd54b6b046b888277272fa84af81746b1ac`，执行主体与位宽说明见[CP 与计算执行器的位宽](<./CP_MEC 软件实现、参考与扩展.md#cp-executor-widths>)。
+当前执行模型为 **RV64 原生 CP 执行固件、RV32 计算执行器运行应用 Kernel**。CP 使用 `qemu-system-riscv64`，计算线程的寄存器及 `a0` 仍为 32 位。同步路径的参数继续放在 VRAM；本轮新增的队列路径由 CP 交付完整 Host 参数地址，计算线程通过只读窗口读取参数。当前实现固定于 `6325a87e4c500f4930c4e0b502a1ec241f83bf26`（由 `3217651` 合入注释与 Linux 风格整改后重写）；接入前的历史基线为 `57543dd54b6b046b888277272fa84af81746b1ac`，执行主体与位宽说明见[CP 与计算执行器的位宽](<./CP_MEC 软件实现、参考与扩展.md#cp-executor-widths>)。
 
 历史进度：2026-10-11 完成双进程设备与原生 RV32 CP 基础接入，包括复位、固件装载、启动和同地址替换固件。2026-10-14 完成 CP Host 访存窗口：CP 用普通读写指令经 IOVA 访问 Host RAM，Host 继续通过 BAR2 和原 DMA 访问 VRAM。该版本的 CP 回归通过 8/8，双进程和单进程 IOMMU 回归各通过 2/2，原有 A57 GPGPU 设备测试通过 21/21；实现与复现命令见[窗口实现说明](<./CP_MEC 软件实现、参考与扩展.md#cp-host-window-implementation>)。
 
@@ -61,7 +61,7 @@
 
 2026-10-19 已按[本阶段实现顺序](#221-实现顺序与范围)完成代码接入、五组队列验收及原有回归：
 
-> **[SOURCE]** 本轮实现固定于实验子仓库提交 [`3217651a83c00c14a39712cefda9394b6e977ff3`](https://github.com/hxfei-git/gpu-study-qemu/commit/3217651a83c00c14a39712cefda9394b6e977ff3)，设备、固件与驱动入口见[当前队列实现索引](<./CP_MEC 软件实现、参考与扩展.md#implementation>)。
+> **[SOURCE]** 以下端到端验收对应整改前的实验子仓库提交 [`3217651a83c00c14a39712cefda9394b6e977ff3`](https://github.com/hxfei-git/gpu-study-qemu/commit/3217651a83c00c14a39712cefda9394b6e977ff3)，设备、固件与驱动入口见[当前队列实现索引](<./CP_MEC 软件实现、参考与扩展.md#implementation>)。
 
 - 步骤 1：已保存 Alpine 构建提交、源码校验值、原配置、七个发行版补丁和一个实验配置补丁。实验配置关闭未使用的设备、网络及文件系统模块，模块项从 892 减至 78，原有 1,286 个内置配置项全部保留；启动、PCI、IOMMU、9p、ext4 等 33 项依赖检查通过，已在独立客体中验证配置可逐字节重现。原生构建的 8 个虚拟 CPU 出现明显的跨 CPU 同步等待，按用户确认改用宿主机 16 任务交叉编译，生成 Linux `6.18.57-0-gpgpu-virt`，内置 `GPU_BUDDY`、`FW_LOADER`。交叉配置只改变两项编译器身份字段，功能选项一致；开发文件中的必要工具已在 ARM64 客体重建，配置、生成头和 `Module.symvers` 的内容校验通过。新内核启动、驱动编译和同版归档完整性检查通过。32 GiB 独立开发盘、原生构建进度与原发行版环境均保留。
 - 步骤 2～5：共享对象、完整访存、HQD、Doorbell、IH、分段执行器、Host 参数窗口和 RV64 固件已接入。最新 CP QTest 16/16 通过，其中保留原 8 项，新增设备边界与真实固件用例；并发 64 位访问检查为 A57 与 RV64 CP 双向各 2000 轮。真实固件已验证 KIQ／HIQ 故障的停止范围、IH 满环后的部分写入保留、首次错误保留、乱序 Doorbell 和编号回绕；IH 故障后提交新 Dispatch 的竞态已修复。单／双进程 IOMMU 各 2/2、ARM64／RISC-V 设备各 21/21、汇编检查 4/4 通过。
@@ -75,9 +75,9 @@
 
 当前结论为“核心实现基本符合规格，既有验收通过，仍有一项协议异常处理待修复”。驱动读到匹配的管理完成标记后，未检查 `status` 是否属于已定义的 `0～6`；若仍为初值 `0xffff_ffff` 或其他未知编码，创建队列的失败分支可能释放 MQD 及 Ring、进度对象引用。此时尚不能确认设备访问已经结束。修复应按[规格 4.4](<./CP_MEC 第一版规格.md#spec-management-result>)识别协议错误，并按对象寿命条件保留不能安全回收的资源。
 
-> **[SOURCE]** 子仓库固定提交 `3217651a83c00c14a39712cefda9394b6e977ff3`：[管理结果读取，第 106～117 行](https://github.com/hxfei-git/gpu-study-qemu/blob/3217651a83c00c14a39712cefda9394b6e977ff3/software/gpgpu/linux/gpgpu_queue.c#L106-L117)、[创建失败回收，第 570～581 行](https://github.com/hxfei-git/gpu-study-qemu/blob/3217651a83c00c14a39712cefda9394b6e977ff3/software/gpgpu/linux/gpgpu_queue.c#L570-L581)。本次为代码与规格复核，该缺口尚未修复。
+> **[SOURCE]** 子仓库整改后固定提交 `6325a87e4c500f4930c4e0b502a1ec241f83bf26`：[管理结果读取，第 110～129 行](https://github.com/hxfei-git/gpu-study-qemu/blob/6325a87e4c500f4930c4e0b502a1ec241f83bf26/software/gpgpu/linux/gpgpu_queue.c#L110-L129)、[创建失败回收，第 622～634 行](https://github.com/hxfei-git/gpu-study-qemu/blob/6325a87e4c500f4930c4e0b502a1ec241f83bf26/software/gpgpu/linux/gpgpu_queue.c#L622-L634)。本次为代码与规格复核，该缺口尚未修复。
 
-本次复核另在拉取后的代码上执行 `make -C software/gpgpu -j4 all check-assembler`，用户态库、示例和测试程序编译成功，汇编检查 4/4 通过。当前审查环境没有 QEMU 构建产物、RISC-V 裸机编译器和 ARM64 测试镜像，未重新运行完整 CP QTest 或 Linux 队列验收。上文数量沿用已提交的历史运行记录；原始 `build/` 日志未纳入 Git，不随拉取取得。
+此前规格复核在拉取后的代码上执行 `make -C software/gpgpu -j4 all check-assembler`，用户态库、示例和测试程序编译成功，汇编检查 4/4 通过。当时未配置 QEMU 构建产物、RISC-V 裸机编译器和 ARM64 测试镜像。随后风格整改已补齐临时工具链并验证 RV64 固件编译，仍未重跑完整 CP QTest 或 Linux 队列验收。上文数量沿用已提交的历史运行记录；原始 `build/` 日志未纳入 Git，不随拉取取得。
 
 [GPGPU 虚拟加速器硬件手册](<./QEMU_2026_GPGPU_硬件手册.html>) 已从实验汇编中拆出，保留原教学基线，并补入第二阶段架构、地址空间、固件保留区、HQD、Doorbell、管理命令、AQL、Signal、IH、执行器接口和错误／释放规则。主仓库及子仓库状态入口已统一；后续实验计划继续在本大纲维护。
 

@@ -407,7 +407,7 @@
 <p><a id="manual-status"></a></p>
 <h2 id="当前版本与执行路径">当前版本与执行路径</h2>
 <p>本手册用于本仓库的 QEMU 教学设备。基础设备部分来自原实验资料，第二阶段部分收录已确认的 CP/MEC 规格第 1～8 节及第 9.7 节的 Host 接口约定，保留原节号方便核对。寄存器名称借鉴 AMD，本实验的布局和简化行为不代表 MI300X 的硬件接口。</p>
-<p>当前实现固定于实验子仓库 <code>3217651a83c00c14a39712cefda9394b6e977ff3</code>（2026-10-19）。RV64 原生 CP 处理队列固件，RV32 执行器运行应用 Kernel；全设备共 4 个 HQD 槽，KIQ、HIQ 各占一个，用户队列共享两个名额，VMID 固定为 0。队列验收采用双进程、<code>IOMMU=none</code>；原同步路径保留单／双进程及 <code>none/smmuv3</code> 回归。</p>
+<p>当前实现固定于实验子仓库 <code>6325a87e4c500f4930c4e0b502a1ec241f83bf26</code>（2026-10-19）。RV64 原生 CP 处理队列固件，RV32 执行器运行应用 Kernel；全设备共 4 个 HQD 槽，KIQ、HIQ 各占一个，用户队列共享两个名额，VMID 固定为 0。队列验收采用双进程、<code>IOMMU=none</code>；原同步路径保留单／双进程及 <code>none/smmuv3</code> 回归。</p>
 <pre class="text"><code>Host 准备 KIQ 并启动 RV64 CP
   → KIQ 建立 HIQ → HIQ 建立用户 Queue
   → Host 原子预留包编号、填写 AQL、发布 Header、写 Doorbell
@@ -418,8 +418,8 @@
   → Host 复查 Signal、读取结果，满足寿命条件后回收资源</code></pre>
 <p>既有验收记录包含 CP QTest 16/16、Linux 队列 5/5 和四种同步组合回归。规格复核仍有一项待修复：驱动未校验未知管理结果码，创建失败分支可能提前释放 MQD 及相关引用。实现、历史验收与当前复核范围见<a href="./QEMU%20GPGPU%20%E5%AE%9E%E9%AA%8C%E5%A4%A7%E7%BA%B2.md#stage-two-spec-review">实验大纲</a>；本手册描述的安全回收规则仍是必须满足的规格要求。</p>
 <blockquote>
-<p><strong>[SPEC]</strong> 已确认行为以<a href="./CP_MEC%20%E7%AC%AC%E4%B8%80%E7%89%88%E8%A7%84%E6%A0%BC.md">CP/MEC 第一版规格</a>为来源；确认历史、参考实现和后续规划保留在原 Markdown 文档中。下文引用的 <code>57543dd</code> 是接入前的历史代码证据，当前实现为 <code>3217651</code>。</p>
-<p><strong>[SOURCE]</strong> 当前协议常量、布局和编号：<a href="https://github.com/hxfei-git/gpu-study-qemu/blob/3217651a83c00c14a39712cefda9394b6e977ff3/software/gpgpu/include/gpgpu_queue.h#L11-L218">software/gpgpu/include/gpgpu_queue.h</a>；实现入口见<a href="./CP_MEC%20%E8%BD%AF%E4%BB%B6%E5%AE%9E%E7%8E%B0%E3%80%81%E5%8F%82%E8%80%83%E4%B8%8E%E6%89%A9%E5%B1%95.md#implementation">软件说明</a>。</p>
+<p><strong>[SPEC]</strong> 已确认行为以<a href="./CP_MEC%20%E7%AC%AC%E4%B8%80%E7%89%88%E8%A7%84%E6%A0%BC.md">CP/MEC 第一版规格</a>为来源；确认历史、参考实现和后续规划保留在原 Markdown 文档中。下文引用的 <code>57543dd</code> 是接入前的历史代码证据，当前实现为 <code>6325a87</code>，由 <code>3217651</code> 合入中文注释与 Linux 风格整改后重写。</p>
+<p><strong>[SOURCE]</strong> 当前协议常量、布局和编号：<a href="https://github.com/hxfei-git/gpu-study-qemu/blob/6325a87e4c500f4930c4e0b502a1ec241f83bf26/software/gpgpu/include/gpgpu_queue.h#L12-L429">software/gpgpu/include/gpgpu_queue.h</a>；实现入口见<a href="./CP_MEC%20%E8%BD%AF%E4%BB%B6%E5%AE%9E%E7%8E%B0%E3%80%81%E5%8F%82%E8%80%83%E4%B8%8E%E6%89%A9%E5%B1%95.md#implementation">软件说明</a>。</p>
 </blockquote>
 <p><a id="register-index"></a></p>
 <h2 id="第二阶段地址与寄存器索引">第二阶段地址与寄存器索引</h2>
