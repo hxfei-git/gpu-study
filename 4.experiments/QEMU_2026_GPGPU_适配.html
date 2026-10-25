@@ -258,9 +258,9 @@ device_init_func()
             `-- pc-&gt;exit() =&gt; gpgpu_exit()
 </code></pre></figure>
 <p>查看 GPU 的实现，可以直接从
-<a href="./gpu-study-qemu/hw/gpgpu/gpgpu.c" title="源码第 429 行">gpgpu_register_types()</a>、
-<a href="./gpu-study-qemu/hw/gpgpu/gpgpu.c" title="源码第 399 行">gpgpu_class_init()</a>和
-<a href="./gpu-study-qemu/hw/gpgpu/gpgpu.c" title="源码第 298 行">gpgpu_realize()</a>
+<a href="vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu.c:195:1" title="源码第 195 行">gpgpu_register_types()</a>、
+<a href="vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu.c:163:1" title="源码第 163 行">gpgpu_class_init()</a>和
+<a href="vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu.c:60:1" title="源码第 60 行">gpgpu_realize()</a>
 进入。框架调用入口分别是
 <a href="./gpu-study-qemu/system/runstate.c" title="源码第 965 行">QOM 模块初始化</a>、
 <a href="./gpu-study-qemu/qom/object.c" title="源码第 336 行">类初始化</a>和
@@ -275,7 +275,7 @@ device_init_func()
 QEMU 进程中执行。测试进程通过 QTest 协议请求读取一个地址；QEMU
 根据地址找到设备的内存区域，再调用该区域注册的读回调。</p>
 <h3 id="section-4">控制寄存器区域的注册与映射</h3>
-<p><a href="./gpu-study-qemu/hw/gpgpu/gpgpu.c" title="源码第 212 行">gpgpu_ctrl_ops</a>
+<p><a href="vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu_mmio.c:188:1" title="源码第 188 行">gpgpu_ctrl_ops</a>
 指定了控制寄存器区域的读写操作：</p>
 <figure class="code-block"><figcaption>C</figcaption><pre tabindex="0"><code><span class="k">static</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">MemoryRegionOps</span><span class="w"> </span><span class="n">gpgpu_ctrl_ops</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="p">.</span><span class="n">read</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">gpgpu_ctrl_read</span><span class="p">,</span>
@@ -289,7 +289,7 @@ QEMU 进程中执行。测试进程通过 QTest 协议请求读取一个地址�
 </code></pre></figure>
 <p><code>.read</code> 是函数指针，保存读取该区域时需要调用的 <code>gpgpu_ctrl_read</code>。
 控制寄存器按小端解释，设备回调处理的访问宽度为四字节。</p>
-<p><a href="./gpu-study-qemu/hw/gpgpu/gpgpu.c" title="源码第 298 行">gpgpu_realize()</a>
+<p><a href="vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu.c:60:1" title="源码第 60 行">gpgpu_realize()</a>
 创建控制寄存器区域，并将该区域关联到 PCI BAR0：</p>
 <figure class="code-block"><figcaption>C</figcaption><pre tabindex="0"><code><span class="n">memory_region_init_io</span><span class="p">(</span><span class="o">&amp;</span><span class="n">s</span><span class="o">-&gt;</span><span class="n">ctrl_mmio</span><span class="p">,</span><span class="w"> </span><span class="n">OBJECT</span><span class="p">(</span><span class="n">s</span><span class="p">),</span><span class="w"> </span><span class="o">&amp;</span><span class="n">gpgpu_ctrl_ops</span><span class="p">,</span><span class="w"> </span><span class="n">s</span><span class="p">,</span>
 <span class="w">                      </span><span class="s">&quot;gpgpu-ctrl&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">GPGPU_CTRL_BAR_SIZE</span><span class="p">);</span>
@@ -482,8 +482,8 @@ Mask 的主机 MMIO 读写，以及软复位清零。主机侧可通过 BAR0
 当前 <code>gpgpu_core_exec_kernel()</code> 和 <code>gpgpu_core_exec_warp()</code> 还是
 待实现函数，实验七的寄存器读写检查尚未启动线程执行。</p>
 <p>相关定义见
-<a href="./gpu-study-qemu/hw/gpgpu/gpgpu.h" title="源码第 219 行">GPGPUSIMTContext</a>
-和 <a href="./gpu-study-qemu/hw/gpgpu/gpgpu_core.h" title="源码第 67 行">GPGPULane、GPGPUWarp</a>；
+<a href="vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/gpgpu_mmio.h:17:1" title="源码第 17 行">GPGPUSIMTContext</a>
+和 <a href="vscode://file/home/book/1.project/gpu_study/4.experiments/gpu-study-qemu/hw/gpgpu/compute/gpgpu_compute_internal.h:32:1" title="源码第 32 行">GPGPULane、GPGPUWarp</a>；
 实验要求及硬件手册见 <a href="file:///home/book/1.project/qemu/QEMU_2026_%E5%AE%9E%E9%AA%8C.html#page-stage2--gpu--gpu-datasheet">本地实验文档</a>。</p>
 <h2 id="section-13">浮点格式：FP32、FP16、BF16、FP8、FP4</h2>
 <p>FP 是 Floating Point（浮点）的缩写。FP32、FP16、FP8、FP4 中的
