@@ -19,6 +19,16 @@
 | ROCr   | ROCm Runtime                              | AMD 的 HSA 用户态运行时                        |
 | GPUVM  | GPU Virtual Memory                        | GPU 虚拟内存管理                               |
 | AQL    | Architected Queuing Language              | HSA 定义的队列包格式与提交协议                 |
+| ABI    | Application Binary Interface | 二进制接口 |
+| GPUVA  | GPU Virtual Address | GPU 虚拟地址 |
+| DRM    | Direct Rendering Manager | Linux 图形设备内核框架 |
+| GEM    | Graphics Execution Manager | DRM 内存对象管理框架 |
+| BO     | Buffer Object | 保存实际存储与引用的缓冲对象 |
+| CSR    | Control and Status Register | 控制与状态寄存器；用于读取启动信息 |
+| SGPR   | Scalar General-Purpose Register | 本实验每 Warp 共享的启动状态 |
+| VGPR   | Vector General-Purpose Register | 本实验各 Lane 独有的启动状态 |
+| ALU    | Arithmetic Logic Unit | 算术逻辑单元 |
+| TLB    | Translation Lookaside Buffer | 地址翻译缓存 |
 | API    | Application Programming Interface         | 应用编程接口                                   |
 | PCIe   | Peripheral Component Interconnect Express | 高速外设互连总线                               |
 | BAR    | Base Address Register                     | PCIe 基址寄存器；描述设备资源窗口              |
@@ -38,7 +48,7 @@
 | MSI-X  | Message Signaled Interrupts Extended      | 扩展消息中断                                   |
 | PC     | Program Counter                           | 程序计数器，保存取指地址                       |
 | SP     | Stack Pointer                             | 栈指针；固件使用 RISC-V 的 `sp` 寄存器       |
-| VMID   | Virtual Memory Identifier                 | 虚拟地址空间标识；第二阶段固定为 0             |
+| VMID   | Virtual Memory Identifier                 | 用户上下文编号；开启 GPUVM 时选择页表             |
 | IB     | Indirect Buffer                           | 间接命令缓冲区；本版不引入                     |
 | IQ     | 未核实                                    | AMD 寄存器中的内部对象缩写；本版不引入         |
 | EOP    | End of Pipe                               | 执行结束相关处理；本版不建立独立 EOP 缓冲区    |
@@ -52,7 +62,11 @@
 
 2026-10-19 已实现共享协议、设备队列入口、RV64 固件、驱动与 HSAKMT 风格接口库。CP 回归通过 16/16，新内核上的五组 Linux 队列验收和四种同步组合回归均通过。第 9 节确认记录中的“尚待实现”保留其确认时点含义；实际运行数量与后续扩展统一见[大纲进度说明](<./QEMU GPGPU 实验大纲.md#current-progress>)。本次采用的 IH 地址、错误枚举和复位字段补在第 7.1 节，执行器错误枚举补在第 6.3.3 节，当前源码入口见[实现说明](<./CP_MEC 软件实现、参考与扩展.md#implementation>)。
 
-寄存器查阅见 [GPGPU 虚拟加速器硬件手册](<./QEMU_2026_GPGPU_硬件手册.html>)，其中按功能列出地址、位域、访问权限及复位行为；本文继续保存完整的队列协议、软件约定和规格确认记录。已确认规格与实现状态分别维护；2026-10-19 复核中的管理结果码校验缺口及验证范围见[大纲复核记录](<./QEMU GPGPU 实验大纲.md#stage-two-spec-review>)，该缺口尚未修复。
+寄存器查阅见 [GPGPU 虚拟加速器硬件手册](<./QEMU_2026_GPGPU_硬件手册.html>)，其中按功能列出地址、位域、访问权限及复位行为；本文继续保存完整的队列协议、软件约定和规格确认记录。已确认规格与实现状态分别维护；2026-10-19 复核中的管理结果码校验缺口及验证范围见[大纲复核记录](<./QEMU GPGPU 实验大纲.md#stage-two-spec-review>)，该缺口已在第三阶段修复，未知结果继续保留资源。
+
+**[DESIGN]** 2026-10-28 起，当前接口为版本 2：设备／固件队列协议、DRM 与 GPUVM 编码统一升级，旧组件明确拒绝。用户端只使用 DRM/GEM 与 AQL Queue；设备属性 `gpuvm=on/off` 决定用户地址是否翻译，默认开启。第 1～8 节按当前接口说明；第 9 节保留原确认时点记录，其旧地址与参数窗口约定不再作为执行要求。历史验收数量也不作为当前入口的固定计数。
+
+当前计算验证统一为 `test-gpgpu-stack`：ARM virt、A57、1 GiB、`IOMMU=none`，分别运行 GPUVM 开／关下的向量加法 17,003 个结果、矩阵乘法 437 个结果与 ReLU 513 个结果。结果以实际逐元素比较为准，不追加专项测试。当前公共库和绑定接口见[GPUVM 规格第 8 节](<./GPUVM 第一版规格.md#gpuvm-device-host-interface>)。
 
 <a id="spec-overview"></a>
 
@@ -61,7 +75,7 @@
 **[DESIGN]** 第一版使用一个 QEMU 原生 RV64 CP，由 TCG 在 M-mode 执行裸机固件，不启用页表；现有 RV32 计算解释器继续执行应用 Kernel。4 个 HQD 槽位中，槽位 0 用于 KIQ，槽位 1 用于 HIQ，槽位 2、3 由 CP 按创建请求分配给用户 AQL Queue。计算执行器一次处理一个完整 Dispatch。
 
 ```text
-Host 准备 KIQ 的 Ring、MQD 与 HQD，启动 CP
+Host 配置并确认 Outbound，准备 KIQ 的 Ring、MQD 与 HQD，启动 CP
   → 驱动经 KIQ 请求建立 HIQ，确认管理操作完成
   → 应用经内存接口申请 Ring 和进度区，再请求创建用户 Queue，驱动准备 MQD
   → 驱动经 HIQ 提交 MAP_QUEUES，指定 USER_AQL 和 MQD 地址
@@ -77,11 +91,11 @@ Host 准备 KIQ 的 Ring、MQD 与 HQD，启动 CP
 
 原生 CP 执行队列固件，计算执行器执行应用 Kernel，两者各自保存寄存器和取指位置。2026-10-17 的 RV64 迁移只改变原生 CP；计算线程的寄存器和 Kernel 指令仍按 RV32 执行。执行主体、构建入口及参数交接边界见[CP 与计算执行器的位宽](<./CP_MEC 软件实现、参考与扩展.md#cp-executor-widths>)。上图规定本阶段的队列执行顺序，实际运行结果见大纲进度说明。
 
-本文用户态流程中的“运行时”泛指准备 AQL 和等待 Signal 的调用方，第二阶段由实验程序承担。HSAKMT 风格接口库封装驱动的设备、内存、队列和事件操作，分工按[第 9.7 节](#spec-host-api-scope)执行，不要求实现 ROCr/HSA 运行时。
+本文用户态流程中的“运行时”泛指准备应用数据的调用方。槽位预留、Header 发布、8 字节 Doorbell 更新、Signal 等待与事件配合、排空及 Queue 销毁统一由 HSAKMT 风格公共库承担；示例链接 `libgpgpu-kmt.a`。旧 Runtime、`libgpgpu.a` 和同步提交入口已删除。
 
 <a id="spec-user-queue-capacity"></a>
 
-**[DESIGN]** 第二阶段全设备最多同时存在 **两条用户 Queue**，所有应用共享这两个名额，KIQ、HIQ 不计入其中。用户队列按申请创建，各自的 Ring、MQD 和进度区由驱动分配。文中的 Queue A、B、MQD_A、MQD_B 只是示例名称，不是预先固定的队列身份或地址，也不与槽位 2、3 永久绑定。
+**[DESIGN]** 全设备最多同时存在 **两条用户 Queue**，每个上下文最多一条，所有应用共享这两个名额，KIQ、HIQ 不计入其中。用户队列按申请创建，各自的 Ring、MQD 和进度区由驱动分配。文中的 Queue A、B、MQD_A、MQD_B 只是示例名称，不是预先固定的队列身份或地址，也不与槽位 2、3 永久绑定。
 
 假设其他创建条件均满足，下面演示两个名额的分配与复用；槽位选择只用于举例：
 
@@ -126,22 +140,22 @@ HQD 保存状态，CP 读取状态并执行命令，计算执行器执行 Kernel
 
 Host 建立一条队列时，需要准备 Ring、MQD 和进度内存。MQD 保存队列配置与需要恢复的状态；装入 HQD 后，CP 使用 HQD 中的活动状态读取 Ring。卸载保存时，消费位置和错误快照写回原 MQD，供以后恢复或诊断。MQD 的 64 字节布局与装载、保存范围见[第 2.6 节](#spec-mqd-format)。
 
-**[DESIGN]** 当前阶段的设备访存不引入虚拟地址和 GPU 页表。以下队列与任务主线采用 Host DMA 直通配置：Host RAM 对象用物理地址定位，VRAM 对象用区内字节偏移定位。已有 SMMUv3 通路的实现与回归记录保留在第 2.1 节；它不表示当前队列已经实现按 VMID 翻译地址。
+**[DESIGN]** GPU 物理空间连续分为 VRAM `[0, vram_size)` 与 Outbound `[vram_size, 0x1_0000_0000)`。用户访问在 GPUVM 开启时先翻译，关闭时直接使用输入地址；管理对象始终使用 GPU 物理地址。两类访问汇入同一个物理入口，再按范围访问 VRAM 或经 PCIe DMA 访问 Host RAM。
 
 <a id="spec-ring-mqd-storage"></a>
 
 **[DESIGN]** 用户 Ring、KIQ Ring、HIQ Ring 和所有 MQD 均放在 Host RAM，由驱动使用 `dma_alloc_coherent()` 分配设备可访问的一致性内存。CP 通过 [Host 访存窗口](#cp-host-window)读取命令、装载 MQD，并在卸载保存时写回必要状态。
 
 ```text
-驱动管理资源（第二阶段 VMID 固定为 0）
+驱动管理资源（显式管理域，输入为 GPU 物理地址）
   ├─ KIQ Ring、HIQ Ring：位于 Host RAM，保存管理命令
   └─ MQD_A：位于 Host RAM，保存 Queue A 的配置与可恢复状态
        │ CP 读取配置；卸载时保存必要状态
        ▼
 HQD 槽位 2：Queue A 当前的活动状态
-  ├─ MQD 物理地址 → 读取驱动管理的 MQD_A
-  ├─ Ring 物理地址 → 读取进程 A 位于 Host RAM 的 Ring
-  ├─ 队列 VMID = 0 → 本阶段固定值，不据此选择页表
+  ├─ MQD 的 GPU 物理地址 → 读取驱动管理的 MQD_A
+  ├─ 用户 Ring 的 GPU 地址 → 读取进程 A 位于 Host RAM 的 Ring
+  ├─ 队列 VMID = 1 → 开启时选择页表，关闭时保留来源编号
   ├─ PQ_RPTR → 保存当前消费位置
   ├─ RPTR_REPORT_ADDR → 指定向哪里回报消费进度
   └─ WPTR_POLL_ADDR → 指定从哪里读取软件生产进度
@@ -151,9 +165,9 @@ HQD 槽位 2：Queue A 当前的活动状态
 - KIQ、HIQ Ring 由驱动分配和填写管理命令，不映射给普通应用。
 - 所有 MQD 由驱动分配、初始化并管理生命周期，不映射给普通应用；CP 在装载和卸载保存时访问。
 
-驱动沿用第一阶段的分配与映射方法，另行分配并按队列生命周期保留这些对象；原有暂存缓冲区继续用于数据搬运。Ring 保存命令包；Kernel 代码、描述对象、参数和输入输出数据分别按[第 2.3 节](#spec-kernel-data-storage)准备。分配后的访问关系与已有源码依据见[Ring 与 MQD 的分配和访问](<./CP_MEC 软件实现、参考与扩展.md#ring-mqd-storage>)。
+驱动按队列生命周期保留这些对象；Host BO 独立分配，CPU 映射由 GEM 引用保活，数据搬运使用对象间 COPY。Ring 保存命令包；Kernel 代码、描述对象、参数和输入输出数据分别按[第 2.3 节](#spec-kernel-data-storage)准备。分配后的访问关系与已有源码依据见[Ring 与 MQD 的分配和访问](<./CP_MEC 软件实现、参考与扩展.md#ring-mqd-storage>)。
 
-**[DESIGN]** 第二阶段只保留 `VMID = 0`。KIQ、HIQ 和两条用户 AQL Queue 的 `CP_HQD_VMID` 均填写 0，MQD 中保留的队列 VMID 字段也固定为 0；非零编号暂不支持。本阶段不建立 VMID 分配池，也不按 VMID 选择页表或提供进程间的设备访问隔离。驱动继续用 Host 侧软件对象记录用户 Ring、Signal 和任务资源的所属上下文，MQD 仍由驱动管理；本版不采用 `CP_MQD_CONTROL`。多 VMID 的数量、分配、传递与隔离列为[第三阶段扩展](<./CP_MEC 软件实现、参考与扩展.md#multi-vmid-extension>)，与 AMD 地址空间的联系见[MQD 与管理地址空间](<./CP_MEC 软件实现、参考与扩展.md#mqd-vmid>)。
+**[DESIGN]** KIQ、HIQ 的 VMID 为 0，用户上下文使用 1、2。开启 GPUVM 时用户编号选择已配置的页表；关闭时仍保存编号用于故障归属和资源管理，但不创建页表，不提供页权限隔离，也不强制进程独占。CP 的访问域由显式参数传递，不再用 `VMID == 0` 判断管理或用户访问。
 
 `RPTR_REPORT_ADDR / HI` 与 `WPTR_POLL_ADDR / HI` 保存的是地址，各地址指向的内存保存进度数值。本版将进度区与 Ring 命令区分开分配，Host 通过自己的映射访问相应内存，见[进度与完成值的分配](#spec-shared-state-storage)。消费位置、生产进度的更新规则见第 5、6 节。
 
@@ -175,61 +189,46 @@ CP 直接按槽位访问：
 
 <a id="cp-host-window"></a>
 
-### 2.1 CP 通过窗口读写 Host RAM
+### 2.1 CP 本地窗口与公共物理入口
 
-本节先记录已经实现的通用 DMA 访问路径，包含 SMMUv3 翻译配置，再说明队列访存上下文和 Signal 更新规则。当前队列主线按直通配置使用这条路径，窗口基址保存对应的 Host RAM 物理地址；下文保留既有寄存器名称和 IOVA 测试案例。
-
-**[DESIGN]** Host 使用 BAR2 直接读写 VRAM，也可以配置现有 DMA 在 Host RAM 与 VRAM 之间批量搬运。CP 直接使用同一份 VRAM；需要访问 Host RAM 时，通过本地窗口执行普通 `load/store`，不配置 Host 的 DMA 搬运寄存器。
+CP 已取得一个队列对象地址，需要通过本地 load/store 完成访问。固件先保存访问域、VMID、源 HQD 槽与阶段，再把对象地址写入本地窗口基址；窗口入口保留在 CP 的独立地址空间。
 
 ```text
-Host CPU → BAR2 → VRAM ← CP 的本地 load/store
-Host 配置现有 DMA → 在 Host RAM 与 VRAM 之间搬运
-
-CP 的窗口 load/store
-  → 窗口 IOVA 基址 + 窗口内偏移
-  → 设备发起 PCIe 访存请求
-  → Host SMMUv3 翻译与检查（启用时）
-  → Host RAM
+CP 本地窗口 load/store
+  → 窗口基址 + 窗口内偏移，得到 GPU 存储地址
+  → 显式访问域
+      ├─ 用户域：gpuvm=on 时按 VMID 翻译，off 时直通
+      └─ 管理域：输入直接作为 GPU 物理地址
+  → 公共物理入口
+      ├─ [0, vram_size) → VRAM
+      └─ [vram_size, 0x1_0000_0000) → 减 vram_size 得到 Host IOVA
+                                          → PCIe DMA → SMMUv3（启用时）→ Host RAM
 ```
 
-窗口只提供访问入口，不分配新的 RAM，也不要求先把 Host 数据搬到 VRAM。Host 的 DMA 和 CP 的窗口可以在同一运行时期使用；访问同一份数据时，软件仍须保证准备、读取和复用顺序。
-
-下图保留 Host 窗口接入时的本地地址范围；它们不是 Host 的 BAR 地址。图中当时预留的 HQD 区域已按[第 8.3 节](#spec-hqd-address-map)接入：
+CP 的代码、栈和控制寄存器仍使用自己的裸机地址；Host 经 BAR2 读写 VRAM。下面只列 CP 本地窗口，不能将这些地址当作 RV32 Kernel 的特殊地址：
 
 ```text
-0x0000_0000 … vram_size-1    原有 VRAM
-0x8000_0000 … 0x8000_ffff    64 KiB Host 访存窗口
-0xfffe_0000                  CP_HOST_IOVA_BASE_LO
-0xfffe_0004                  CP_HOST_IOVA_BASE_HI
-0xffff_0000                  留给 HQD；本次窗口实现不接入 HQD
+0x8000_0000 … 0x8000_ffff    CP 的 64 KiB 访存窗口
+0xfffe_0000 / 0xfffe_0004    窗口目标基址的低／高位
+0xfffe_0008                 访问域：0 管理、1 用户
+0xfffe_000c                 用户 VMID
+0xfffe_0010                 源 HQD 槽
+0xfffe_0014                 访问阶段
 ```
 
-两个基址寄存器保存按 64 KiB 对齐的 64 位 IOVA。访问 IOVA `0x1_0000_1234` 时，CP 写 `BASE_HI = 1`、`BASE_LO = 0`，随后读取窗口地址 `0x8000_1234`。只有实际访问范围需要有效映射，不要求整个窗口都有映射。
+基址按 64 KiB 对齐，固件写完高低位后再访问。窗口支持自然对齐的 1、2、4、8 字节小端访问，8 字节由 RV64 的 `LD/SD` 完成。失败返回原生 load/store access fault，已完成的写入保留；窗口不修改独立 COPY 的 DMA 完成状态。
 
-CP 的通用寄存器为 64 位，本地地址仍使用原有 4 GiB 布局。例如固件从参数区取得窗口地址时，按下面的路径访问：
+例如 `gpuvm=off`、64 MiB VRAM 时，GPU 物理地址 `0x4500_1234` 对应 Host IOVA `0x4100_1234`。CP 设置基址 `0x4500_0000`，读取本地 `0x8000_1234`，公共物理入口再减去 `0x0400_0000`。IOVA 0 对应 GPU 物理地址 `0x0400_0000`，不排除该页。窗口覆盖只选择路由，实际 Host 存储及 IOMMU 映射必须有效。
 
-```text
-参数区保存 32 位本地地址 0x8000_1234
-  → LWU 零扩展为 0x0000_0000_8000_1234
-  → 选择 Host 窗口，得到窗口内偏移 0x1234
-  → 加上 64 位窗口基址，访问 Host RAM
-```
+全设备 Outbound 窗口由驱动在 CP 启动前配置并确认：GPU 基址为 `vram_size`，Host IOVA 基址为 0，长度为 `0x1_0000_0000 - vram_size`。BAR0 `0x0b00～0x0b18` 保存这些值、使能和确认状态；运行期间拒绝重配置。驱动设置 31 位 DMA mask，每次分配用 64 位算术检查完整区间，再保存原始 DMA 地址和转换后的 GPU 物理地址；释放和 CPU 映射仍用原始地址。
 
-使用 `LUI` 构造本地地址后也须清除高 32 位的符号扩展。这里处理的是 CP 本地入口地址；Host 地址仍由两个基址寄存器完整保存，不截成 32 位。
-
-- 基址寄存器采用自然对齐的 32 位读写。`BASE_LO[15:0]` 读零、写入忽略；固件写完高低位后才能访问窗口，更新期间中断处理程序也不能使用窗口。
-- 窗口采用自然对齐的 1、2、4、8 字节小端读写，8 字节访问使用 `LD/SD`。成功时，当前指令取得读值或完成相应写请求；地址或权限检查失败时，CP 收到原生 load/store access fault，由固件处理。失败不承诺撤销已经发生的写入。
-- 窗口不修改 Host 的 `DMA_STATUS`、`ERROR_STATUS` 或完成中断，不增加 CP 专用 DMA 寄存器。其可用性不额外依赖 `GLOBAL_CTRL.ENABLE`，CP 启停仍按第 3 节执行。
-- CP 复位将窗口基址清零；零基址表示访问 IOVA 0 附近，不表示窗口关闭。Host DMA 状态仍按现有复位规则保留。
-- Host 保持实际访问范围的映射、权限和内存寿命有效。当前窗口沿用该 PCIe 设备的 IOMMU 上下文，尚未实现按队列 VMID 选择页表。
-
-现有窗口提供普通数据读写，固件代码与栈继续放在 VRAM。对象地址采用[第 2.4 节的字节地址编码](#spec-address-values)；队列访存上下文和 Signal 的单一更新者规则见下文，32 位进度与 64 位完成值的完整访问及发布顺序遵守[第 2.2.1 节](#spec-shared-value-integrity)。调用路径与验证方式见[窗口实现说明](<./CP_MEC 软件实现、参考与扩展.md#cp-host-window-implementation>)。
+停止时先保持 CP 复位，等待在途物理访问结束，再确认整体复位已关闭窗口。未确认停止时保留相关资源。BO 分配、队列创建与进程退出均不重配窗口。
 
 <a id="spec-memory-access-context"></a>
 
 #### 2.1.1 访存上下文与队列错误归属
 
-CP 已根据 Queue A 的 HQD 找到 Ring，接下来读取包内容。以下按 DMA 直通、`VMID = 0` 举例，说明固件在访问前保存什么，以及失败后怎样找到所属队列。
+CP 已根据 Queue A 的 HQD 找到 Ring，接下来读取包内容。以下按 `gpuvm=off`、用户 `VMID = 1` 举例，说明固件在访问前保存什么，以及失败后怎样找到所属队列。
 
 ```text
 CP 正在处理 Queue A，位于 HQD 槽位 2
@@ -237,14 +236,14 @@ CP 正在处理 Queue A，位于 HQD 槽位 2
   │ 固件记录本次访问：
   │   所属槽位 = 2
   │   操作 = 读取 Ring
-  │   Host 物理地址 = 0x1_9000_0080
+  │   GPU 物理地址 = 0x4500_0080
   ▼
 配置 Host 访存窗口
-  窗口基址 = 0x1_9000_0000
+  窗口基址 = 0x4500_0000
   CP 本地读取地址 = 0x8000_0080
   │
   ▼
-访问 Host RAM 的 0x1_9000_0080
+经 Outbound 访问 Host IOVA 0x4100_0080
   ├─ 成功：取得数据，继续解析命令
   │
   └─ 失败：触发 CP 访存异常
@@ -256,7 +255,7 @@ CP 正在处理 Queue A，位于 HQD 槽位 2
              → 停止 Queue A 后续取包
 ```
 
-**[DESIGN]** 固件在访问前保存所属 HQD 槽位、访问阶段和完整目标地址，访问失败后据此区分“读取 Ring 失败”“写回消费进度失败”等情况。队列归属由槽位确定，VMID 仍统一为 0。处理 KIQ 或 HIQ 的映射命令时，记录来源管理队列、目标种类和 MQD 地址；CP 选定目标槽位后，再记录该槽位，例如“HIQ 正在为 CP 选定的槽位 2 读取 MQD”。尚未选定目标槽位时，错误仍关联到来源管理队列和本次请求。
+**[DESIGN]** 固件在访问前保存所属 HQD 槽位、访问阶段和完整目标地址，访问失败后据此区分“读取 Ring 失败”“写回消费进度失败”等情况。队列归属由槽位确定，访问域和用户 VMID 分别保存。处理 KIQ 或 HIQ 的映射命令时，记录来源管理队列、目标种类和 MQD 地址；CP 选定目标槽位后，再记录该槽位，例如“HIQ 正在为 CP 选定的槽位 2 读取 MQD”。尚未选定目标槽位时，错误仍关联到来源管理队列和本次请求。
 
 普通 Host 访问成功时，同步取得读值或完成写请求；失败时进入原生访存异常，由固件按上述上下文处理。能够归属到用户队列的访问错误，记录到该槽位的 `CP_HQD_ERROR`，并停止这条队列后续取包；CP 可以继续处理 KIQ 和其他正常队列。KIQ 实际通道故障，或 CP 固件代码、栈等访问异常时，停止队列调度并保留相关资源，设备恢复留作后续扩展。
 
@@ -288,7 +287,7 @@ Host 等待任务 T1
 
 **[DESIGN]** `value` 保留 64 位有符号整数，按 8 字节对齐。Host 在提交前初始化为 `1`；从任务发布到本次使用结束，只有 CP 可以更新 `value`，Host 不与 CP 并发写入。CP 在正常完成路径上执行一次“读取、减一、写回”，将 `1` 改为 `0`，无需专门的原子加或原子读改写入口。计算执行器不另行更新同一 Signal。
 
-`S.value` 的 Host 物理地址保留完整的 64 位；按[第 2.5.2 节](#spec-signal-layout)的布局，`value` 位于 Signal 起始地址的偏移 `0x00`。每次任务的完成更新只执行一次；访存失败仍按所属队列记录错误，不盲目重复减一。Host 重新初始化或复用 Signal 前，必须先满足[第 2.5.3 节](#spec-signal-notify-wait)及[第 7.1.7 节](#spec-ih-object-lifetime)已经确定的旧任务、旧通知与对象引用条件；应用释放接口见[9.7.4 的已确认接口](#spec-host-object-release)。
+`S.value` 的 GPU 地址存入 64 位协议槽，高 32 位须为零；按[第 2.5.2 节](#spec-signal-layout)的布局，`value` 位于 Signal 起始地址的偏移 `0x00`。每次任务的完成更新只执行一次；访存失败仍按所属队列记录错误，不盲目重复减一。Host 重新初始化或复用 Signal 前，必须先满足[第 2.5.3 节](#spec-signal-notify-wait)及[第 7.1.7 节](#spec-ih-object-lifetime)已经确定的旧任务、旧通知与对象引用条件；应用释放接口见[9.7.4 的已确认接口](#spec-host-object-release)。
 
 **[BOUNDARY]** 单一更新者省去了并发读改写之间的冲突，仍须保证 Host 与 CP 取得完整的 64 位值，并保证结果写回先于完成值发布。窗口支持对齐的 8 字节读写；完整字段访问遵守[第 2.2.1 节](#spec-shared-value-integrity)，具体可见性操作见[第 6.4 节](#spec-dispatch-visibility)。通知槽标记和防止漏唤醒的等待协议已按[第 2.5.3 节](#spec-signal-notify-wait)确定，中断交付沿用[第 7.1.5 节](#spec-ih-signal-notify)。多更新者的原子读改写列为[后续扩展](<./CP_MEC 软件实现、参考与扩展.md#signal-atomic-extension>)，不作为第二阶段必需接口。
 
@@ -322,7 +321,7 @@ Ring_A 中任务 T1 的 Dispatch
              CP 按完成协议更新，运行时等待或查询
 ```
 
-这里的 `completion_signal` 保存 Signal S1 的 64 位 Host RAM 物理地址，字段与通知槽的关系见[第 2.5 节](#spec-signal-representation)。M1 是保存标记值的内存位置，HIQ 中的第二条命令执行向 M1 写值的操作；KIQ 建立 HIQ 时也采用同一管理队列内后附标记的形式，见[管理命令与完成确认](#spec-management)。
+这里的 `completion_signal` 在 64 位槽中保存 Signal S1 的 GPU 地址，字段与通知槽的关系见[第 2.5 节](#spec-signal-representation)。M1 是保存标记值的内存位置，HIQ 中的第二条命令执行向 M1 写值的操作；KIQ 建立 HIQ 时也采用同一管理队列内后附标记的形式，见[管理命令与完成确认](#spec-management)。
 
 - **进度区按队列分配。** 每条队列独立分配一块进度内存，生产进度与消费回报均保存 32 位数值，使用其中不同的位置，各位置至少按 8 字节对齐，与 Ring 包槽分开。用户队列的进度区映射给所属应用；运行时写生产进度、读消费进度，CP 执行相反方向的访问。KIQ、HIQ 也各有独立进度区，由驱动承担 Host 侧读写，不映射给普通应用。进度区在创建队列时准备，卸载并满足回收条件后释放。
 - **管理标记按管理请求使用。** 驱动单独管理一块完成标记区，按请求分配结果区。每个在途管理请求独占 16 字节，至少按 8 字节对齐，包含 8 字节完成标记、4 字节结果码和 4 字节保留空间，仅供驱动和 CP 访问。`WRITE_COMPLETION` 携带结果区起始地址和待写入的 64 位无符号序号，先写结果码、再写完成标记，命令布局见[第 4.1 节](#spec-management-packet-format)，结果区布局见[第 4.4 节](#spec-management-result)。结果区的保留与回收由管理请求控制，不与目标队列的进度区绑定；驱动确认卸载结果并满足生命周期条件后，再回收目标队列资源。标记初值为 0、预期值使用递增序号，等待和复用规则见[第 4.3 节](#spec-management-marker)。
@@ -347,7 +346,7 @@ Host 只能读到完整旧值或完整新值
 
 生产进度 `W` 和消费回报 `R` 沿用[第 5.2.1 节](#spec-ring-progress)的 32 位数值，每次按完整的 32 位值访问，存放位置继续至少按 8 字节对齐。
 
-完整读取和写入是 Host、CP 与 QEMU 访存后端共同承担的接口要求，覆盖指令、窗口回调、消息传输到最终内存访问的路径。CP 发出一次 `LD/SD` 或消息长度为 8 字节，只能说明访问形式；后端仍须保证读取方取得完整旧值或完整新值。当前代码已接入等宽原子访问，并通过 CP 回归中的并发读写检查；验证范围及端到端验收状态见[大纲进度说明](<./QEMU GPGPU 实验大纲.md#current-progress>)。
+完整读取和写入是 Host、CP 与 QEMU 访存后端共同承担的接口要求，覆盖指令、窗口回调、消息传输到最终内存访问的路径。CP 发出一次 `LD/SD` 或消息长度为 8 字节，只能说明访问形式；后端仍须保证读取方取得完整旧值或完整新值。当前代码保留等宽访问。2026-10-19 的 CP 并发读写结果作为历史记录，不列入当前执行要求；记录及端到端验收状态见[大纲进度说明](<./QEMU GPGPU 实验大纲.md#current-progress>)。
 
 字段值完整，还须满足相关数据的发布顺序。AQL 继续按[第 5.2.2 节](#spec-aql-reserve-publish)先更新 `W` 预留，再填写包体、发布有效 Header；CP 确认 Header 有效并保证包体可见后才解析。按[第 6 节](#spec-dispatch-completion)，CP 确认结果写回后发布 Signal，结束旧槽访问并将 Header 置为 `INVALID` 后回报新 `R`；Host 完成相应同步后，才读取结果或复用槽。具体屏障须结合 Host 映射、CP 窗口和后端落实并验证。
 
@@ -357,124 +356,64 @@ Host 只能读到完整旧值或完整新值
 
 ### 2.3 Kernel 代码、参数块与数组的存储和访问
 
-**[DESIGN]** Kernel 描述对象、Kernel 代码和输入输出数组放在 VRAM，实际显存区间由 Linux 内核驱动统一分配和回收，管理范围见[第 3.1 节](#spec-firmware-layout)。参数块放在驱动分配的 Host RAM 一致性内存，映射给所属应用，由运行时填写。CP 读取描述对象取得代码入口，把入口偏移、参数块物理地址和执行维度交给计算执行器。执行器直接读取 Host RAM 参数块，再根据其中的 VRAM 偏移访问数组，不先把整块参数搬到 VRAM。
+**[DESIGN]** 现有三个示例固定把代码、描述对象和数组放在 VRAM，把参数及队列相关对象放在 Host coherent 存储。库返回统一的 `gpu_address`，调用方用该值填写描述对象、AQL 和参数中的数组指针；参数的 `cpu` 映射供 Host 填写数据。
 
-以 `Z[i] = X[i] + Y[i]` 为例，以下按 Host DMA 直通配置说明，地址和偏移均为示例，不规定实际分配位置或二进制字段布局。下图展示字段保存的值、对象实际位置，以及 CP 和执行器各自的读取动作。
+以向量加法为例，下面设 `gpuvm=off`、VRAM 为 64 MiB，参数的 Host IOVA 为 `0x4100_2000`：
 
 ```text
-Host RAM 中的 AQL Dispatch 包
-由 Host CPU 填写，RV64 CP 读取
-│
-├─ kernel_object = 0x4000
-│    保存的值：Kernel 描述对象在 VRAM 内的字节偏移
-│    │
-│    └─ CP 根据这个偏移，读取 VRAM 的 0x4000 位置
-│         │
-│         └─ Kernel 描述对象
-│              │
-│              └─ 代码入口偏移 = 0x8000
-│                   │
-│                   └─ CP 将入口偏移交给执行器
-│                        │
-│                        └─ RV32 计算执行器从 VRAM 的 0x8000 位置取指
-│                             └─ Kernel 代码
-│
-└─ kernarg_address = 0x9000_2000
-     保存的值：参数块在 Host RAM 中的物理地址
-     │
-     └─ CP 将参数块物理地址交给执行器
-          │
-          └─ 执行器通过 Host 访存路径读取该地址
-               │
-               └─ Host RAM 物理地址 0x9000_2000：参数块
-                    │
-                    ├─ X = 0x1_0000（X 数组的 VRAM 字节偏移）
-                    │    └─ 执行器据此读取 VRAM 中的 X 数组
-                    │
-                    ├─ Y = 0x2_0000（Y 数组的 VRAM 字节偏移）
-                    │    └─ 执行器据此读取 VRAM 中的 Y 数组
-                    │
-                    ├─ Z = 0x3_0000（Z 数组的 VRAM 字节偏移）
-                    │    └─ 执行器据此写入 VRAM 中的 Z 数组
-                    │
-                    └─ N = 1024（参与计算的元素数量）
+Dispatch.kernel_object = 0x4000 → VRAM 中的16字节描述对象
+  └─ code_entry = 0x8000 → 执行器经公共入口从 VRAM 取指
+
+Dispatch.kernarg_address = 0x4500_2000 → 启动时 a0 = 0x4500_2000
+  └─ 普通内存读取 → Outbound → Host IOVA 0x4100_2000 的参数块
+       ├─ X = 0x1_0000 → VRAM 中的 X
+       ├─ Y = 0x2_0000 → VRAM 中的 Y
+       ├─ Z = 0x3_0000 → VRAM 中的 Z
+       └─ N → 元素数量
 ```
 
-找代码时，Dispatch 保存描述对象的 VRAM 偏移，描述对象再保存代码入口偏移。找数据时，Dispatch 保存参数块的 Host RAM 物理地址，参数块再保存 X、Y、Z 的 VRAM 偏移和 N；数组内容仍在 VRAM。图中的地址和偏移均供设备使用，Host 软件通过自己的映射填写这些数值。
+开启 GPUVM 时流程相同，但这些字段使用绑定返回的 GPUVA，先由所属 VM 页表翻译，再进入公共物理入口。CP 读取描述对象和 Kernel 取指都走这一入口，关闭 GPUVM 时也能访问 Outbound，不保留只许 VRAM 的旁路。
 
-运行时在发布 Dispatch 前准备好代码、描述对象、参数和输入数据。任务仍可能访问这些对象时，必须保留相应存储和设备访问条件，不能覆盖参数或回收对象；异常结束按[第 7.3 节](#spec-failure-retirement)处理，应用对象释放接口见[9.7.4 的已确认接口](#spec-host-object-release)。计算结果 Z 留在 VRAM，Host 确认完成后再通过已有读取或搬运路径取得结果。
-
-**[BOUNDARY]** RV64 CP 的 Host 窗口支持对齐的 8 字节读写；RV32 计算执行器在队列模式下通过独立的只读参数窗口访问 Host 参数，旧同步路径继续从 VRAM 读取参数。计算线程的 `a0` 保存在执行器的 lane 状态中，参数读取使用执行器的窗口，不经过 CP 的窗口。地址数值按[第 2.4 节](#spec-address-values)编码，字段位宽、对象对齐及基本访问校验按[第 2.4.2 节](#spec-address-validation)执行。描述对象的 16 字节布局、参数长度和只读参数窗口已按[9.5.2](#spec-kernel-executor-interface)确定，完整规则见[第 6.2 节](#spec-kernel-descriptor)；CP 向执行器提交这些信息的寄存器和状态接口已按[9.5.3](#spec-cp-dispatch-interface)确定，见[第 6.3 节](#spec-executor-dispatch)。代码与接口说明见[参数访问说明](<./CP_MEC 软件实现、参考与扩展.md#kernel-argument-access>)；本节是教学设备设计，不规定 AMD 的默认参数存放方式。
+Host 发布前准备好全部内容，发布后保持代码、参数、数组和 Signal 的存储有效，直到确认任务不再访问。Kernel 参数读取使用真实 `a0`，不经过 CP 的本地窗口，也不经过旧 RV32 参数窗口；完整启动和范围规则见[第 6.2 节](#spec-kernel-descriptor)。
 
 <a id="spec-address-values"></a>
 
-### 2.4 物理地址与 VRAM 偏移的编码
+### 2.4 GPU 地址的编码与访问域
 
-驱动已经为 Queue A 分配 Ring_A，且 HIQ 已建立，接下来需要让 CP 知道从哪里取包。以下仍按 Host DMA 直通配置举例，数值只用于说明地址编码，不规定实际分配位置和 MQD 的二进制布局。用户队列沿“驱动填写 MQD、通过 HIQ 请求装载、CP 配置 HQD”的路径建立：
-
-```text
-Host RAM 中的 Ring_A
-起始物理地址 = 0x1_9000_0000
-         │
-         │ 驱动将 Ring 物理地址写入 MQD_A
-         ▼
-Host RAM 中的 MQD_A
-  └─ Ring 地址 = 0x1_9000_0000
-         │
-         │ 驱动经 HIQ 提交 MAP_QUEUES
-         │ CP 读取 MQD_A，将地址拆分后装入 HQD
-         ▼
-Queue A 的 HQD
-  ├─ CP_HQD_PQ_BASE    = 0x9000_0000（低 32 位）
-  └─ CP_HQD_PQ_BASE_HI = 0x1        （高 32 位）
-         │
-         │ CP 读取两部分，拼成完整地址
-         ▼
-Ring 物理地址 = 0x1_9000_0000
-         │
-         │ CP 配置 Host 访存窗口并读取
-         ▼
-取得 Ring_A 中的命令包
-```
-
-**[DESIGN]** 地址字段按字节保存原值。Host RAM 物理地址字段保留完整的 64 位；使用两个 32 位寄存器时，分别保存地址的低 32 位和高 32 位，拼接后得到原始字节地址，不先移位压缩。VRAM 对象使用区内字节偏移，由字段用途确定访问 Host RAM 还是 VRAM。
-
-CP 将高 32 位左移 32 位，再与低 32 位组合，得到完整地址。首次启动前由 Host 直接配置 KIQ 的 HQD，使用相同的数值编码；用户队列的 HQD 由 CP 按管理命令配置，配置写方沿用第 2 节的约定。
-
-Dispatch 中的两个字段分别定位描述对象和参数块。沿用第 2.3 节的示例：
+驱动已为 Queue A 绑定 Ring，接下来把 Ring 的 GPU 地址交给 CP。下例使用关闭 GPUVM 时的物理地址，窗口换算条件与上节相同：
 
 ```text
-kernel_object = 0x4000
-  └─ 按 VRAM 字节偏移解释
-       └─ CP 读取 VRAM 偏移 0x4000 处的描述对象
-
-kernarg_address = 0x9000_2000
-  └─ 按 Host RAM 物理地址解释
-       └─ CP 将地址交给执行器
-            └─ 执行器读取该物理地址处的参数块
+Host IOVA 0x4100_0000 → Ring 的 GPU 物理地址 0x4500_0000
+  → 驱动填写 MQD.ring_base = 0x4500_0000
+  → HIQ 管理命令提供 MQD 的 GPU 物理地址
+  → CP 按管理域读取 MQD，再配置 HQD
+      ├─ CP_HQD_PQ_BASE = 0x4500_0000
+      ├─ CP_HQD_PQ_BASE_HI = 0
+      └─ VMID = 1
+  → CP 按用户域读取 Ring → 公共物理入口 → Host IOVA 0x4100_0000
 ```
 
-运行时填写 `kernel_object` 时使用描述对象的 VRAM 偏移，填写 `kernarg_address` 时使用参数块的 Host RAM 物理地址。Host 软件通过自己的映射准备对象，映射指针不写入这些设备字段。
+**[DESIGN]** 协议字段仍按原宽度保存字节地址，两个 32 位寄存器分别保存低、高位，不预先右移压缩。版本 2 的 GPU 存储地址限定为 32 位，64 位字段的高 32 位须为零；地址加长度等计算用 64 位，先校验再缩窄。
 
-**[BOUNDARY]** 本节确定地址单位、Host 物理地址的 64 位表示和低高位拆分规则。共享对象中的多字节字段统一按[下文的小端规则](#spec-shared-endian)编码，地址位宽、对象对齐及基本访问校验见[第 2.4.2 节](#spec-address-validation)，Signal 字段见[第 2.5 节](#spec-signal-representation)。具体结构布局和访问失败后的队列处理按对应章节的已确认约定执行。已有 Host 访存窗口基址的 64 KiB 对齐规则仍按第 2.1 节执行；队列地址编码的确认不表示队列功能已经实现。
+用户 Ring、进度、描述对象、参数、Signal 和通知槽使用 GPUVA 或 GPU 物理地址，取决于设备 `gpuvm` 属性。管理 Ring、MQD、管理完成区、IH 与 COPY 物理端点一律保存 GPU 物理地址。`dma_addr_t` 只供驱动的 DMA API 使用，不能直接填入这些设备字段。Host CPU 指针也不写入 GPU 地址字段。
 
 <a id="spec-shared-endian"></a>
 
 #### 2.4.1 共享对象中的小端字段
 
-Host 已取得 Signal S 的物理地址 `0x1_9000_3000`，接下来把它写入 Dispatch 的 `completion_signal` 字段。CP 读取这个 64 位字段时，需要按相同的字节顺序还原地址：
+设 GPUVM 关闭，Host 已取得 Signal S 的 GPU 物理地址 `0x4500_3000`，接下来把它写入 Dispatch 的 `completion_signal` 字段。CP 读取这个 64 位字段时，需要按相同的字节顺序还原地址：
 
 ```text
-completion_signal 的数值 = 0x1_9000_3000
+completion_signal 的数值 = 0x4500_3000
          │
          │ Host 按小端写入 Dispatch 中的 8 字节字段
          ▼
 字段内偏移： +0  +1  +2  +3  +4  +5  +6  +7
-对应字节：   00  30  00  90  01  00  00  00
+对应字节：   00  30  00  45  00  00  00  00
          │
          │ CP 按小端读取这 8 个字节
          ▼
-还原物理地址 = 0x1_9000_3000
+还原物理地址 = 0x4500_3000
 ```
 
 **[DESIGN]** Ring 命令、MQD、Signal、通知槽、Kernel 描述对象和参数块中的多字节字段统一采用小端格式：低地址存低有效字节，高地址存高有效字节。该规则同时适用于 Host RAM 和 VRAM 中的这些对象；驱动、运行时、CP 和计算执行器按同一规则读写各自访问的字段。图中的 `00`、`30` 等均为十六进制字节。
@@ -485,19 +424,19 @@ completion_signal 的数值 = 0x1_9000_3000
 
 #### 2.4.2 地址位宽、对象对齐与访问校验
 
-CP 已从 Dispatch 取得描述对象的 VRAM 偏移，接下来要读取描述对象并取得代码入口。沿用第 2.3 节的取值，先检查字段和访问范围，再把入口交给计算执行器：
+CP 已从 Dispatch 取得描述对象的 GPU 地址，接下来要读取描述对象并取得代码入口。沿用第 2.3 节的取值，先检查字段和访问范围，再把入口交给计算执行器：
 
 ```text
-CP 取得 kernel_object：64 位无符号偏移，数值为 0x4000
+CP 取得 kernel_object：64 位无符号地址，数值为 0x4000
   → 检查高 32 位为零、描述对象地址按 8 字节对齐
-  → 按描述对象大小检查整段范围落在 VRAM 内
-  → 读取 VRAM 偏移 0x4000 处的描述对象
-  → 取得其中的代码入口偏移：32 位无符号数，数值为 0x8000
+  → 按描述对象大小检查完整 GPU 地址范围
+  → 按用户域读取 GPU 地址 0x4000 处的描述对象
+  → 取得其中的代码入口地址：32 位无符号数，数值为 0x8000
   → 交给 RV32 计算执行器
   → 执行器检查入口按 4 字节对齐，并检查实际访存范围
 ```
 
-**[DESIGN]** `kernel_object` 保留 64 位无符号字段，保存 VRAM 字节偏移；当前阶段要求高 32 位为零，且访问范围位于实际 VRAM 容量内。Kernel 描述对象中的代码入口偏移，以及参数块中 X、Y、Z 等数组的 VRAM 偏移，使用 32 位无符号数，配合现有 RV32 计算执行器。从更宽接口取得这些 32 位偏移时，必须先检查范围再转换。Host RAM 物理地址仍保留完整 64 位。
+**[DESIGN]** `kernel_object`、`kernarg_address` 和 `completion_signal` 保留 64 位字段，保存用户 GPU 地址并检查高 32 位为零。代码入口与参数中的数组地址为 32 位，转换前检查完整范围。公共物理入口拒绝跨 VRAM／Outbound 边界的非法范围，用户访问继续保护 VRAM 首页和固件保留区；开启翻译时还检查映射及权限。
 
 **[DESIGN]** 对象采用以下最低对齐要求：
 
@@ -509,22 +448,22 @@ CP 取得 kernel_object：64 位无符号偏移，数值为 0x4000
 
 驱动在创建和配置对象时检查，CP 在解析对象引用时检查，计算执行器检查实际执行的访存。检查内容包括地址对齐、乘加计算不溢出，以及整段访问范围有效。VRAM 访问必须完整落在实际容量内；Host RAM 访问还必须处理访存接口返回的错误。
 
-校验失败就拒绝该次访问，不截断地址、不自动调整地址。访存过程中发生的失败交给错误协议处理，不承诺撤销已经发生的写入。第二阶段 VMID 固定为 0，驱动用软件对象管理 Host 侧资源归属，按 VMID 的设备访问隔离留到第三阶段；访存失败按[第 2.1.1 节](#spec-memory-access-context)关联当前队列并停止相应取包，具体错误码、通知及失败收尾已按第 7 节和 9.6 确认。
+校验失败就拒绝该次访问，不截断地址、不自动调整地址。访存过程中发生的失败交给错误协议处理，不承诺撤销已经发生的写入。用户 VMID 为 1、2；开启 GPUVM 时按页表隔离，关闭时共享物理空间；访存失败按[第 2.1.1 节](#spec-memory-access-context)关联当前队列并停止相应取包，具体错误码、通知及失败收尾已按第 7 节和 9.6 确认。
 
-**[BOUNDARY]** 这些是教学设备的接口约定，不套用 AMD 的完整对象布局。MQD 布局已在 9.2.1 确认，见[第 2.6 节](#spec-mqd-format)；管理命令布局已在 9.3.2 确认，见[第 4.1 节](#spec-management-packet-format)。进度值采用[第 5.2.1 节](#spec-ring-progress)确定的 32 位包编号；Kernel 描述对象、参数布局和访问窗口已按 9.5.2 确定，见[第 6.2 节](#spec-kernel-descriptor)；Signal 的 24 字节布局及通知、等待协议已按[9.5.4](#spec-signal-completion-protocol)确定，见[第 2.5.2 节](#spec-signal-layout)和[第 2.5.3 节](#spec-signal-notify-wait)。
+**[BOUNDARY]** 这些是教学设备的接口约定，不套用 AMD 的完整对象布局。MQD 布局已在 9.2.1 确认，见[第 2.6 节](#spec-mqd-format)；管理命令布局已在 9.3.2 确认，见[第 4.1 节](#spec-management-packet-format)。进度值采用[第 5.2.1 节](#spec-ring-progress)确定的 32 位包编号；Kernel 描述对象、参数布局和启动接口按版本 2 更新，见[第 6.2 节](#spec-kernel-descriptor)；Signal 的 24 字节布局及通知、等待协议已按[9.5.4](#spec-signal-completion-protocol)确定，见[第 2.5.2 节](#spec-signal-layout)和[第 2.5.3 节](#spec-signal-notify-wait)。
 
 <a id="spec-signal-representation"></a>
 
-### 2.5 Signal 的物理地址、字段位宽与对齐
+### 2.5 Signal 的 GPU 地址、字段位宽与对齐
 
 运行时为任务 T1 准备 Signal S，将 S 的引用填入 Dispatch。CP 取得这个引用后，需要找到完成值和通知信息；Host 驱动则需要根据事件编号找到等待线程。
 
-**[DESIGN]** 本实验的 `completion_signal` 直接保存 S 的 64 位 Host RAM 物理字节地址。S 保存完成值 `value`、事件编号 `event_id` 和通知槽地址 `event_mailbox_ptr`；通知槽也位于 Host RAM。下面沿用 DMA 直通配置，地址和事件编号为示例；初值 `1` 与 CP 完成后减为 `0` 的规则见[第 2.1.2 节](#spec-signal-single-writer)，图中不规定字段偏移和完整通知协议：
+**[DESIGN]** 本实验的 `completion_signal` 在 64 位槽中保存 S 的用户 GPU 地址。S 保存完成值 `value`、事件编号 `event_id` 和通知槽地址 `event_mailbox_ptr`；通知槽也位于 Host RAM。下面设 GPUVM 关闭，地址和事件编号为示例；初值 `1` 与 CP 完成后减为 `0` 的规则见[第 2.1.2 节](#spec-signal-single-writer)，图中不规定字段偏移和完整通知协议：
 
 ```text
 AQL Dispatch
   └─ completion_signal：64 位
-       保存 S 的物理地址 = 0x1_9000_3000
+       保存 S 的物理地址 = 0x4500_3000
          │
          │ CP 按物理地址访问 Host RAM
          ▼
@@ -536,7 +475,7 @@ Host RAM 中的 Signal S
   │    └─ 保存事件编号，本例为 7
   │
   └─ event_mailbox_ptr：64 位
-       保存 M7 的物理地址 = 0x1_9000_4000
+       保存 M7 的物理地址 = 0x4500_4000
          │
          │ CP 需要发送完成通知时，按这个地址写入
          ▼
@@ -590,7 +529,7 @@ Host 为任务 T1 准备 Signal S，CP 根据 Dispatch 中的 `completion_signal
 偏移 0x00：value              64 位有符号数，提交前为 1
 偏移 0x08：event_id           32 位无符号事件编号
 偏移 0x0c：reserved           32 位，填 0
-偏移 0x10：event_mailbox_ptr  64 位通知槽物理地址
+偏移 0x10：event_mailbox_ptr  64 位通知槽 GPU 地址
 总大小：24 字节
 ```
 
@@ -686,19 +625,19 @@ CP 开始卸载：清除 ACTIVE、关闭 Doorbell 使能，槽位仍占用
 
 ```text
 MQD：64 字节，偏移范围 0x00～0x3f
-  ├─ 0x00  ring_base          64 位 / 8 字节：Ring 的 Host RAM 物理地址
-  ├─ 0x08  rptr_report_addr   64 位 / 8 字节：消费进度回报位置的物理地址
-  ├─ 0x10  wptr_poll_addr     64 位 / 8 字节：生产进度存放位置的物理地址
+  ├─ 0x00  ring_base          64 位 / 8 字节：Ring 的 GPU 地址
+  ├─ 0x08  rptr_report_addr   64 位 / 8 字节：消费进度回报位置的 GPU 地址
+  ├─ 0x10  wptr_poll_addr     64 位 / 8 字节：生产进度存放位置的 GPU 地址
   ├─ 0x18  pq_control        32 位 / 4 字节：Ring 容量与控制
   ├─ 0x1c  doorbell_control  32 位 / 4 字节：队列 Doorbell 配置
-  ├─ 0x20  vmid              32 位 / 4 字节：第二阶段固定为 0
+  ├─ 0x20  vmid              32 位 / 4 字节：管理队列为 0，用户队列为 1 或 2
   ├─ 0x24  aql_control       32 位 / 4 字节：0 为非 AQL，1 为 AQL
   ├─ 0x28  saved_rptr        64 位 / 8 字节：零扩展保存 32 位消费位置，高 32 位为 0
   ├─ 0x30  saved_error       32 位 / 4 字节：卸载时保存的错误快照
   └─ 0x34～0x3f reserved              12 字节：保留
 ```
 
-`ring_base`、`rptr_report_addr` 和 `wptr_poll_addr` 都保存完整的 Host RAM 物理字节地址，分别装入 HQD 的 `CP_HQD_PQ_BASE / HI`、`CP_HQD_PQ_RPTR_REPORT_ADDR / HI` 和 `CP_HQD_PQ_WPTR_POLL_ADDR / HI`。每组地址按[第 2.4 节](#spec-address-values)直接拆成低、高 32 位。四个配置字段分别对应 HQD 的 Ring 控制、Doorbell 控制、VMID 和 AQL 控制寄存器；`pq_control` 保存 Ring 字节容量，`doorbell_control` 保存偏移和独立使能，完整编码见[第 8.1 节](#spec-hqd-field-encoding)。
+`ring_base`、`rptr_report_addr` 和 `wptr_poll_addr` 管理队列保存 GPU 物理地址，用户队列保存本模式的 GPU 地址，分别装入 HQD 的 `CP_HQD_PQ_BASE / HI`、`CP_HQD_PQ_RPTR_REPORT_ADDR / HI` 和 `CP_HQD_PQ_WPTR_POLL_ADDR / HI`。每组地址按[第 2.4 节](#spec-address-values)直接拆成低、高 32 位。四个配置字段分别对应 HQD 的 Ring 控制、Doorbell 控制、VMID 和 AQL 控制寄存器；`pq_control` 保存 Ring 字节容量，`doorbell_control` 保存偏移和独立使能，完整编码见[第 8.1 节](#spec-hqd-field-encoding)。
 
 **[DESIGN]** 驱动和 CP 按以下规则使用这份布局：
 
@@ -759,14 +698,14 @@ CP 地址 `0～vram_size-1` 对应 VRAM 的相同字节偏移。Host 经 `BAR2 �
 
 驱动中的显存管理功能按设备维护一份统一的空闲、占用和保留状态，记录已分配区间及其所属上下文，负责实际 VRAM 空间的分配与回收。管理范围从偏移 0 开始，覆盖完整的前 60 MiB；首个 Host 页也由该功能登记为保留，普通分配从保留页之后开始。
 
-**[DESIGN]** 参考 AMD 驱动的做法，底层复用内核通用伙伴分配器：目标内核提供 `gpu_buddy` 时使用该接口；目标内核仍提供 `drm_buddy` 时使用对应实现。驱动按设备建立一个分配器实例，管理前 60 MiB，并负责请求校验、并发保护、对象归属及释放时机。本阶段没有设备页表，普通显存对象申请连续区间，继续按起始偏移访问。
+**[DESIGN]** 参考 AMD 驱动的做法，底层复用内核通用伙伴分配器：目标内核提供 `gpu_buddy` 时使用该接口；目标内核仍提供 `drm_buddy` 时使用对应实现。驱动按设备建立一个分配器实例，管理前 60 MiB，并负责请求校验、并发保护、对象归属及释放时机。普通显存对象仍申请固定连续区间；开启 GPUVM 时由页表映射到该物理区间，关闭时绑定直接返回物理地址。
 
 ```text
 应用通过运行时申请 VRAM
   → Linux 内核驱动检查大小、对齐和其他请求条件
   → 调用 gpu_buddy 或目标内核的 drm_buddy，从前 60 MiB 分配区间
   → 驱动记录占用与所属上下文，将分配结果交给运行时
-  → 运行时准备数据，CP 和执行器按已分配对象的偏移访问 VRAM
+  → 运行时准备数据，CP 和执行器按对象绑定返回的 GPU 地址访问 VRAM
   → 设备访问结束且满足资源释放条件后，驱动调用分配器回收区间
 ```
 
@@ -774,7 +713,7 @@ QEMU 提供显存存储和设备访问接口；应用、运行时和 CP 使用�
 
 末尾 4 MiB 固件保留区不进入普通显存分配池。这块保留区属于设备，应用退出、队列销毁或 CP 暂时复位都不释放它。更新固件前先停止 CP，并确认相关设备访问已经结束；CP 单独复位的影响见第 3.3 节。
 
-**[BOUNDARY]** 这一布局通过分配范围避免正常分配发生重叠，Kernel 越界访问的设备隔离留到第三阶段。当前工作区已接入固定保留区、链接布局和启动初始化，原同步路径与队列模式分别运行；代码与测试说明见[实现说明](<./CP_MEC 软件实现、参考与扩展.md#implementation>)。
+**[BOUNDARY]** 用户访问在公共入口继续保护 VRAM 首页和固件存储区。当前工作区保留固定固件链接布局与启动初始化，任务统一经队列提交；代码与测试说明见[实现说明](<./CP_MEC 软件实现、参考与扩展.md#implementation>)。
 
 BAR 写入、DMA 写入、计算解释器写入和冷复位清零都应使对应 TCG 指令翻译失效，支持在相同地址替换固件。以下控制寄存器已经接入：
 
@@ -787,6 +726,8 @@ BAR 写入、DMA 写入、计算解释器写入和冷复位清零都应使对应
 没有连接 CP 的单进程设备对这两个寄存器读零、写入忽略。
 
 ### 3.2 配置并激活 KIQ 后解除复位
+
+版本 2 先在 CP 保持复位、没有活跃 HQD 或在途访问时配置 Outbound，并读取确认状态；随后按下列顺序配置 IH、KIQ 和固件。两种 GPUVM 状态都必须核对设备版本与固件握手值为 2。
 
 **[DESIGN]** 队列模式在固件启动流程中配置 KIQ，顺序如下：
 
@@ -879,7 +820,7 @@ Host 观察到本次预期标记
 
 CP 必须先让管理操作达到规定的完成条件，并保证本次结果状态对 Host 可见，才能发布后面的标记；使用异步接口时也须等待相关操作完成。两条命令在对应管理 Ring 中按逻辑顺序相邻，执行时遵守第 5 节的队列选择规则，不要求在同一轮检查中连续执行。
 
-这里向 HIQ 先放入映射本次队列的 `MAP_QUEUES`，再放入写完成标记命令；Ring、MQD 等资源由驱动事先准备。驱动从[管理完成标记区](#spec-shared-state-storage)取得本次结果区 M1，后面的命令携带 M1 的完整 Host RAM 物理地址和预期值。M1 位于 HIQ Ring 外；CP 执行 `WRITE_COMPLETION` 时，先在结果区偏移 8 字节处写结果码，再在开头写完成标记。
+这里向 HIQ 先放入映射本次队列的 `MAP_QUEUES`，再放入写完成标记命令；Ring、MQD 等资源由驱动事先准备。驱动从[管理完成标记区](#spec-shared-state-storage)取得本次结果区 M1，后面的命令携带 M1 的 GPU 物理地址和预期值。M1 位于 HIQ Ring 外；CP 执行 `WRITE_COMPLETION` 时，先在结果区偏移 8 字节处写结果码，再在开头写完成标记。
 
 建立 HIQ 时，对应的映射命令和写标记命令都放入 KIQ。驱动确认这次配置成功后，才能使用 HIQ 提交用户队列管理命令。两个 Ring 各自按序消费，HIQ 中的标记不能用来确认 KIQ 中的操作，反之亦然。
 
@@ -924,7 +865,7 @@ Queue A 建立后，驱动持有 MQD_A 的物理地址，CP 也已将这个地�
 ```text
 驱动向 HIQ 提交 UNMAP_QUEUES
   ├─ queue_kind = USER_AQL（数值 2）
-  └─ mqd_addr = MQD_A 的 Host RAM 物理地址
+  └─ mqd_addr = MQD_A 的 GPU 物理地址
        │ CP 通过 Host 访存窗口读取命令
        ▼
 CP 检查用户槽位 2、3 的当前绑定
@@ -976,7 +917,7 @@ MQD 中的 `aql_control` 只说明包格式：KIQ、HIQ 均为 `0`，用户 AQL 
 
 `UNMAP_QUEUES` 匹配到队列后，使用该 HQD 中保留的 MQD 地址保存必要状态。`WRITE_COMPLETION` 没有目标队列字段，偏移 `0x04` 的零是保留值，不表示操作槽位 0。
 
-`mqd_addr`、`completion_addr` 都保存完整的 **64 位 Host RAM 物理字节地址**，至少按 8 字节对齐，不右移编码。前者指向已确认的 64 字节 MQD，后者指向[第 4.4 节](#spec-management-result)的 16 字节结果区。CP 执行 `WRITE_COMPLETION` 时，先将前一条管理操作的 32 位结果码写入 `completion_addr + 8`，保证结果可见，再向 `completion_addr` 写入完整的 64 位 `completion_value`。结果码由 CP 按来源管理 Ring 暂存，命令不增加结果码字段。地址及整段访问范围按[第 2.4.2 节](#spec-address-validation)校验，完成地址须覆盖完整 16 字节结果区。
+`mqd_addr`、`completion_addr` 都保存保存在 64 位槽中的 **GPU 物理字节地址**（高 32 位为零），至少按 8 字节对齐，不右移编码。前者指向已确认的 64 字节 MQD，后者指向[第 4.4 节](#spec-management-result)的 16 字节结果区。CP 执行 `WRITE_COMPLETION` 时，先将前一条管理操作的 32 位结果码写入 `completion_addr + 8`，保证结果可见，再向 `completion_addr` 写入完整的 64 位 `completion_value`。结果码由 CP 按来源管理 Ring 暂存，命令不增加结果码字段。地址及整段访问范围按[第 2.4.2 节](#spec-address-validation)校验，完成地址须覆盖完整 16 字节结果区。
 
 对已经发布的管理命令，`opcode = 0` 和其他未定义编号均为非法命令。保留区非零或地址校验失败时，拒绝该命令。对于 `MAP_QUEUES`、`UNMAP_QUEUES`，`queue_kind` 不属于 `1`、`2`，或目标种类与来源管理队列不符合上述分工时，同样拒绝处理。请求结果、命令配对和回报故障按[第 4.4 节](#spec-management-result)处理，强制恢复步骤列入[后续异常恢复扩展](<./QEMU GPGPU 实验大纲.md#stalled-task-recovery-extension>)。尚未发布的 Ring 空间是否可读由提交协议判断，不能把空槽中的零当成一条已提交命令。
 
@@ -1339,7 +1280,7 @@ D = (W - R) mod 2^32 = 3
 
 不能用普通的 `W < R` 判断进度错误，也不因计数溢出而清空 Ring。现有容量除以包大小后，槽数都是 2 的幂，最大为 2048；每个槽数都整除 `2^32`，因此计数溢出后仍可用同一公式定位下一槽。用户 AQL 允许预留超出物理容量的编号，但每个线程仍须满足上述 `P` 与 `R` 的条件才能写槽，差值检查也不能代替 Header 发布协议。32 位模运算还要求预留进度领先最老未归还编号的距离必须小于 `2^32`；运行时必须限制在途预留数量，避免活跃编号重复。验证须覆盖预留上限与跨计数溢出的并发行为，已运行的用例及结果见[大纲进度说明](<./QEMU GPGPU 实验大纲.md#current-progress>)。
 
-**[DESIGN]** `CP_HQD_PQ_RPTR` 的整个 32 位值保存当前 `R`，固件不另存消费编号的高位。Host RAM 中的生产进度和消费回报也保存 32 位无符号数，存放位置沿用至少 8 字节对齐的约定；指定这些位置的地址仍为完整的 64 位 Host RAM 物理地址。
+**[DESIGN]** `CP_HQD_PQ_RPTR` 的整个 32 位值保存当前 `R`，固件不另存消费编号的高位。Host RAM 中的生产进度和消费回报也保存 32 位无符号数，存放位置沿用至少 8 字节对齐的约定；指定这些位置的地址仍保留 64 位槽；管理队列使用 GPU 物理地址，用户队列使用本模式的 GPU 地址。
 
 首次创建时，`W`、HQD 消费进度、消费回报和 `MQD.saved_rptr` 均初始化为 `0`。正常卸载前，Host 按[第 7.4 节](#spec-unmap-drain)停止提交并等到消费回报 `R == W`；CP 卸载时将当前 `R` 零扩展到 64 位，保存到 `MQD.saved_rptr`，高 32 位填零。重新装载先检查高 32 位为零，再恢复低 32 位；高位非零则拒绝该配置。生产进度继续从共享内存读取保留的 `W`，不因重新装载而清零。MQD 的字段布局与装载、保存流程见[第 2.6 节](#spec-mqd-format)。
 
@@ -1513,7 +1454,7 @@ Doorbell 提供有包发布的通知，CP 在该队列下一次被检查时取�
 
 ## 6. 计算提交、完成 Signal 与 Ring 槽复用
 
-CP 按[第 6.1 节](#spec-dispatch-packet)检查 AQL Dispatch，从包中取得任务规模、参数块物理地址和完成 Signal，并根据 `kernel_object` 中的 VRAM 偏移读取 Kernel 描述对象，再把代码入口、代码长度、完整的 Host 参数地址、参数长度及任务规模交给计算执行器。执行器通过[只读参数窗口](#spec-kernarg-window)读取 Host RAM 参数，根据其中的偏移访问 VRAM 数组，见[代码与参数的访问关系](#spec-kernel-data-storage)。
+CP 按[第 6.1 节](#spec-dispatch-packet)检查 AQL Dispatch，以用户地址域读取 Kernel 描述对象，再把代码入口、参数地址、声明长度和任务规模交给执行器。执行器以真实 `a0` 读取参数，并按同一 GPUVM 状态完成取指和数组读写，见[代码与参数的访问关系](#spec-kernel-data-storage)。
 
 **[DESIGN]** 保留现有分发寄存器及 PCIe BAR 映射，正常任务改由 CP 访问这些分发接口。CP 向执行器交付的描述字段和参数访问方式见[第 6.2 节](#spec-kernel-descriptor)，CP 地址映射、长度寄存器、提交与结果确认规则见[第 6.3 节](#spec-executor-dispatch)。这些接口与分段执行已接入，代码说明见[计算派发实现](<./CP_MEC 软件实现、参考与扩展.md#dispatch>)。
 
@@ -1602,7 +1543,7 @@ setup：
 
 **[DESIGN]** `reserved0`、`reserved2` 及 Header、setup 中的保留位全部填零。`group_segment_size = 0`，不申请工作组共享存储；`private_segment_size = 0`，不通过 Dispatch 申请每线程私有存储。线程继续使用现有固定寄存器，相关扩展见[资源说明](<./CP_MEC 软件实现、参考与扩展.md#kernel-registers-lds>)。
 
-三个对象引用都必须有效：`kernel_object` 保存 VRAM 中 Kernel 描述对象的字节偏移，`kernarg_address` 保存 Host RAM 参数块的物理地址，`completion_signal` 保存 Host RAM 完成 Signal 的物理地址。第一版每个任务都提供独立的完成 Signal，不采用省略完成 Signal 的提交方式。对象的位宽、对齐、计算溢出和完整访问范围按[第 2.4.2 节](#spec-address-validation)检查，描述对象、参数长度和向量加法参数布局见[第 6.2 节](#spec-kernel-descriptor)，Signal 的 24 字节布局见[第 2.5.2 节](#spec-signal-layout)。
+三个对象引用都必须有效：`kernel_object`、`kernarg_address`、`completion_signal` 分别保存描述对象、参数块和 Signal 的用户 GPU 地址。第一版每个任务都提供独立的完成 Signal，不采用省略完成 Signal 的提交方式。对象的位宽、对齐、计算溢出和完整访问范围按[第 2.4.2 节](#spec-address-validation)检查，描述对象、参数长度和向量加法参数布局见[第 6.2 节](#spec-kernel-descriptor)，Signal 的 24 字节布局见[第 2.5.2 节](#spec-signal-layout)。
 
 > **[SPEC]** [HSA System Architecture 1.2](https://hsafoundation.com/wp-content/uploads/2021/02/HSA-SysArch-1.2.pdf)，**2018-05-02**，§2.9.1、表 2–4，原文第 25 页规定 Header 位域；§2.9.6、表 2–7，原文第 29 页规定 64 字节 Kernel Dispatch 布局。标准中的 `completion_signal` 是 Signal 句柄，本实验采用物理地址引用；布局沿用标准，不能据此认定完整 HSA 兼容。运行时字段定义与枚举见[包格式参考](<./CP_MEC 软件实现、参考与扩展.md#dispatch-packet-reference>)。
 
@@ -1656,111 +1597,99 @@ Header 的 `barrier` 位允许 `0`、`1`。`barrier = 1` 要求当前任务在�
 
 <a id="spec-kernel-descriptor"></a>
 
-### 6.2 Kernel 描述对象与计算执行器参数窗口
+### 6.2 Kernel 描述对象、真实参数地址与启动 CSR
 
-Host 要提交 1024 个元素的向量加法，已准备好代码、数组和任务规模。以下是第二阶段用户 AQL 路径已确认的代码与参数交付流程；RV64 CP 执行固件，RV32 计算执行器运行应用 Kernel：
+CP 已取得 Dispatch，接下来读取 16 字节描述对象、核对 Kernel ABI，并为 RV32 执行器交付配置：
 
 ```text
-Host 准备
-  ├─ VRAM：Kernel 描述对象、代码、数组 X/Y/Z
-  └─ Host RAM：参数块，保存 X/Y/Z 的 VRAM 偏移和 N
-                  ↓
-RV64 CP 读取 Dispatch 和描述对象
-  → 取得代码入口和长度、完整的 64 位 Host 参数地址、参数长度
-  → 将这些信息和任务规模交给计算执行器
-                  ↓
-RV32 计算执行器启动各线程
-  → 向 Kernel 提供参数访问入口
-  → Kernel 读取参数，再访问 VRAM 中的数组
+Dispatch → kernel_object → 用户域读取描述对象
+  → 检查 kernel_abi_version = 2、代码与参数范围及对齐
+  → 保存 gpuvm_enabled、VMID、HQD 槽、代码和参数地址、长度与工作规模
+  → 新建 Warp：填写一次共享启动状态，再填写各 Lane 线程坐标
+  → 初始化 PC、mhartid，并令各有效 Lane 的 a0 = kernarg_address
+  → Kernel 通过 CSR 取得启动坐标，通过普通内存读取参数和数组
 ```
-
-本节规定描述对象、参数块和计算线程的访问规则。CP 通过分发寄存器交付这些信息、启动和等待执行器的规则已在[第 6.3 节](#spec-executor-dispatch)确定。
 
 #### 6.2.1 16 字节 Kernel 描述对象
 
-**[DESIGN]** 运行时在加载 Kernel 时，根据代码和该 Kernel 的参数约定生成描述对象，存放在驱动分配的 VRAM 中，至少按 8 字节对齐。Dispatch 的 `kernel_object` 保存描述对象的 VRAM 字节偏移。描述对象固定为 16 字节，四个字段均为 32 位无符号小端值：
+**[DESIGN]** 描述对象至少按 8 字节对齐，当前示例存于 VRAM；四个字段均为 32 位无符号小端值：
 
 ```text
-偏移 0x00：code_entry    代码入口的 VRAM 字节偏移
-偏移 0x04：code_size     代码区域的字节长度
-偏移 0x08：kernarg_size  这个 Kernel 所需的参数块字节长度
-偏移 0x0c：reserved      保留，填 0
+偏移 0x00：code_entry          代码入口的 GPU 地址
+偏移 0x04：code_size           代码区域的字节长度
+偏移 0x08：kernarg_size        参数块的字节长度
+偏移 0x0c：kernel_abi_version  固定为 2
 ```
 
-第一版代码区域从 `code_entry` 开始。CP 在启动前检查入口按 4 字节对齐、`code_size` 为非零的 4 字节整数倍、地址加法不溢出，并确认整段代码落在有效 VRAM 范围内。执行器的每次取指都必须完整落在这段声明范围内。
-
-同一 Kernel 的多次提交可以复用描述对象，每次 Dispatch 通过 `kernarg_address` 提供该次参数块的 Host 物理地址。运行时负责使参数布局与 Kernel 的读取方式一致。这里的 16 字节布局是本实验约定，标准 AQL Dispatch 包继续采用第 6.1 节的 64 字节格式。
+CP 拒绝旧值 0 和所有不支持的 ABI。代码入口按 4 字节对齐，代码长度非零且为 4 字节整数倍；使用宽整数检查地址加长度，执行器每次取指仍受声明代码范围约束。描述对象可供同一 Kernel 的多次提交复用，AQL 包仍为 64 字节。
 
 #### 6.2.2 Host 参数块的布局与长度
 
-**[DESIGN]** 参数块位于驱动分配并映射给所属应用的 Host RAM 一致性内存，由运行时填写。基址至少按 8 字节对齐，长度由描述对象的 `kernarg_size` 给出，范围为 4 字节至 64 KiB，且为 4 字节的整数倍。运行时按该长度准备参数存储；没有参数的 Kernel 使用一个填零的 4 字节占位块。
-
-第一版参数按 32 位小端字段排列，可保存数组的 VRAM 偏移、整数或浮点标量。字段顺序和含义由运行时与具体 Kernel 共同约定，CP 只检查地址和长度，不解释应用参数。向量加法的参数块为 16 字节，描述对象填写 `kernarg_size = 16`：
+参数仍位于独立 Host coherent BO，至少按 8 字节对齐，长度为 4 字节至 64 KiB 的 4 字节整数倍。无参数 Kernel 使用 4 字节零占位块。参数内容由应用和 Kernel 约定，CP 只校验地址、长度与对齐。
 
 ```text
-偏移 0x00：X 数组的 VRAM 偏移，32 位
-偏移 0x04：Y 数组的 VRAM 偏移，32 位
-偏移 0x08：Z 数组的 VRAM 偏移，32 位
-偏移 0x0c：N，本例为 1024，32 位
+向量加法参数：共16字节
+  0x00：X 的 GPU 地址，32位
+  0x04：Y 的 GPU 地址，32位
+  0x08：Z 的 GPU 地址，32位
+  0x0c：N，32位
 ```
 
-其他 Kernel 可以使用不同的字段和长度，仍须满足上述对齐、长度和编码要求。数组内容保存在 VRAM，参数块中的数组位置继续使用 32 位无符号字节偏移。
+参数不增加前缀或启动信息指针。地址在 GPUVM 开启时为 GPUVA，关闭时为 GPU 物理地址；传入 RV32 字段前须检查 32 位范围。
 
 <a id="spec-kernarg-window"></a>
 
-#### 6.2.3 计算线程通过只读窗口读取 Host 参数
+#### 6.2.3 计算线程用真实 a0 读取参数
 
-**[DESIGN]** RV64 CP 把 Dispatch 中完整的 64 位参数地址 `kernarg_address` 和描述对象中的 32 位参数长度 `kernarg_size` 交给计算执行器。执行器保存本次任务的 Host 参数基址与长度，在计算执行器自己的地址空间提供固定的只读窗口。每个计算线程启动时，`a0` 保存这个窗口的入口：
-
-```text
-参数窗口：0x9000_0000～0x9000_ffff，共 64 KiB
-每个计算线程启动时：a0 = 0x9000_0000
-```
-
-Kernel 通过 `a0 + 偏移` 读取参数。执行器先根据窗口地址得到参数偏移，再加上保存的完整 Host 基址，按需读取 Host RAM；整块参数不搬到 VRAM。以读取向量加法的 N 为例：
+`a0 = kernarg_address`。以 GPUVM 关闭、64 MiB VRAM 为例，参数 Host IOVA 为 `0x4100_2000`，对应 GPU 物理地址 `0x4500_2000`：
 
 ```text
-执行器保存的 Host 参数基址：0x1_9000_2000
-参数长度：16 字节
-
-Kernel 执行 lw t0, 12(a0)
-  → 访问计算执行器窗口地址 0x9000_000c
-  → 执行器计算：Host 参数基址 + 12
-  → 读取 Host 地址 0x1_9000_200c
-  → t0 得到 N = 1024
+Kernel 执行 lw t0, 12(a0)，a0 = 0x4500_2000
+  → 普通用户访问 GPU 地址 0x4500_200c
+  → 公共物理入口选择 Outbound
+  → 减 0x0400_0000 → Host IOVA 0x4100_200c
+  → t0 取得 N
 ```
 
-64 位 Host 地址由执行器保存，32 位 `a0` 保存计算线程可访问的窗口入口。窗口范围固定为 64 KiB，实际允许读取的范围由本次 `kernarg_size` 限定；Host 参数基址只要求按 8 字节对齐，不要求按窗口大小对齐。
-
-这个只读窗口服务于计算线程，需要接入 RV32 执行器的参数读取路径。CP 已有的 [Host 访存窗口](#cp-host-window)位于 CP 自己的地址空间，继续供固件读写 Host RAM。两者分别保存访问上下文；CP 的窗口映射不会自动成为计算线程的地址映射。
+开启 GPUVM 时，`a0` 保存参数 GPUVA，普通访存先按保存的 VMID 翻译。参数运行时适用普通内存访问规则，不再识别 `0x9000_0000` 参数窗口，不单独拒绝旧窗口写入。CP 自己的本地访存窗口保持独立。
 
 #### 6.2.4 访问校验、资源寿命与失败处理
 
-**[DESIGN]** 第一版参数窗口只接受自然对齐的 4 字节整数或浮点读取。执行器每次读取都检查访问范围完整落在 `kernarg_size` 内、整次读取的 Host 地址计算不溢出，并确认 Host 访存返回成功。向参数窗口写入也按错误处理。
+派发时保留代码、参数范围和对齐检查。执行中，取指还检查声明代码范围，参数和数组读写按普通内存路由、映射及权限处理。高位非法、越界、访存失败或指令错误都使任务失败，由 CP 停止源队列后续取包，不补写成功 Signal。
 
-例如 `kernarg_size = 16` 时，偏移 12 处的 4 字节读取覆盖字节 12～15，可以访问；偏移 16 处的读取已经越界，即使对应地址仍在 64 KiB 窗口内也必须拒绝。
+Host 在发布后保留对象内容、绑定和存储。正常结束先排空和销毁 Queue，再结束事件与旧通知、解绑和释放；开启 GPUVM 时解绑还须完成 TLB 失效。未知结果继续保留资源，关闭 GEM handle 不提前回收已绑定对象，CPU mmap 独立保活存储。
 
-Host 在发布 Dispatch 前准备好描述对象、代码和参数。发布后保持内容、存储和设备访问条件有效，直到确认任务不再访问它们。正常成功路径沿第 6 节完成任务清理后发布 Signal；异常结束按[第 7.3 节](#spec-failure-retirement)处理，应用释放接口见[9.7.4 的已确认接口](#spec-host-object-release)，不能仅凭等待超时释放资源。
+#### 6.2.5 Warp 与 Lane 的只读启动状态
 
-描述对象字段非法、取指越界、参数访问越界、向只读参数窗口写入或 Host 读取失败，都使本次任务失败。CP 记录所属队列错误并停止该队列后续取包，不发布成功 Signal。执行器通过[第 6.3 节](#spec-executor-dispatch)的状态和错误寄存器返回结果；CP 的队列错误编号见[第 7.2.1 节](#spec-queue-error-codes)，失败后的资源保留按[第 7.3 节](#spec-failure-retirement)处理，执行器细分错误码见第 6.3.3 节，强制停止和故障复位按既定范围留作后续扩展。
+每 Warp 的 `startup_sgpr` 保存 `blockIdx.x/y/z`、`blockDim.x/y/z`、`gridDim.x/y/z`，共 9 个 32 位值；每 Lane 的 `startup_vgpr` 保存 `threadIdx.x/y/z`，共 3 个 32 位值。它们独立于 Kernel 可覆盖的通用寄存器。
 
-**[BOUNDARY]** 队列模式已接入 16 字节描述对象、代码范围检查、Host 参数窗口及相关失败处理。旧同步路径仍把 VRAM 参数偏移写入 RV32 计算线程的 `a0`，源码与接口位置见[参数访问说明](<./CP_MEC 软件实现、参考与扩展.md#kernel-argument-access>)。上述参数窗口和描述对象格式只用于本实验，不作为 AMD 硬件格式或既有 QEMU 能力。
+```text
+0xCC0～0xCC2：THREAD_ID_X / Y / Z
+0xCC3～0xCC5：BLOCK_ID_X  / Y / Z
+0xCC6～0xCC8：BLOCK_DIM_X / Y / Z
+0xCC9～0xCCB：GRID_DIM_X  / Y / Z
+0xF14：mhartid，保留现有编号和编码
+```
+
+创建新 Warp 时初始化一次，坐标按 X 维变化最快的顺序填写，`gridDim` 表示 Block 数量；同一 Warp 分段继续时不重置，切到下一个 Warp 才重填。CSR 读取仅支持 `CSRRS` 且 `rs1` 编码为 `x0`；`rd=x0` 仍检查 CSR 有效性再丢弃结果，未知 CSR、写入及其他形式报指令错误。汇编器支持 `csrr`、`csrrs`，接受数字和 `.equ` 常量并检查范围。
+
+**[BOUNDARY]** 本轮只实现启动状态及只读接口，不扩展可写 SGPR/VGPR、标量 ALU 或向量指令体系。RV32 的旧控制页已删除；`0x8000_0000`、`0x9000_0000` 在开启翻译时是普通 GPUVA，关闭时只按 VRAM／Outbound 物理布局解释。
 
 <a id="spec-executor-dispatch"></a>
 
 ### 6.3 CP 提交计算与读取执行结果
 
-CP 已读取一个有效 Dispatch，接下来把描述对象中的代码信息、包中的 Host 参数地址和任务规模交给执行器。以下继续使用 1024 个元素的向量加法；本节采用 CP 解析描述对象、执行器接收解析后配置的分工：
+CP 已读取一个有效 Dispatch，接下来把描述对象中的代码信息、包中的参数 GPU 地址和任务规模交给执行器。以下继续使用 1024 个元素的向量加法；本节采用 CP 解析描述对象、执行器接收解析后配置的分工：
 
 ```text
 CP 读取 Dispatch 和 Kernel 描述对象
-  → 取得代码入口、代码长度、Host 参数地址和参数长度
+  → 取得代码入口、代码长度、参数 GPU 地址和参数长度
   → 换算任务规模：4 个工作组，每组 256 个线程
   → 填写执行器配置，最后写 DISPATCH
           ↓
 RV32 计算执行器
   → 从 VRAM 取指，检查是否超出代码范围
-  → 通过只读窗口读取 Host 参数，检查是否超出参数范围
+  → 通过真实 a0 按普通内存规则读取参数
   → 执行计算并写回结果
   → 保存成功或失败状态
           ↓
@@ -1776,15 +1705,15 @@ CP 读取并确认执行结果
 原有配置在队列路径中采用以下含义：
 
 ```text
-0x0300 / 0x0304  KERNEL_ADDR_LO/HI：代码入口的 VRAM 偏移
-0x0308 / 0x030c  KERNEL_ARGS_LO/HI：完整的 64 位 Host 参数物理地址
+0x0300 / 0x0304  KERNEL_ADDR_LO/HI：代码入口的 GPU 地址
+0x0308 / 0x030c  KERNEL_ARGS_LO/HI：参数的 GPU 地址，高 32 位为零
 0x0310 / 0x0314 / 0x0318  GRID_DIM_X/Y/Z：工作组数量，本例为 (4, 1, 1)
 0x031c / 0x0320 / 0x0324  BLOCK_DIM_X/Y/Z：每组线程数量，本例为 (256, 1, 1)
 0x0328  SHARED_MEM_SIZE：第一版填 0
 0x0330  DISPATCH：写 1，提交本次配置
 ```
 
-`KERNEL_ADDR` 继续保存代码入口的 VRAM 偏移，第一版高 32 位填零；描述对象由 CP 读取，执行器不再解析描述对象。`KERNEL_ARGS` 保存本次 Host 参数地址，不能截掉高 32 位；参数内容由执行器经第 6.2.3 节的只读窗口按需读取。
+`KERNEL_ADDR`、`KERNEL_ARGS` 保存用户 GPU 地址，两个高位寄存器均须为零。描述对象由 CP 读取，执行器使用传入的代码入口和真实参数地址，不再解析描述对象或参数窗口。
 
 所有寄存器采用对齐的 32 位小端访问。CP 在空闲时分高、低两次填写 64 位地址，全部配置写完并保证顺序后才写 `DISPATCH`；设备在提交时统一保存本次配置。这里不要求将两个地址寄存器合成一次 64 位原子写入。
 
@@ -1798,9 +1727,7 @@ BAR0 偏移  寄存器           CP 写入的值
 0x0334     KERNEL_ARGS_SIZE  kernarg_size
 ```
 
-执行器每次取指都检查整条指令落在本次声明的代码区域内；每次读取参数都检查整次读取落在实际参数块内。长度、对齐、地址溢出和失败处理沿用[第 6.2 节](#spec-kernel-descriptor)，越界使本次任务失败。
-
-例如参数块为 16 字节时，偏移 12 处的 4 字节读取合法，偏移 16 处的读取越界；固定窗口有 64 KiB，不代表本次任务可以读取整个窗口。两个长度用于精确检查本次访问范围，线程退出仍按现有指令约定处理，任务规模仍由工作组配置决定。
+提交时用两个长度检查代码与参数的完整地址范围、对齐和溢出。执行器每次取指继续检查声明代码范围；参数运行时访问按普通内存规则处理，不用 `kernarg_size` 建立额外窗口或逐次参数边界。
 
 #### 6.3.3 提交、执行状态与结果确认
 
@@ -1833,14 +1760,11 @@ IDLE → 提交 → BUSY → DONE 或 FAILED
 
 ```text
 0  NONE            没有执行错误
-1  INVALID_CONFIG  提交配置不满足本版尺寸、地址或长度约束
-2  CODE_RANGE      取指超出声明代码范围或不满足指令对齐
-3  ARG_RANGE       参数读取越界、未对齐或访问宽度不支持
-4  ARG_READ        Host 参数读取失败
-5  ARG_WRITE       试图写入只读参数窗口
-6  INSTRUCTION     无法执行的指令
-7  VRAM            计算访问超出 VRAM
-8  BUDGET          累计执行预算耗尽
+1  INVALID_CONFIG  提交配置不满足尺寸、地址或长度约束
+2  CODE_RANGE      取指超出声明范围、对齐错误或取指访问失败
+3  INSTRUCTION     无法执行的指令或不支持的 CSR 形式
+4  MEMORY          普通存储访问失败
+5  BUDGET          累计执行预算耗尽
 ```
 
 忙时重提、未确认时修改配置、非法寄存器宽度或越权访问均保留当前任务及结果，另置全局 `INVALID_CMD`，不能借此覆盖当前 `DISPATCH_ERROR`。
@@ -1855,7 +1779,7 @@ IDLE → 提交 → BUSY → DONE 或 FAILED
 
 #### 6.3.5 提交权限、结果写回与 Signal
 
-**[DESIGN]** 正常队列路径中，配置、`DISPATCH` 和 `DISPATCH_ACK` 由 CP 写入，Host 可以读取诊断状态。第二阶段队列路径沿用 9.5.2 已确定的 Host RAM 参数方案：CP 将完整的 Host 参数物理地址写入 `KERNEL_ARGS_LO/HI`。第一阶段已有的 Host 直接提交实现继续使用 VRAM 参数偏移，仅保留用于独立回归，不与队列路径同时运行。
+**[DESIGN]** 配置、`DISPATCH` 和 `DISPATCH_ACK` 由 CP 写入，Host 可以读取诊断状态。任务统一来自队列；旧 Host 同步提交旁路已删除。设备接受 Dispatch 时保存 `gpuvm_enabled`，分段执行期间不改变地址模式。
 
 执行器只有在计算结束、结果写回完成且相关访问结束后，才能发布 `DONE`；失败也须结束相关访问后再发布 `FAILED`。CP 读取并保存结果、完成必要清理后，写 `DISPATCH_ACK` 确认取走结果。
 
@@ -1972,7 +1896,7 @@ CP 发现一条用户队列无法继续处理后，需要把队列身份和错�
 
 **[DESIGN]** 第二阶段采用简化 IH：全设备共用一个 Host RAM IH Ring，设置七个管理寄存器和一个 CP 提交入口，中断控制沿用 `IRQ_ENABLE / IRQ_STATUS / IRQ_ACK`。设备将记录写入 Ring，发布后中断通知 Host，驱动读取记录并分发处理。本节于 2026-10-18 确认，设备、固件和驱动路径现已接入；记录编码及提交接口属于本实验设计。
 
-以下沿一条按申请创建的用户队列说明完整路径。Host 访存采用 DMA 直通配置，Host RAM 地址为完整的 64 位物理字节地址，VRAM 地址为字节偏移：
+以下沿一条用户队列说明完整路径。IH Ring 与记录中的 MQD 匹配地址使用 GPU 物理地址；Signal 与通知槽使用所属队列的用户 GPU 地址：
 
 ```text
 CP 发现队列错误
@@ -2482,7 +2406,7 @@ CP 开始执行卸载时清除 `ACTIVE`，同时关闭该队列的 Doorbell 使�
 | `0x000` | `CP_MQD_BASE_ADDR`              | 保存当前队列 MQD 物理地址低位，MQD 由驱动管理。                                | 采用 | [MQD 基址](<./CP_MEC 软件实现、参考与扩展.md#mqd>)                   |
 | `0x004` | `CP_MQD_BASE_ADDR_HI`           | 与前一项共同保存 MQD 地址高位。                                                | 采用 | [MQD 基址](<./CP_MEC 软件实现、参考与扩展.md#mqd>)                   |
 | `0x008` | `CP_HQD_ACTIVE`                 | bit 0 标记队列是否激活，其余位填 0；CP 据此判断是否检查队列。                  | 采用 | [队列激活](<./CP_MEC 软件实现、参考与扩展.md#active>)                |
-| `0x00c` | `CP_HQD_VMID`                   | 保留字段，第二阶段所有队列固定填 0，不据此选择页表。                           | 采用 | [队列地址空间](<./CP_MEC 软件实现、参考与扩展.md#vmid>)              |
+| `0x00c` | `CP_HQD_VMID`                   | 管理队列填 0，用户队列填 1 或 2；开启 GPUVM 时选择页表。                           | 采用 | [队列地址空间](<./CP_MEC 软件实现、参考与扩展.md#vmid>)              |
 | `0x020` | `CP_HQD_PQ_BASE`                | 保存 Ring 基址编码低位，用于定位命令 Ring。                                    | 采用 | [Ring 定位](<./CP_MEC 软件实现、参考与扩展.md#ring-base>)            |
 | `0x024` | `CP_HQD_PQ_BASE_HI`             | 与前一项共同保存 Ring 基址编码高位。                                           | 采用 | [Ring 定位](<./CP_MEC 软件实现、参考与扩展.md#ring-base>)            |
 | `0x028` | `CP_HQD_PQ_RPTR`                | 保存完整的 32 位下一待消费包编号，由 CP 按模 `2^32` 推进。                   | 采用 | [Ring 进度](<./CP_MEC 软件实现、参考与扩展.md#ring-progress>)        |
@@ -2567,20 +2491,20 @@ CP_HQD_ACTIVE
   └─ bits 31:1：保留，填 0
 ```
 
-故障队列按[第 7.2.2 节](#spec-queue-error-stop-scope)清除 `ACTIVE` 并保留占用；`ACTIVE = 0` 不单独代表在途访问已经结束。正常卸载按[第 7.4 节](#spec-unmap-drain)由 Host 先排空，CP 开始卸载时清除 `ACTIVE` 并关闭 Doorbell 使能。`CP_HQD_VMID` 的整个寄存器固定填 `0`；`CP_HQD_AQL_CONTROL` 的整个寄存器填 `0` 表示非 AQL 管理队列，填 `1` 表示用户 AQL 队列，其余值暂不支持。
+故障队列按[第 7.2.2 节](#spec-queue-error-stop-scope)清除 `ACTIVE` 并保留占用；`ACTIVE = 0` 不单独代表在途访问已经结束。正常卸载按[第 7.4 节](#spec-unmap-drain)由 Host 先排空，CP 开始卸载时清除 `ACTIVE` 并关闭 Doorbell 使能。`CP_HQD_VMID` 在管理队列填 `0`，用户队列填 `1` 或 `2`；`CP_HQD_AQL_CONTROL` 的整个寄存器填 `0` 表示非 AQL 管理队列，填 `1` 表示用户 AQL 队列，其余值暂不支持。
 
-MQD 地址、Ring 地址、消费进度回报地址和生产进度读取地址这四组寄存器，均保存完整的 64 位 Host RAM 物理字节地址：
+四组地址均保留 64 位寄存器槽，高 32 位为零。MQD 始终是 GPU 物理地址；Ring 和 R/W 地址按管理域或用户域解释：
 
 ```text
 低位寄存器：地址的低 32 位
 高位寄存器：地址的高 32 位
 
-例如地址 = 0x1_9000_0000
-  ├─ LO = 0x9000_0000
-  └─ HI = 0x1
+例如地址 = 0x4500_0000
+  ├─ LO = 0x4500_0000
+  └─ HI = 0x0
 ```
 
-这四组地址不预先右移压缩，对齐与访问范围按[第 2.4.2 节](#spec-address-validation)校验。Doorbell OFFSET 的 4 字节单位只用于 Doorbell 字段，不改变 Host RAM 地址的字节编码规则。
+这四组地址不预先右移压缩，对齐与访问范围按[第 2.4.2 节](#spec-address-validation)校验。Doorbell OFFSET 的 4 字节单位只用于 Doorbell 字段，不改变 GPU 地址的字节编码规则。
 
 **[DESIGN]** `CP_HQD_PQ_RPTR` 的整个 32 位值保存下一待消费包编号，按模 `2^32` 推进；回报内存保存相同的 32 位值，MQD 的 64 位 `saved_rptr` 零扩展保存该值。取槽、满空判断与恢复规则见[第 5.2.1 节](#spec-ring-progress)。
 
@@ -2685,6 +2609,8 @@ Host 驱动用锁保护“选槽—访问窗口”，写入选择值后先回读
 <a id="spec-open-interfaces"></a>
 
 ## 9. 软件接口约定与确认记录
+
+**[BOUNDARY] 历史确认记录。** 本节保留 2026-10-17～2026-10-19 的原始方案与“尚待实现”表述。这里的 VMID 0、Host 物理地址、旧参数窗口、同步回归及调用方提交职责只说明当时版本；当前版本 2 以第 1～8 节及[GPUVM 规格](<./GPUVM 第一版规格.md>)为准，不按本节旧约定恢复兼容实现。
 
 本节沿着“创建用户队列，提交一次计算，再销毁队列”的过程，记录驱动、用户态调用方、CP 固件和 QEMU 共同使用的接口约定。9.1～9.7 的第一版行为与实现边界均已确认；9.4.4 的首部访问、管理 Ring 并发和取号约束已补齐，功能仍须接入和验证。
 
