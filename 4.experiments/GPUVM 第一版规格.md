@@ -50,13 +50,19 @@
 | PCIe   | Peripheral Component Interconnect Express | 高速外设互连总线 |
 | API    | Application Programming Interface                      | 应用编程接口                                                |
 
-本文保留 GPUVM 第一版的固定存储设计，并按 2026-10-28 的统一访存方案更新为版本 2。应用统一使用 DRM/GEM、AQL Queue、Doorbell、RV64 CP 和 Signal/IH；RV32 Kernel 的访存模式只由设备属性 `gpuvm=on/off` 决定，默认开启。实现入口和实际运行记录见[软件栈说明](<./gpu-study-qemu/software/gpgpu/README.md#stage-three-gpuvm>)。
+本文保留 GPUVM 第一版的固定存储设计，并沿用统一访存方案，并按 2026-10-29 重构更新为协议版本 3。应用统一使用 DRM/GEM、AQL Queue、Doorbell、RV64 CP 和 Signal/IH；RV32 Kernel 的访存模式只由设备属性 `gpuvm=on/off` 决定，默认开启。实现入口和实际运行记录见[软件栈说明](<./gpu-study-qemu/software/gpgpu/README.md#stage-three-gpuvm>)。
 
 **[DESIGN]** 开启 GPUVM 时按页表翻译，关闭时直接解释 GPU 物理地址；两者最终使用同一个 VRAM／Outbound 物理入口。线程启动信息改为只读 CSR，`a0` 保存真实参数地址。旧控制页、参数窗口、SYSTEM 直接指向 Host DMA 的页表编码和三模式接口均已移除。
 
 建议先读第 1 节的使用流程，再读第 2～7 节的对象、访问和回收，最后检查第 9 节的范围记录。推进顺序与验收统一维护在[第三阶段大纲](<./QEMU GPGPU 实验大纲.md#stage-three-vmid>)。
 
 <a id="gpuvm-overview"></a>
+
+2026-10-29 完成设备、固件、驱动和用户库重构，协议统一为版本 3。2026-10-30 在子模块 `efd22b0` 验证 QTest 11/11、汇编器 7/7；Linux 全栈验收尚未完成，需恢复指定开发环境后运行 GPUVM on/off 两种模式。历史验收只代表其记录的版本。
+
+当前代码入口见[软件栈第 0 节](<./gpu-study-qemu/software/gpgpu/README.md#0-代码结构与分层>)：协议头集中在 `software/gpgpu/include/gpgpu/`；设备按 `bar0.c`、`cp/`、`compute/`、`mem/`、`irq/` 分层；用户库拆为 `lib/kmt/` 与 `lib/rt/`，统一生成 `libgpgpu.a`；驱动按设备、管理队列、通知、对象、页表、队列和事件分文件。
+
+当前测试入口为 `make -f Makefile.camp test-gpgpu-qtest`（11 项）、`make -C software/gpgpu check`（7 项）和 Linux 全栈 `make -f Makefile.camp test-gpgpu-stack`。
 
 ## 1. 首版目标与应用使用流程
 
@@ -201,7 +207,7 @@ Host 页先将 DMA API 返回的 IOVA 转为 `vram_size + IOVA`，再把该 GPU 
 
 完整表项写入前校验对齐、位宽及目标范围，不能靠掩码隐藏非法地址。无效项写零，不支持的有效项编码报页表错误。代码页开放读与取指，参数和输入页开放读，输出及共享状态按需要开放读写；不同权限的对象分开占页。
 
-> **[SOURCE]** 固定 Linux 源码：[amdgpu_gart.h，第 35～38 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/amdgpu_gart.h#L35-L38)定义 4 KiB GPU 页；[amdgpu_vm.h，第 57～68 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/amdgpu_vm.h#L57-L68)定义 AMD 的有效、区域与权限位；[amdgpu_gmc.c，第 163～175 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/amdgpu_gmc.c#L163-L175)将地址和标志写入 8 字节表项；[gmc_v9_0.c，第 1985～1994 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/gmc_v9_0.c#L1985-L1994)设置 48 位地址掩码，并对包含 9.4.3 的分支选择 48 位 DMA 能力。[amdgpu_vm.c，第 2392～2425 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/amdgpu_vm.c#L2392-L2425)按空间大小计算层级及末级大小。这些是参考实现的编码，版本 2 的 32 位物理地址、删除 SYSTEM 和固定三级格式是本设备设计，不声明与 AMD 硬件格式兼容。
+> **[SOURCE]** 固定 Linux 源码：[amdgpu_gart.h，第 35～38 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/amdgpu_gart.h#L35-L38)定义 4 KiB GPU 页；[amdgpu_vm.h，第 57～68 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/amdgpu_vm.h#L57-L68)定义 AMD 的有效、区域与权限位；[amdgpu_gmc.c，第 163～175 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/amdgpu_gmc.c#L163-L175)将地址和标志写入 8 字节表项；[gmc_v9_0.c，第 1985～1994 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/gmc_v9_0.c#L1985-L1994)设置 48 位地址掩码，并对包含 9.4.3 的分支选择 48 位 DMA 能力。[amdgpu_vm.c，第 2392～2425 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/amdgpu_vm.c#L2392-L2425)按空间大小计算层级及末级大小。这些是参考实现的编码，版本 3 的 32 位物理地址、删除 SYSTEM 和固定三级格式是本设备设计，不声明与 AMD 硬件格式兼容。
 
 对象和块搬运可以跨页，每一页分别检查。单次标量访问要求自然对齐且不跨页，完整 32/64 位共享字段不能拆成部分写入。跨页操作后续失败时保留先前写入，不提供回滚。
 
@@ -224,7 +230,7 @@ Host IOVA 0x4100_0000
                                       └─ SMMUv3（启用时）→ Host 物理内存
 ```
 
-Outbound 的 GPU 基址为 `vram_size`、Host IOVA 基址为 0、窗口长度为 `0x1_0000_0000 - vram_size`。驱动在 CP 启动前配置 BAR0 `0x0b00` 寄存器组并确认成功；窗口由整个设备共用，运行期间拒绝重配置。窗口覆盖仅决定路由，Host 存储或 IOMMU 映射不存在仍会访问失败。
+Outbound 的 GPU 基址为 `vram_size`、Host IOVA 基址为 0、窗口长度为 `0x1_0000_0000 - vram_size`。BAR0 `0x0b00～0x0b10` 布局寄存器只读，驱动在 CP 启动前读回核对布局，再写 `0x0b14` CONTROL 并确认成功；写只读布局置 `OUTBOUND_STATUS.ERROR` 并锁存 `INVALID_CMD`；窗口由整个设备共用，运行期间拒绝重配置。窗口覆盖仅决定路由，Host 存储或 IOMMU 映射不存在仍会访问失败。
 
 驱动统一设置 31 位 DMA mask，保留 `vram_size < 2 GiB` 限制。每次分配都用 64 位算术校验完整 DMA 区间及转换后的 GPU 区间，IOVA 0 合法，对应 GPU 物理地址 `vram_size`。用户 Host BO、管理 Ring、MQD、完成区、IH 和通知页遵守同一规则；Host BO 独立使用 `dma_alloc_coherent()`，不建立大块连续池。原始 `dma_addr_t` 供 DMA API 映射和释放，转换后的地址供设备协议使用。
 
@@ -257,7 +263,7 @@ CP 现有访存窗口显式选择管理域或用户域。管理域直接进入�
 
 <a id="gpuvm-executor"></a>
 
-AQL 的 `kernel_object`、`kernarg_address`、`completion_signal` 统一使用用户 GPU 地址。描述对象保持 16 字节，偏移 `0x0c` 改为 `kernel_abi_version = 2`，CP 拒绝旧值 0 和其他版本；代码入口仍为 32 位字段。
+AQL 的 `kernel_object`、`kernarg_address`、`completion_signal` 统一使用用户 GPU 地址。描述对象保持 16 字节，偏移 `0x0c` 改为 `kernel_abi_version = 3`，CP 拒绝旧值 0 和其他版本；代码入口仍为 32 位字段。
 
 ```text
 CP 读取描述对象 → 保存代码、参数地址及长度、VMID、HQD 槽与 gpuvm_enabled
@@ -411,15 +417,17 @@ IH 自身故障 → 锁存状态、拒绝新记录、停止新取包和调度
 
 > **[SOURCE]** 固定 Linux 源码：[amdgpu_gem.c，第 811～886 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/amdgpu_gem.c#L811-L886)校验地址、权限、操作及文件所属对象句柄；[第 944～974 行](https://github.com/torvalds/linux/blob/248951ddc14de84de3910f9b13f51491a8cd91df/drivers/gpu/drm/amd/amdgpu/amdgpu_gem.c#L944-L974)区分映射、解除、清理与替换。本期只采用同步、整对象 `MAP/UNMAP` 子集。
 
-能力查询返回版本 2、32 位地址、4 KiB 页、可分配 GPUVA 区间数量（开启为 1、关闭为 0）、两个用户编号、每上下文一 Queue 及当前绑定数量。映射更新限制是第一版接口的固定规则。默认应用不接触物理 DMA 地址。
+DRM ioctl 的 version 字段及能力查询返回版本均为 3、32 位地址、4 KiB 页、可分配 GPUVA 区间数量（开启为 1、关闭为 0）、两个用户编号、每上下文一 Queue 及当前绑定数量。映射更新限制是第一版接口的固定规则。默认应用不接触物理 DMA 地址。
 
-库增加 `gpgpuKmtAllocMemoryEx()` 选择权限和固定 GPUVA，普通 `gpgpuKmtAllocMemory()` 默认读写、自动选址；代码对象必须显式添加取指权限。`gpgpuKmtGetVmInfo()` 查询能力，`gpgpuKmtGetVmFault()` 查询尚持有的队列对象的首次故障。关闭队列前先保存故障；队列对象销毁后不能再用其编号查询。内存、队列和事件结构须保持有效直至显式释放或 `gpgpuKmtClose()` 完成。
+库由 `gpgpuKmtAllocMemory()` 接收权限和固定 GPUVA 参数，`fixed_va=0` 时自动选址；代码对象必须显式添加取指权限。`gpgpuKmtGetVmInfo()` 查询能力，`gpgpuKmtGetVmFault()` 查询尚持有的队列对象的首次故障。关闭队列前先保存故障；队列对象销毁后不能再用其编号查询。内存、队列和事件结构须保持有效直至显式释放或 `gpgpuKmtClose()` 完成。
 
-### 8.3 单一 DRM 入口与版本 2
+<a id="83-单一-drm-入口与版本-2"></a>
 
-两种状态都只开放 DRM render node。驱动读取设备的 `gpuvm` 属性后固定使用，删除 `queue_mode`、`/dev/gpgpu0`、旧同步提交和旧 Runtime。设备／固件队列协议、DRM 与 GPUVM 编码均为版本 2，旧组件明确拒绝，不增加兼容转换。AQL 包仍为 64 字节，Kernel 描述对象仍为 16 字节。
+### 8.3 单一 DRM 入口与版本 3
 
-公共 HSAKMT 风格库承担槽位预留、Header 发布、8 字节 Doorbell 更新、Signal 等待与事件配合、排空和 Queue 销毁；示例统一链接 `libgpgpu-kmt.a`。应用只使用 `cpu` 和 `gpu_address`，不选择 Host DMA 地址、VRAM 偏移或 GPUVA 三套字段。
+两种状态都只开放 DRM render node。驱动读取设备的 `gpuvm` 属性后固定使用，删除 `queue_mode`、`/dev/gpgpu0`、旧同步提交和旧 Runtime。设备／固件队列协议、DRM 与 GPUVM 编码均为版本 3，旧组件明确拒绝，不增加兼容转换。AQL 包仍为 64 字节，Kernel 描述对象仍为 16 字节。
+
+公共 HSAKMT 风格库承担槽位预留、Header 发布、8 字节 Doorbell 更新、Signal 等待与事件配合、排空和 Queue 销毁；示例通过 `lib/rt/` 调用 `lib/kmt/`，统一链接 `libgpgpu.a`。应用只使用 `cpu` 和 `gpu_address`，不选择 Host DMA 地址、VRAM 偏移或 GPUVA 三套字段。
 
 <a id="gpuvm-open-interfaces"></a>
 

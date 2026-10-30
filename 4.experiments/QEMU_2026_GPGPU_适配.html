@@ -186,6 +186,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <p>本文记录 GPGPU 设备注册与初始化的调用主线，以及实验一
 <code>test-device-id</code> 中 BAR0 读取如何触发设备回调、结果如何返回测试进程。
 实验七的笔记说明 Grid/Block 配置与 SIMT 执行位置之间的关系。</p>
+<h2 id="current-v3">当前进度与源码入口</h2><p>2026-10-29 完成设备、固件、驱动和用户库重构，协议统一为版本 3。2026-10-30 在子模块 <code>efd22b0</code> 验证 QTest 11/11、汇编器 7/7；Linux 全栈验收尚未完成，需恢复指定开发环境后运行 GPUVM on/off 两种模式。历史验收只代表其记录的版本。</p><p>当前设备注册见 <a href="./gpu-study-qemu/hw/gpgpu/gpgpu.c">gpgpu.c</a>，BAR0 子区域见 <a href="./gpu-study-qemu/hw/gpgpu/bar0.c">bar0.c</a>，计算入口在 compute/scheduler.c 与 compute/rv32.c，存储和中断在 mem/ 与 irq/。共享协议头在 software/gpgpu/include/gpgpu/，用户库拆为 lib/kmt/ 与 lib/rt/；完整分层见 <a href="./gpu-study-qemu/software/gpgpu/README.md#0-代码结构与分层">软件栈第 0 节</a>。</p><p>当前测试入口为 make -f Makefile.camp test-gpgpu-qtest（11 项）、make -C software/gpgpu check（7 项）和 Linux 全栈 make -f Makefile.camp test-gpgpu-stack。</p><p><strong>[BOUNDARY] 以下为早期训练营历史讲解。</strong>旧文件名、回调、源码摘录和实验编号保留当时语境，不代表版本 3 的当前入口。版本 3 的 DEV_VERSION 为 0x0003_0000，寄存器读回测试改为 tests/qtest/gpgpu-regs-test.c，CP 队列测试为 tests/qtest/gpgpu-cp-test.c。</p>
 <h2 id="section-2">GPGPU 设备注册与初始化调用图</h2>
 <p>这张图只保留 GPU 设备的注册、创建和初始化主线。以启动参数
 <code>-device gpgpu</code> 为例，重点看三个 GPU 函数在什么位置被调用。

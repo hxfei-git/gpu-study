@@ -90,6 +90,12 @@
 
 **[BOUNDARY]** 本文保留固定提交下的源码分析与历次实现记录。2026-10-28 的版本 2 统一使用 DRM/GEM、AQL 与连续 VRAM／Outbound 物理空间，默认开启 GPUVM，启动信息改为只读 CSR，`a0` 保存真实参数地址。旧同步路径、参数窗口和专项测试已删除；下文固定提交中的代码与验收命令只说明历史版本。当前构建、对象接口和唯一计算入口见[软件栈说明](<./gpu-study-qemu/software/gpgpu/README.md>)。
 
+2026-10-29 完成设备、固件、驱动和用户库重构，协议统一为版本 3。2026-10-30 在子模块 `efd22b0` 验证 QTest 11/11、汇编器 7/7；Linux 全栈验收尚未完成，需恢复指定开发环境后运行 GPUVM on/off 两种模式。历史验收只代表其记录的版本。
+
+当前代码入口以 [软件栈第 0 节](<./gpu-study-qemu/software/gpgpu/README.md#0-代码结构与分层>)为准：共享协议在 `software/gpgpu/include/gpgpu/`，包括 `gpgpu_regs.h`、`gpgpu_cp_map.h`、`gpgpu_queue_abi.h`、`gpgpu_ih_abi.h`、`gpgpu_vm_abi.h`、`gpgpu_version.h` 和 `uapi/gpgpu_drm.h`。设备 BAR0 分发在 `hw/gpgpu/bar0.c`，存储和中断分别在 `mem/`、`irq/`。用户库的 `lib/kmt/` 封装驱动接口，`lib/rt/` 组织计算，统一生成 `libgpgpu.a`。Linux 驱动由 `gpgpu_main.c`、`gpgpu_dev.c`、`gpgpu_mgmt.c`、`gpgpu_ih.c`、`gpgpu_drm.c`、`gpgpu_bo.c`、`gpgpu_vram.c`、`gpgpu_vm.c`、`gpgpu_queue.c`、`gpgpu_event.c` 组成，对象和锁约定在 `gpgpu_drv.h`。这些驱动文件均位于 `software/gpgpu/linux/`。
+
+当前测试入口为 `make -f Makefile.camp test-gpgpu-qtest`（11 项）、`make -C software/gpgpu check`（7 项）和 Linux 全栈 `make -f Makefile.camp test-gpgpu-stack`。
+
 ## 1. 现有实现与 CP 接入位置
 
 当前代码保留 Host 直接启动计算的同步路径，并已接入“用户发布 AQL → RV64 CP 取包 → RV32 执行器计算 → Signal 与事件通知”的队列路径。CP QTest 已通过 16/16；Linux 新内核下的驱动装载、五组队列端到端测试和四种同步组合回归均通过。具体运行结果与后续安排统一见[大纲当前实现记录](<./QEMU GPGPU 实验大纲.md#stage-two-implementation-results>)。
@@ -182,7 +188,7 @@ B 等待 DMA 回复
 
 同日运行 Linux 客体回归，内核为 `6.18.57-0-virt`。单／双进程分别覆盖 `none`、`smmuv3`：四组均通过三个示例的 17,953 个输出值、68/68 运行时检查、5/5 驱动装卸载检查及 2/2 软件栈卸载重载检查，退出码均为 0，无内核异常或非预期 SMMU fault。这四组回归沿用同步计算路径，双进程模式中的原生 CP 保持复位，应用 Kernel 仍由 RV32 计算解释器执行；CP 固件能力由上述 8 项 QTest 单独验证。结果保存在子仓库 `build/gpgpu-linux-module/{none,smmuv3,remote/none,remote/smmuv3}/` 下的 `test.json`、`stack-test.json` 和相应日志中。
 
-RV64 版本在子仓库中使用同时启用 `aarch64-softmmu`、`riscv64-softmmu` 和 `vfio-user-server` 的构建。下列入口沿用 `build/arm64-qemu`；2026-10-14 的历史记录使用 `build/cp-window`：
+RV64 版本在子仓库中使用同时启用 `aarch64-softmmu`、`riscv64-softmmu` 和 `vfio-user-server` 的构建。下列历史入口沿用 `build/arm64-qemu`；2026-10-14 的历史记录使用 `build/cp-window`：
 
 ```bash
 make -f Makefile.camp test-gpgpu-cp JOBS=4
@@ -193,7 +199,7 @@ QTEST_QEMU_BINARY="$PWD/build/arm64-qemu/qemu-system-aarch64" \
   -p /aarch64/virt/generic-pcihost/pci-bus-generic/pci-bus/gpgpu/gpgpu-tests
 ```
 
-RISC-V 设备回归将上一条命令中的 `aarch64` 换为 `riscv64`。汇编前端与四种 Linux 配置继续使用已有入口：
+RISC-V 设备回归将上一条命令中的 `aarch64` 换为 `riscv64`。当时的汇编前端与四种 Linux 配置使用以下历史入口：
 
 ```bash
 make -C software/gpgpu check-assembler
@@ -236,7 +242,7 @@ done
 
 构建、运行与软件栈使用方式见[子仓库软件栈说明](./gpu-study-qemu/software/gpgpu/README.md)和[设备源码规格](./gpu-study-qemu/docs/specs/gpgpu.rst)。
 
-> **[SOURCE] 当前队列实现入口**（实验子仓库 `6325a87e4c500f4930c4e0b502a1ec241f83bf26`，2026-10-19；与上述历史同步基线区分）：
+> **[SOURCE] 2026-10-19 队列实现历史入口**（实验子仓库 `6325a87e4c500f4930c4e0b502a1ec241f83bf26`；与上述历史同步基线区分，当前版本 3 入口见本文开头）：
 >
 > - 固件检查管理与用户槽位的顺序：[software/gpgpu/firmware/main.c](https://github.com/hxfei-git/gpu-study-qemu/blob/6325a87e4c500f4930c4e0b502a1ec241f83bf26/software/gpgpu/firmware/main.c#L132) 的 [132–164 行](https://github.com/hxfei-git/gpu-study-qemu/blob/6325a87e4c500f4930c4e0b502a1ec241f83bf26/software/gpgpu/firmware/main.c#L132)；Dispatch 执行确认、Signal、通知和槽位归还：[software/gpgpu/firmware/aql.c](https://github.com/hxfei-git/gpu-study-qemu/blob/6325a87e4c500f4930c4e0b502a1ec241f83bf26/software/gpgpu/firmware/aql.c#L72) 的 [72–173 行](https://github.com/hxfei-git/gpu-study-qemu/blob/6325a87e4c500f4930c4e0b502a1ec241f83bf26/software/gpgpu/firmware/aql.c#L72)。
 > - 执行器提交与终态确认：[hw/gpgpu/gpgpu_dispatch.c](https://github.com/hxfei-git/gpu-study-qemu/blob/6325a87e4c500f4930c4e0b502a1ec241f83bf26/hw/gpgpu/gpgpu_dispatch.c#L216) 的 [216–260 行](https://github.com/hxfei-git/gpu-study-qemu/blob/6325a87e4c500f4930c4e0b502a1ec241f83bf26/hw/gpgpu/gpgpu_dispatch.c#L216)；Host 参数窗口读取：[hw/gpgpu/gpgpu_params.c](https://github.com/hxfei-git/gpu-study-qemu/blob/6325a87e4c500f4930c4e0b502a1ec241f83bf26/hw/gpgpu/gpgpu_params.c#L12) 的 [12–30 行](https://github.com/hxfei-git/gpu-study-qemu/blob/6325a87e4c500f4930c4e0b502a1ec241f83bf26/hw/gpgpu/gpgpu_params.c#L12)。
@@ -1588,10 +1594,10 @@ AMD/HSA 的 Packet Processor 是处理队列包的协议角色。在 MI300X 的�
 
 <a id="kernel-argument-access"></a>
 
-**[DESIGN]** CP 从 AQL Packet 和 16 字节 Kernel 描述对象取得代码入口、参数地址与执行维度。版本 2 根据设备 `gpuvm` 属性解释用户地址：开启时为 GPUVA，关闭时为 GPU 物理地址。用户域统一进入翻译或直通层，再通过公共物理入口访问 VRAM 或 Outbound；管理域始终使用 GPU 物理地址。
+**[DESIGN]** CP 从 AQL Packet 和 16 字节 Kernel 描述对象取得代码入口、参数地址与执行维度。版本 3 根据设备 `gpuvm` 属性解释用户地址：开启时为 GPUVA，关闭时为 GPU 物理地址。用户域统一进入翻译或直通层，再通过公共物理入口访问 VRAM 或 Outbound；管理域始终使用 GPU 物理地址。
 
 ```text
-CP 读取 Dispatch → 读取描述对象，检查 kernel_abi_version = 2
+CP 读取 Dispatch → 读取描述对象，检查 kernel_abi_version = 3
   → 设置代码地址、代码长度、参数地址、参数长度与工作规模
   → 经 CP 本地寄存器窗口写 DISPATCH
   → 执行器保存配置，新 Warp 填写只读启动状态
@@ -1627,7 +1633,7 @@ AQL 的 `grid_size` 是各轴的线程数量，现有执行器的 `grid_dim` 是
 
 应用先将数组的 `gpu_address` 和标量 N 写入 Host 参数 BO。CP 把 `kernarg_address` 直接交给执行器，Lane 的 `a0` 保存同一地址。Kernel 读取参数得到 X、Y、Z 的地址，再通过统一用户访问入口读取 X、Y、写回 Z。开启 GPUVM 时这些地址分别翻译，关闭时直接按连续 VRAM／Outbound 布局访问。
 
-16 字节描述对象的四个 32 位小端字段依次为代码入口、代码长度、参数长度和 `kernel_abi_version=2`。描述对象按 8 字节对齐，代码入口按 4 字节对齐、长度为非零的 4 字节整数倍。参数地址按 8 字节对齐，长度为 4 字节至 64 KiB 的 4 字节整数倍；无参数使用 4 字节零占位块。代码、参数及数组在 Queue 卸载确认之前保持绑定。
+16 字节描述对象的四个 32 位小端字段依次为代码入口、代码长度、参数长度和 `kernel_abi_version=3`。描述对象按 8 字节对齐，代码入口按 4 字节对齐、长度为非零的 4 字节整数倍。参数地址按 8 字节对齐，长度为 4 字节至 64 KiB 的 4 字节整数倍；无参数使用 4 字节零占位块。代码、参数及数组在 Queue 卸载确认之前保持绑定。
 
 **[BOUNDARY]** 启动 CSR、描述符和地址布局属于教学设备。RV64 CP 的本地访存窗口继续服务固件，RV32 计算线程不再有特殊参数窗口。后面的旧同步源码摘录仅用于说明历史调用约定，不是当前实现入口。
 

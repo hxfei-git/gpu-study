@@ -64,18 +64,24 @@
 
 寄存器查阅见 [GPGPU 虚拟加速器硬件手册](<./QEMU_2026_GPGPU_硬件手册.html>)，其中按功能列出地址、位域、访问权限及复位行为；本文继续保存完整的队列协议、软件约定和规格确认记录。已确认规格与实现状态分别维护；2026-10-19 复核中的管理结果码校验缺口及验证范围见[大纲复核记录](<./QEMU GPGPU 实验大纲.md#stage-two-spec-review>)，该缺口已在第三阶段修复，未知结果继续保留资源。
 
-**[DESIGN]** 2026-10-28 起，当前接口为版本 2：设备／固件队列协议、DRM 与 GPUVM 编码统一升级，旧组件明确拒绝。用户端只使用 DRM/GEM 与 AQL Queue；设备属性 `gpuvm=on/off` 决定用户地址是否翻译，默认开启。第 1～8 节按当前接口说明；第 9 节保留原确认时点记录，其旧地址与参数窗口约定不再作为执行要求。历史验收数量也不作为当前入口的固定计数。
+**[DESIGN]** 2026-10-29 起，当前接口为版本 3：设备／固件队列协议、DRM 与 GPUVM 编码统一升级，旧组件明确拒绝。用户端只使用 DRM/GEM 与 AQL Queue；设备属性 `gpuvm=on/off` 决定用户地址是否翻译，默认开启。第 1～8 节按当前接口说明；第 9 节保留原确认时点记录，其旧地址与参数窗口约定不再作为执行要求。历史验收数量也不作为当前入口的固定计数。
 
 当前计算验证统一为 `test-gpgpu-stack`：ARM virt、A57、1 GiB、`IOMMU=none`，分别运行 GPUVM 开／关下的向量加法 17,003 个结果、矩阵乘法 437 个结果与 ReLU 513 个结果。结果以实际逐元素比较为准，不追加专项测试。当前公共库和绑定接口见[GPUVM 规格第 8 节](<./GPUVM 第一版规格.md#gpuvm-device-host-interface>)。
 
 <a id="spec-overview"></a>
+
+2026-10-29 完成设备、固件、驱动和用户库重构，协议统一为版本 3。2026-10-30 在子模块 `efd22b0` 验证 QTest 11/11、汇编器 7/7；Linux 全栈验收尚未完成，需恢复指定开发环境后运行 GPUVM on/off 两种模式。历史验收只代表其记录的版本。
+
+当前代码入口见[软件栈第 0 节](<./gpu-study-qemu/software/gpgpu/README.md#0-代码结构与分层>)：协议头集中在 `software/gpgpu/include/gpgpu/`；设备按 `bar0.c`、`cp/`、`compute/`、`mem/`、`irq/` 分层；用户库拆为 `lib/kmt/` 与 `lib/rt/`，统一生成 `libgpgpu.a`；驱动按设备、管理队列、通知、对象、页表、队列和事件分文件。
+
+当前测试入口为 `make -f Makefile.camp test-gpgpu-qtest`（11 项）、`make -C software/gpgpu check`（7 项）和 Linux 全栈 `make -f Makefile.camp test-gpgpu-stack`。
 
 ## 1. 整体架构与执行路径
 
 **[DESIGN]** 第一版使用一个 QEMU 原生 RV64 CP，由 TCG 在 M-mode 执行裸机固件，不启用页表；现有 RV32 计算解释器继续执行应用 Kernel。4 个 HQD 槽位中，槽位 0 用于 KIQ，槽位 1 用于 HIQ，槽位 2、3 由 CP 按创建请求分配给用户 AQL Queue。计算执行器一次处理一个完整 Dispatch。
 
 ```text
-Host 配置并确认 Outbound，准备 KIQ 的 Ring、MQD 与 HQD，启动 CP
+Host 读回核对 Outbound 布局、使能并确认，准备 KIQ 的 Ring、MQD 与 HQD，启动 CP
   → 驱动经 KIQ 请求建立 HIQ，确认管理操作完成
   → 应用经内存接口申请 Ring 和进度区，再请求创建用户 Queue，驱动准备 MQD
   → 驱动经 HIQ 提交 MAP_QUEUES，指定 USER_AQL 和 MQD 地址
@@ -91,7 +97,7 @@ Host 配置并确认 Outbound，准备 KIQ 的 Ring、MQD 与 HQD，启动 CP
 
 原生 CP 执行队列固件，计算执行器执行应用 Kernel，两者各自保存寄存器和取指位置。2026-10-17 的 RV64 迁移只改变原生 CP；计算线程的寄存器和 Kernel 指令仍按 RV32 执行。执行主体、构建入口及参数交接边界见[CP 与计算执行器的位宽](<./CP_MEC 软件实现、参考与扩展.md#cp-executor-widths>)。上图规定本阶段的队列执行顺序，实际运行结果见大纲进度说明。
 
-本文用户态流程中的“运行时”泛指准备应用数据的调用方。槽位预留、Header 发布、8 字节 Doorbell 更新、Signal 等待与事件配合、排空及 Queue 销毁统一由 HSAKMT 风格公共库承担；示例链接 `libgpgpu-kmt.a`。旧 Runtime、`libgpgpu.a` 和同步提交入口已删除。
+当前公共库包含 `lib/kmt/` 的 HSAKMT 风格薄层与 `lib/rt/` 的小运行时，示例统一链接 `libgpgpu.a`。KMT 层负责槽位预留、Header 发布、8 字节 Doorbell 更新、Signal 与事件等待、排空及 Queue 销毁；运行时负责装载 Kernel、组包并调用这些接口完成派发。历史 Runtime 与旧同步提交入口已删除。
 
 <a id="spec-user-queue-capacity"></a>
 
@@ -220,7 +226,7 @@ CP 的代码、栈和控制寄存器仍使用自己的裸机地址；Host 经 BA
 
 例如 `gpuvm=off`、64 MiB VRAM 时，GPU 物理地址 `0x4500_1234` 对应 Host IOVA `0x4100_1234`。CP 设置基址 `0x4500_0000`，读取本地 `0x8000_1234`，公共物理入口再减去 `0x0400_0000`。IOVA 0 对应 GPU 物理地址 `0x0400_0000`，不排除该页。窗口覆盖只选择路由，实际 Host 存储及 IOMMU 映射必须有效。
 
-全设备 Outbound 窗口由驱动在 CP 启动前配置并确认：GPU 基址为 `vram_size`，Host IOVA 基址为 0，长度为 `0x1_0000_0000 - vram_size`。BAR0 `0x0b00～0x0b18` 保存这些值、使能和确认状态；运行期间拒绝重配置。驱动设置 31 位 DMA mask，每次分配用 64 位算术检查完整区间，再保存原始 DMA 地址和转换后的 GPU 物理地址；释放和 CPU 映射仍用原始地址。
+全设备 Outbound 窗口布局固定，驱动在 CP 启动前读回核对，再写 CONTROL 使能并确认：GPU 基址为 `vram_size`，Host IOVA 基址为 0，长度为 `0x1_0000_0000 - vram_size`。BAR0 `0x0b00～0x0b18` 保存这些值、使能和确认状态；其中 `0x0b00～0x0b10` 只读，写入置 `OUTBOUND_STATUS.ERROR` 并锁存 `INVALID_CMD`，仅 CONTROL 可写；运行期间拒绝修改 CONTROL。驱动设置 31 位 DMA mask，每次分配用 64 位算术检查完整区间，再保存原始 DMA 地址和转换后的 GPU 物理地址；释放和 CPU 映射仍用原始地址。
 
 停止时先保持 CP 复位，等待在途物理访问结束，再确认整体复位已关闭窗口。未确认停止时保留相关资源。BO 分配、队列创建与进程退出均不重配窗口。
 
@@ -393,7 +399,7 @@ Host IOVA 0x4100_0000 → Ring 的 GPU 物理地址 0x4500_0000
   → CP 按用户域读取 Ring → 公共物理入口 → Host IOVA 0x4100_0000
 ```
 
-**[DESIGN]** 协议字段仍按原宽度保存字节地址，两个 32 位寄存器分别保存低、高位，不预先右移压缩。版本 2 的 GPU 存储地址限定为 32 位，64 位字段的高 32 位须为零；地址加长度等计算用 64 位，先校验再缩窄。
+**[DESIGN]** 协议字段仍按原宽度保存字节地址，两个 32 位寄存器分别保存低、高位，不预先右移压缩。版本 3 的 GPU 存储地址限定为 32 位，64 位字段的高 32 位须为零；地址加长度等计算用 64 位，先校验再缩窄。
 
 用户 Ring、进度、描述对象、参数、Signal 和通知槽使用 GPUVA 或 GPU 物理地址，取决于设备 `gpuvm` 属性。管理 Ring、MQD、管理完成区、IH 与 COPY 物理端点一律保存 GPU 物理地址。`dma_addr_t` 只供驱动的 DMA API 使用，不能直接填入这些设备字段。Host CPU 指针也不写入 GPU 地址字段。
 
@@ -450,7 +456,7 @@ CP 取得 kernel_object：64 位无符号地址，数值为 0x4000
 
 校验失败就拒绝该次访问，不截断地址、不自动调整地址。访存过程中发生的失败交给错误协议处理，不承诺撤销已经发生的写入。用户 VMID 为 1、2；开启 GPUVM 时按页表隔离，关闭时共享物理空间；访存失败按[第 2.1.1 节](#spec-memory-access-context)关联当前队列并停止相应取包，具体错误码、通知及失败收尾已按第 7 节和 9.6 确认。
 
-**[BOUNDARY]** 这些是教学设备的接口约定，不套用 AMD 的完整对象布局。MQD 布局已在 9.2.1 确认，见[第 2.6 节](#spec-mqd-format)；管理命令布局已在 9.3.2 确认，见[第 4.1 节](#spec-management-packet-format)。进度值采用[第 5.2.1 节](#spec-ring-progress)确定的 32 位包编号；Kernel 描述对象、参数布局和启动接口按版本 2 更新，见[第 6.2 节](#spec-kernel-descriptor)；Signal 的 24 字节布局及通知、等待协议已按[9.5.4](#spec-signal-completion-protocol)确定，见[第 2.5.2 节](#spec-signal-layout)和[第 2.5.3 节](#spec-signal-notify-wait)。
+**[BOUNDARY]** 这些是教学设备的接口约定，不套用 AMD 的完整对象布局。MQD 布局已在 9.2.1 确认，见[第 2.6 节](#spec-mqd-format)；管理命令布局已在 9.3.2 确认，见[第 4.1 节](#spec-management-packet-format)。进度值采用[第 5.2.1 节](#spec-ring-progress)确定的 32 位包编号；Kernel 描述对象、参数布局和启动接口按版本 3 更新，见[第 6.2 节](#spec-kernel-descriptor)；Signal 的 24 字节布局及通知、等待协议已按[9.5.4](#spec-signal-completion-protocol)确定，见[第 2.5.2 节](#spec-signal-layout)和[第 2.5.3 节](#spec-signal-notify-wait)。
 
 <a id="spec-signal-representation"></a>
 
@@ -727,7 +733,7 @@ BAR 写入、DMA 写入、计算解释器写入和冷复位清零都应使对应
 
 ### 3.2 配置并激活 KIQ 后解除复位
 
-版本 2 先在 CP 保持复位、没有活跃 HQD 或在途访问时配置 Outbound，并读取确认状态；随后按下列顺序配置 IH、KIQ 和固件。两种 GPUVM 状态都必须核对设备版本与固件握手值为 2。
+版本 3 先在 CP 保持复位、没有活跃 HQD 或在途访问时读回核对 Outbound 布局，再写 CONTROL 并读取确认状态；随后按下列顺序配置 IH、KIQ 和固件。两种 GPUVM 状态都必须核对设备版本与固件握手值为 3。
 
 **[DESIGN]** 队列模式在固件启动流程中配置 KIQ，顺序如下：
 
@@ -1603,7 +1609,7 @@ CP 已取得 Dispatch，接下来读取 16 字节描述对象、核对 Kernel AB
 
 ```text
 Dispatch → kernel_object → 用户域读取描述对象
-  → 检查 kernel_abi_version = 2、代码与参数范围及对齐
+  → 检查 kernel_abi_version = 3、代码与参数范围及对齐
   → 保存 gpuvm_enabled、VMID、HQD 槽、代码和参数地址、长度与工作规模
   → 新建 Warp：填写一次共享启动状态，再填写各 Lane 线程坐标
   → 初始化 PC、mhartid，并令各有效 Lane 的 a0 = kernarg_address
@@ -1618,7 +1624,7 @@ Dispatch → kernel_object → 用户域读取描述对象
 偏移 0x00：code_entry          代码入口的 GPU 地址
 偏移 0x04：code_size           代码区域的字节长度
 偏移 0x08：kernarg_size        参数块的字节长度
-偏移 0x0c：kernel_abi_version  固定为 2
+偏移 0x0c：kernel_abi_version  固定为 3
 ```
 
 CP 拒绝旧值 0 和所有不支持的 ABI。代码入口按 4 字节对齐，代码长度非零且为 4 字节整数倍；使用宽整数检查地址加长度，执行器每次取指仍受声明代码范围约束。描述对象可供同一 Kernel 的多次提交复用，AQL 包仍为 64 字节。
@@ -1982,8 +1988,10 @@ type = 2：QUEUE_ERROR
 type = 3：DEVICE_ERROR
   hqd_slot = 0xffff_ffff，表示没有具体队列
   mqd_addr = 0
-  data     = 全局 ERROR_STATUS 的 32 位错误位快照
+  data     = GPGPU_ERR_FIRMWARE（ERROR_STATUS 的 bit 4）
 ```
+
+DEVICE_ERROR 的 `data` 必须等于 `GPGPU_ERR_FIRMWARE`，否则按 `GPGPU_IH_ERR_RECORD` 拒绝；设备只锁存 FIRMWARE 位。
 
 `type = 0` 和其他值暂不使用。记录保存事件发生时的队列身份；Host 不能只按槽位编号，把旧记录交给后来使用同一槽位的新队列。MQD 地址和事件编号的复用条件见[第 7.1.7 节](#spec-ih-object-lifetime)。队列错误值采用[第 7.2.1 节](#spec-queue-error-codes)的 32 位编号。
 
@@ -2141,12 +2149,12 @@ Host 通过 W 判断记录是否已经完整发布，不要求整条 32 字节�
 
 #### 7.1.5 中断确认与 Signal 通知
 
-已有中断控制寄存器增加 IH 对应的 `bit 3`，MSI-X 使用向量 3：
+版本 3 的 IRQ bit 0、1、2 分别为 DMA_DONE、ERROR、IH，MSI-X 向量分别为 0、1、2。IH 使用 `bit 2` 和向量 2：
 
 ```text
-IRQ_ENABLE.bit3   允许 IH 中断
-IRQ_STATUS.bit3   IH 中断待处理
-IRQ_ACK.bit3      Host 确认本次 IH 中断
+IRQ_ENABLE.bit2   允许 IH 中断
+IRQ_STATUS.bit2   IH 中断待处理
+IRQ_ACK.bit2      Host 确认本次 IH 中断
 ```
 
 屏蔽 IH 中断不停止写 Ring。重新允许中断时，如果仍有未读记录，设备继续通知。Host 写 `IRQ_ACK` 时若 Ring 仍非空，也必须保留或重新产生通知，避免遗漏并发到达的记录。`IRQ_ACK` 处理的是中断状态，槽位由 `IH_RPTR` 归还。
@@ -2610,7 +2618,7 @@ Host 驱动用锁保护“选槽—访问窗口”，写入选择值后先回读
 
 ## 9. 软件接口约定与确认记录
 
-**[BOUNDARY] 历史确认记录。** 本节保留 2026-10-17～2026-10-19 的原始方案与“尚待实现”表述。这里的 VMID 0、Host 物理地址、旧参数窗口、同步回归及调用方提交职责只说明当时版本；当前版本 2 以第 1～8 节及[GPUVM 规格](<./GPUVM 第一版规格.md>)为准，不按本节旧约定恢复兼容实现。
+**[BOUNDARY] 历史确认记录。** 本节保留 2026-10-17～2026-10-19 的原始方案与“尚待实现”表述。这里的 VMID 0、Host 物理地址、旧参数窗口、同步回归及调用方提交职责只说明当时版本；当前版本 3 以第 1～8 节及[GPUVM 规格](<./GPUVM 第一版规格.md>)为准，不按本节旧约定恢复兼容实现。
 
 本节沿着“创建用户队列，提交一次计算，再销毁队列”的过程，记录驱动、用户态调用方、CP 固件和 QEMU 共同使用的接口约定。9.1～9.7 的第一版行为与实现边界均已确认；9.4.4 的首部访问、管理 Ring 并发和取号约束已补齐，功能仍须接入和验证。
 

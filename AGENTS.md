@@ -156,6 +156,8 @@ Keep each pull request focused. Describe the reader-facing change, identify upda
 
 ### 学习与实验进度
 
+2026-10-29 完成设备、固件、驱动和用户库重构，协议统一为版本 3。2026-10-30 在子模块 `efd22b0` 验证 QTest 11/11、汇编器 7/7；Linux 全栈验收尚未完成，需恢复指定开发环境后运行 GPUVM on/off 两种模式。历史验收只代表其记录的版本。 协议差异见 [PROTOCOL_V3.md](<./4.experiments/gpu-study-qemu/software/gpgpu/PROTOCOL_V3.md>)。
+
 学习部分已完成第 06 阶段上下篇的学习：[06_AQL 应用的完整运行流程：驱动初始化、执行与资源释放（上）](<./1.笔记/06_AQL 应用的完整运行流程：驱动初始化、执行与资源释放（上）.md>)与[下篇](<./1.笔记/06_AQL 应用的完整运行流程：驱动初始化、执行与资源释放（下）.md>)。第七章仍是后续学习阶段，按[第七章大纲](<./1.笔记/07_AMDGPU 通用内存管理与 DRM 任务提交（大纲）.md>)继续；已有章节的补充按当前问题就地完成。
 
 根据用户反馈，实验第一阶段已完成，并已搭配 A57、支持 SMMUv3 系统 IOMMU。第二阶段围绕用户 AQL Queue、Doorbell、CP 与 Signal 展开，实验范围见 [QEMU GPGPU 四阶段实验大纲](<./4.experiments/QEMU GPGPU 实验大纲.md>)，已确认约定见 [CP/MEC 第一版规格](<./4.experiments/CP_MEC 第一版规格.md>)。2026-10-11 已完成双进程设备与原生 RISC-V CP 基础接入，2026-10-14 完成 CP Host 访存窗口及回归，2026-10-17 原生 CP 迁移至 RV64，窗口增加对齐的 8 字节读写并通过原有 8 项 CP 回归；裸机物理访存、地址编码和 RV32 计算执行器保持原约定。
