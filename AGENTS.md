@@ -5,8 +5,6 @@
 | AMDGPU | AMD GPU Linux Kernel Driver | AMD GPU Linux 内核驱动 |
 | GPU / CPU | Graphics Processing Unit / Central Processing Unit | 图形处理器／中央处理器 |
 | QEMU | Quick Emulator | 仿真与虚拟化工具 |
-| GPGPU | General-Purpose Computing on Graphics Processing Units | GPU 通用计算 |
-| CP / MEC | Command Processor / Micro Engine Compute | 命令处理器／计算命令处理微引擎 |
 | CDNA | Compute DNA | AMD 计算架构 |
 | RAM / HBM | Random Access Memory / High Bandwidth Memory | 系统内存／高带宽显存 |
 | PCIe | Peripheral Component Interconnect Express | 高速外设互连总线 |
@@ -15,12 +13,12 @@
 | DRM | Direct Rendering Manager | Linux 图形设备内核框架 |
 | KFD | Kernel Fusion Driver | AMD GPU 计算相关内核驱动组件 |
 | AQL | Architected Queuing Language | HSA 队列包格式 |
-| HSA | Heterogeneous System Architecture | 异构系统架构 |
 | MQD / HQD | Memory Queue Descriptor / Hardware Queue Descriptor | 内存／硬件队列描述符 |
 | PDF | Portable Document Format | 可移植文档格式 |
 | URI / URL | Uniform Resource Identifier / Uniform Resource Locator | 统一资源标识符／统一资源定位符 |
 | VS Code | Visual Studio Code | 本项目使用的编辑器 |
 | WSL | Windows Subsystem for Linux | Windows 的 Linux 子系统 |
+| ASCII | American Standard Code for Information Interchange | 美国信息交换标准代码 |
 
 ## 学习背景与讲解依据
 
@@ -28,11 +26,11 @@
 
 ## Project Structure & Module Organization
 
-本仓库保存 Linux、AMD GPU、内存管理和命令提交的学习笔记与实验材料。`1.笔记` 目录保存以 `NN_主题.md` 命名的当前学习笔记，例如 `01_Linux 内存管理基础.md` 和 `02_GPU 内存管理基础.md`；配套图片与资源保存在 `1.笔记/assets`，`2.源码` 保存笔记引用的固定源码基线。`3.资料` 保存参考 PDF，`4.experiments` 保存 `gpu-study-qemu` 子模块；实验代码、自写实验文档和原课程资料都在子仓库维护，课程资料位于其 `docs/课程资料/`。学习背景身份卡和文档常见问题清单保留在根目录。
+本仓库保存 Linux、AMD GPU、内存管理和命令提交的学习笔记与实验材料。`1.笔记` 目录保存以 `NN_主题.md` 命名的当前学习笔记，例如 `01_Linux 内存管理基础.md` 和 `02_GPU 内存管理基础.md`；配套图片与资源保存在 `1.笔记/assets`，`2.源码` 保存笔记引用的固定源码基线。`3.资料` 保存参考 PDF，`4.experiments` 保存实验子模块 `gpu-study-qemu`，见下文“实验子模块”。学习背景身份卡和文档常见问题清单保留在根目录。
 
 笔记部分的后续学习只安排第七章，范围统一放在 `1.笔记` 目录的 [07_AMDGPU 通用内存管理与 DRM 任务提交（大纲）](<./1.笔记/07_AMDGPU 通用内存管理与 DRM 任务提交（大纲）.md>) 中。编写第七章前先阅读该大纲；已有章节的局部缺口补回首次需要它的位置。学习笔记继续采用 `NN_主题.md` 命名。
 
-实验部分按子仓库中的 [QEMU GPGPU 四阶段实验大纲](<./4.experiments/gpu-study-qemu/docs/QEMU GPGPU 实验大纲.md>) 推进，实验计划统一在该大纲维护。进入当前阶段后再细化近期任务，根据实际代码、运行结果和学习反馈动态调整后续范围与顺序，不在项目开始时预先固定全部目标。学习背景身份卡保留个人基础、转型方向与讲解偏好。
+实验部分在子仓库中独立推进，计划、进度和规则都由子仓库维护。学习背景身份卡保留个人基础、转型方向与讲解偏好。
 
 ## 硬件环境约束
 
@@ -85,6 +83,11 @@ Before submitting, preview edited files to check tables, Mermaid diagrams, code 
 Follow the surrounding Chinese-language prose and retain established technical terms such as GPUVM, KFD, AQL, MQD, and HQD. Give each note one `#` title, then use numbered `##` sections and concise `###` subsections. Prefer short explanatory paragraphs, concrete examples, and relationship or flow diagrams. Tag fenced blocks with a language such as `text` or `mermaid`.
 
 When answering questions about this repository, keep the response concise, clear, and direct. Use a short concrete example when it helps explain an abstract concept.
+
+### 现状写法与单一来源
+
+- 文档写现状、约定和结论，不写“某天做了什么”的过程叙述。日期只在本身就是事实时保留，例如固定版本、规范封面日期；变更经过和原因写在提交说明里。
+- 每件事只在一个文档中维护，其他文档只放链接，不复述内容、数量或结论，修改时只改一处。被多处引用的章节使用固定的 ASCII 锚点，改标题时链接不受影响。
 
 ### 学习说明的展开方式
 
@@ -198,14 +201,12 @@ Keep each pull request focused. Describe the reader-facing change, identify upda
 
 ### 学习与实验进度
 
-学习进度与个人安排见根目录的[学习与实验进度](<./学习与实验进度.md>)；实验相关工作先阅读子仓库的[实验进度](<./4.experiments/gpu-study-qemu/docs/实验进度.md>)。学习与实验计划继续在各自大纲维护，不在规则文件中保存状态副本。
+学习进度与个人安排见根目录的[学习与实验进度](<./学习与实验进度.md>)，学习计划在第七章大纲中维护，规则文件不保存状态副本。
 
 学习进度按用户反馈记录；文档已写入、源码已核对、实验已运行验证和用户已掌握分别判断，不以文件存在替代学习或实验完成记录。
 
-### 实验信息归属与两级维护
+### 实验子模块
 
-- 实验阶段、当前任务、下一步和阻塞项只写在子仓库 `docs/实验进度.md`，使用定性状态，不抄测试数字。
-- 某个代码版本的构建与验证结果、提交号和日志只写在子仓库 `software/gpgpu/README.md` 第 5 节，历史工作与验收放第 6 节。
-- 阶段依赖、范围和完成标准在实验大纲；已确认设计在 CP/MEC 与 GPUVM 规格，确认过程只保留 CP/MEC 规格第 9 节。
-- 寄存器、位域、权限和复位值在硬件手册，组件升级差异在 `software/gpgpu/PROTOCOL_V3.md`。
-- 实验代码与文档先在子仓库一同提交，父仓库只同步子模块指针和受影响的学习引用，不再维护一套实验文档。其他入口只放链接。
+`4.experiments/gpu-study-qemu` 独立维护实验代码、实验文档、进度和自己的写作规则，入口见子仓库的 [README](<./4.experiments/gpu-study-qemu/README.md>) 与 `AGENTS.md`。本文件的规则不约束子仓库文件，父仓库也不保存实验状态、命令或验收结果的副本。
+
+子仓库的提交和推送不要求同步父仓库。需要让父仓库记录新的实验版本时，先确认子仓库提交已推送到远端 `main`，再在父仓库提交子模块指针。

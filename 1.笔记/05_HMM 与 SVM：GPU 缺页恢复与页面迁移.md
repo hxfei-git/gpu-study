@@ -908,7 +908,7 @@ A 的 svm_range
 
 驱动随后将 A 的数据搬进这份 BO 管理的 HBM 存储，并为当前页面更新映射。迁移完成后，应用的 A 指针保持不变，`svm_range` 继续跟踪同一段虚拟地址的访问要求与页面变化，关联的 BO 则管理承载数据的 HBM 资源。GPU 最终通过页表访问这些数据。
 
-迁移可能因资源或页面状态而失败。`best_loc=G` 只是本次选择的目标，关联 BO 也只说明已经准备了相应存储；实际结果还取决于页面迁移、数据复制和映射更新。完整顺序见 [§5.2](#52-system-ram-hbm-的迁移与完成条件)，部分迁移与失败回退见 [§5.3](#53-部分迁移与失败回退)。
+迁移可能因资源或页面状态而失败。`best_loc=G` 只是本次选择的目标，关联 BO 也只说明已经准备了相应存储；实际结果还取决于页面迁移、数据复制和映射更新。完整顺序见 [§5.2](#ram-to-hbm-migration)，部分迁移与失败回退见 [§5.3](#53-部分迁移与失败回退)。
 
 > **[SOURCE]** Linux `248951ddc14d`，[`kfd_migrate.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_migrate.c>) 第 533～538 行为迁移准备 BO 并计算范围在资源中的偏移；[`kfd_svm.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_svm.c>) 第 554～605 行检查复用或创建 VRAM BO，第 640～646 行保存 `svm_bo->bo`、`prange->svm_bo`、资源和共享列表。这里的 BO 用于存放 A 的数据。
 
@@ -1839,6 +1839,8 @@ MEMORY_DEVICE_PRIVATE：采用设备私有内存的访问协议
 设备初始化已经建立这套页面描述。迁移 A 时，KFD 根据选中的 HBM 存储位置，取得对应的 `struct page`，再建立这次迁移所需的引用和关联。下节用 P 表示 A 原来的 RAM 页，用 D 表示目标 HBM 页的设备 PFN；“HBM 页 D”就是设备页编号为 D 的那一页。
 
 > **[SOURCE]** Linux `248951ddc14d`，[`include/linux/memremap.h`](<../2.源码/linux/include/linux/memremap.h>) 第 30～75 行定义设备内存类型；[`mm/memremap.c`](<../2.源码/linux/mm/memremap.c>) 第 200～244 行为设备私有内存建立页面描述并归入 `ZONE_DEVICE`；[`mm/mm_init.c`](<../2.源码/linux/mm/mm_init.c>) 第 1008～1051 行初始化设备页及其驱动关联；[`kfd_migrate.c`](<../2.源码/linux/drivers/gpu/drm/amd/amdkfd/kfd_migrate.c>) 第 1026～1085 行完成 KFD 的设备页登记。
+
+<a id="ram-to-hbm-migration"></a>
 
 ### 5.2 system RAM → HBM 的迁移与完成条件
 
