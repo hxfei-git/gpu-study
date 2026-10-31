@@ -1,5 +1,26 @@
 # 笔记源码基线
 
+| 缩写 | 英文全称 | 中文含义 |
+| --- | --- | --- |
+| GPU / AMDGPU | Graphics Processing Unit / AMD GPU Linux Kernel Driver | 图形处理器／AMD GPU Linux 内核驱动 |
+| API | Application Programming Interface | 应用编程接口 |
+| MM / HMM | Memory Management / Heterogeneous Memory Management | 内存管理／异构内存管理 |
+| KFD | Kernel Fusion Driver | AMD GPU 计算相关内核驱动组件 |
+| GPUVM | GPU Virtual Memory | GPU 虚拟内存 |
+| SVM | Shared Virtual Memory | 共享虚拟内存 |
+| PCI / PCIe | Peripheral Component Interconnect / PCI Express | 外设互连／高速外设互连总线 |
+| DMA / IOMMU | Direct Memory Access / Input/Output Memory Management Unit | 直接内存访问／输入输出内存管理单元 |
+| CLR | Common Language Runtime | ROCm 的公共语言运行时仓库 |
+| ROCr | ROCm Runtime | ROCm 的异构计算运行时 |
+| ROCm | Radeon Open Compute | AMD GPU 计算软件平台 |
+| HSA | Heterogeneous System Architecture | 异构系统架构 |
+| AQL | Architected Queuing Language | HSA 队列包格式 |
+| PAL | Platform Abstraction Library | 平台抽象库 |
+| POCL | Portable Computing Language | 可移植计算语言实现 |
+| CP | Command Processor | 命令处理器 |
+| DRM / TTM | Direct Rendering Manager / Translation Table Maps | Linux 图形设备框架／图形对象存储管理框架 |
+| UAPI | User-space Application Programming Interface | 内核向用户态提供的接口 |
+
 本目录对应 `../1.笔记` 中全部 Markdown 笔记使用的源码证据。各仓库默认处于 detached HEAD，目的是让本地代码与笔记中的固定版本一致，而不是跟随远端分支更新。
 
 除非段落另有说明，下面的命令都从仓库根目录运行。
@@ -15,6 +36,7 @@
 | `pal` | <https://github.com/GPUOpen-Drivers/pal.git> | `9fab16015e522fff05890a045a1e9d8d3c23a636` | 精确 | PAL GFX9 dispatch packet 与 command buffer |
 | `pocl` | <https://github.com/vortexgpgpu/pocl.git> | `42fad325efaee07915307ab802f1527171b434d0` | 精确 | POCL Command/Event 依赖图和 Vortex backend |
 | `vortex` | <https://github.com/vortexgpgpu/vortex.git> | `d76b7f24e658867ab57e3942d7c648c3e6af072d` | 公开上游替代版本 | Vortex runtime Queue/Event、CP ring、device 接口 |
+| `gem5` | <https://github.com/gem5/gem5.git> | `f5c5a6e390f55dd5984977815bf9d0bd05da6945` | 精确 | MI300X 配置、AMDGPU 模拟实现与寄存器读写参考；简化行为按段落标明 |
 
 ## 2. 两个版本边界
 
@@ -63,14 +85,5 @@ git -C .\2.源码\rocm-device-libs rev-parse HEAD
 git -C .\2.源码\pal rev-parse HEAD
 git -C .\2.源码\pocl rev-parse HEAD
 git -C .\2.源码\vortex rev-parse HEAD
+git -C .\2.源码\gem5 rev-parse HEAD
 ```
-
-## 6. 文档自依赖检查
-
-从仓库根目录运行：
-
-```powershell
-pwsh -File .\tools\check-doc-dependencies.ps1
-```
-
-该检查会验证笔记中的本地 Markdown 链接、章节锚点、`2.源码/...` 路径、源码行号范围、七个源码仓库的固定 commit，以及历史 CLR 对象。检查不访问网络。当前历史 CLR 对象和固定 ref 缺失，因此检查会报告对应错误；其余固定源码基线仍可正常核验。
