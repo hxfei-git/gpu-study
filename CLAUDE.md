@@ -38,7 +38,7 @@ Claude Code 运行在 WSL2，仓库位于 `/home/book/1.project/gpu_study`。`AG
 
 ## 3. 仓库组成与两级提交
 
-父仓库跟踪学习笔记、参考资料、原课程资料和子模块指针；实验代码、自写实验文档与进度统一由实验子仓库维护。
+父仓库跟踪学习笔记、参考资料和子模块指针；实验代码、自写实验文档、原课程资料与进度统一由实验子仓库维护。
 
 - `2.源码/*` 是笔记引用的固定源码基线，处于 detached HEAD，其中 Linux 为 sparse checkout。这些子模块只读取，不修改文件，也不切换提交；版本清单与核对命令见 `2.源码/README.md`。
 - `4.experiments/gpu-study-qemu` 是用户自己的 QEMU 分支（`hxfei-git/gpu-study-qemu`，统一在 `main` 上开发），实验代码都在这里修改。先在子仓库提交代码与实验文档，再回父仓库提交新的子模块指针；只有学习引用确实受影响时才同步修改父仓库文档。临时任务分支完成后按子仓库规则安全快进 `main`，不改写历史。
@@ -49,8 +49,8 @@ Claude Code 运行在 WSL2，仓库位于 `/home/book/1.project/gpu_study`。`AG
 协议常量以 `software/gpgpu/include/gpgpu/` 为准。历史工作项已并入软件栈说明第 6 节，不再另建工作项或进度文件。
 
 大文件先用锚点或 `rg` 定位，再分段读取：子仓库 `docs/CP_MEC 第一版规格.md`、
-`docs/历史/CP_MEC 软件实现、参考与扩展.md`，以及父仓库
-`4.experiments/QEMU_2026_讲义.html`。常用入口从子仓库的实验进度和软件栈说明进入。
+`docs/历史/CP_MEC 软件实现、参考与扩展.md`，以及
+`docs/课程资料/QEMU_2026_讲义.html`。常用入口从子仓库的实验进度和软件栈说明进入。
 
 ## 4. 实验代码的结构与命令
 
