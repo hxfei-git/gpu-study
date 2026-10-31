@@ -34,7 +34,7 @@ Claude Code 运行在 WSL2，仓库位于 `/home/book/1.project/gpu_study`。`AG
 路径基于当前仓库生成，不附加本地 `#L…`。固定历史源码使用带 commit 的 GitHub
 链接，普通文档使用相对路径。换机器或改变预览环境时再核对，不擅自批量重写链接。
 
-`AGENTS.md` 要求的 humanizer-zh 检查，在本机由用户级技能 `humanizer-zh-docs` 执行，用 Skill 工具调用。这个技能改编自 op7418/Humanizer-zh，内容与 `AGENTS.md` 固定的上游提交 `f4518a8` 不完全相同；需要严格按上游版本检查时，先告知用户。
+`AGENTS.md` 要求的 humanizer-zh 检查，在本机由用户级技能 `humanizer-zh-docs` 执行，用 Skill 工具调用。`humanizer-zh-docs` 改编自 op7418/Humanizer-zh，内容与 `AGENTS.md` 固定的上游提交 `f4518a8` 不完全相同；需要严格按上游版本检查时，先告知用户。缩写表和自然化检查的适用范围以 `AGENTS.md` 为准。
 
 ## 3. 仓库组成与两级提交
 

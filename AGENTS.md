@@ -124,9 +124,17 @@ When answering questions about this repository, keep the response concise, clear
 - 每个条目围绕一个可复用的问题，写清它造成的阅读困难及其避免方法。篇幅以讲清楚为准，不限定句数；必要时补充前提、简短例子或图示，通过合并重复问题、删除无关细节来控制篇幅，不为压缩文字省略关键解释。
 - 维护清单时，同步检查本文件和清单：重复问题合并，适用场景不同的要求写清条件，互相矛盾的要求统一后再保留。用户已明确更正的旧要求必须同步更新；没有依据决定取舍时，向用户说明具体冲突并确认。
 
+### 缩写表与自然化检查的适用范围
+
+缩写表和 humanizer-zh 检查适用于需要长期维护、反复查阅的正式文档，包括学习笔记、规格、设计说明、协议、手册、项目说明及长期维护的大纲等，范围不限于 `1.笔记/`。
+
+临时草稿、会话计划、一次性的交接与执行记录，以及临时排查结果等材料，默认不要求缩写表，也不强制执行 humanizer-zh 检查。临时材料转为正式文档时，再补齐这两项要求；用户明确要求时，按用户要求执行。
+
+文档性质按实际用途判断，不以所在目录、文件后缀、是否已保存为文件或是否已提交 Git 为依据。
+
 ### 中文文档自然化检查
 
-每次新建、补充、改写或审阅本仓库的中文文档时，包括只修改一个段落，都必须使用 [humanizer-zh](https://github.com/op7418/Humanizer-zh/blob/f4518a8eab97b8bfebc66a89d34320a89bef6930/SKILL.md) 技能完成最终检查和润色。不得只在用户明确要求“去 AI 味”时才使用该技能。
+新建、补充、改写或审阅上述适用范围内的正式中文文档时，包括只修改一个段落，都必须使用 [humanizer-zh](https://github.com/op7418/Humanizer-zh/blob/f4518a8eab97b8bfebc66a89d34320a89bef6930/SKILL.md) 技能完成最终检查和润色。不得只在用户明确要求“去 AI 味”时才使用该技能。
 
 - 修改前完整读取 `humanizer-zh` 的 `SKILL.md`，并按其中的流程执行；
 - 先完成事实、结构、源码证据和 Markdown 格式，再对本次新增或改动的自然语言做自然化检查；
@@ -135,7 +143,7 @@ When answering questions about this repository, keep the response concise, clear
 - 交付前再次检查文字是否具体、直接、指代清楚，并删除空泛开场、重复总结和聊天机器人式套话；
 - 如果技能缺失或无法读取，应明确告知用户，并按相同原则人工检查，不得无提示地跳过。
 
-Place an abbreviation glossary immediately after each document's `#` title. Use the columns `缩写`, `英文全称`, and `中文含义`, and include the technical abbreviations used in that document. Add a glossary entry whenever a new abbreviation is introduced.
+正式文档中使用了技术缩写时，在 `#` 标题后设置缩写表，使用“缩写、英文全称、中文含义”三列，只收录本文使用的技术缩写，并随正文更新。没有技术缩写时不建空表。
 
 Keep filenames stable. For links to files whose names contain spaces or non-ASCII characters, preserve the repository convention: `[label](<./1.笔记/02_GPU 内存管理基础.md>)`.
 
